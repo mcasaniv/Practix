@@ -74,7 +74,7 @@ const Navbar: React.FC<NavbarProps> = ({
             {/* Espacio diseñado para el logo de la app */}
             <div className="w-10 h-10 flex items-center justify-center overflow-hidden transition-all duration-300 hover:scale-105 shrink-0" title="Logo de la App">
               <img 
-                src="https://i.imgur.com/cXKUutn.png" 
+                src="logo.png" 
                 onError={(e) => {
                   (e.currentTarget as HTMLElement).style.display = 'none';
                   const parent = (e.currentTarget as HTMLElement).parentElement;
