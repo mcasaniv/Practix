@@ -148,7 +148,7 @@ const App: React.FC = () => {
     const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(db, null, 2));
     const downloadAnchorNode = document.createElement('a');
     downloadAnchorNode.setAttribute("href", dataStr);
-    downloadAnchorNode.setAttribute("download", `academia_ugarte_backup_${new Date().toISOString().split('T')[0]}.json`);
+    downloadAnchorNode.setAttribute("download", `practix_backup_${new Date().toISOString().split('T')[0]}.json`);
     document.body.appendChild(downloadAnchorNode);
     downloadAnchorNode.click();
     downloadAnchorNode.remove();
@@ -538,7 +538,7 @@ const App: React.FC = () => {
         {renderView()}
       </main>
       <footer className="bg-white dark:bg-slate-900 dark:border-slate-800 border-t py-6 text-center text-sm text-gray-500 dark:text-gray-400 font-sans tracking-wide">
-        &copy; {new Date().getFullYear()} Academia Ugarte • Sistema de Gestión Académica
+        &copy; {new Date().getFullYear()} Practix • Sistema de Gestión Académica
       </footer>
     </div>
   );

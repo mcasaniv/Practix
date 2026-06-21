@@ -87,7 +87,7 @@ const QuizView: React.FC<QuizViewProps> = ({ topicName, subjectName, questions, 
 
   return (
     <div className="max-w-4xl mx-auto" ref={containerRef}>
-      <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-800 p-6 mb-8 sticky top-[80px] z-40 flex flex-col md:flex-row items-center justify-between gap-4">
+      <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-800 p-6 mb-8 flex flex-col md:flex-row items-center justify-between gap-4">
         <div>
           <h2 className="text-2xl font-black text-gray-800 dark:text-gray-100">{topicName}</h2>
           <p className="text-gray-400 dark:text-gray-500 text-sm">Contesta todas las preguntas para ver tus resultados.</p>
@@ -212,6 +212,17 @@ const QuizView: React.FC<QuizViewProps> = ({ topicName, subjectName, questions, 
             })}
           </div>
         ))}
+
+        {!isFinished && (
+          <div className="flex justify-center pt-8">
+            <button 
+              onClick={handleGrade}
+              className="w-full md:w-auto bg-indigo-600 text-white px-12 py-5 rounded-2xl font-black text-lg uppercase tracking-widest hover:bg-indigo-700 shadow-2xl transition-all hover:scale-105 active:scale-95"
+            >
+              Calificar Simulacro
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

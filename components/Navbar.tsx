@@ -35,6 +35,7 @@ const Navbar: React.FC<NavbarProps> = ({
 }) => {
   const [showResetModal, setShowResetModal] = useState(false);
   const [showResetFlashcardsModal, setShowResetFlashcardsModal] = useState(false);
+  const isExamView = currentView === 'QUIZ' || currentView === 'MEGA_QUIZ';
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -53,7 +54,7 @@ const Navbar: React.FC<NavbarProps> = ({
   };
 
   return (
-    <nav className="bg-indigo-700 dark:bg-indigo-900 text-white shadow-lg sticky top-0 z-50">
+    <nav className={`bg-indigo-700 dark:bg-indigo-900 text-white shadow-lg ${isExamView ? 'relative' : 'sticky top-0'} z-50`}>
       <div className="container mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           {currentView !== 'HOME' && (
@@ -68,20 +69,20 @@ const Navbar: React.FC<NavbarProps> = ({
             </button>
           )}
           <div 
-            className="cursor-pointer flex items-center gap-2.5 group" 
+            className={`cursor-pointer flex items-center gap-2.5 group ${isExamView ? 'hidden' : ''}`} 
             onClick={() => onNavigate('HOME')}
           >
             {/* Espacio diseñado para el logo de la app */}
             <div className="w-10 h-10 flex items-center justify-center overflow-hidden transition-all duration-300 hover:scale-105 shrink-0" title="Logo de la App">
               <img 
-                src="logo.png" 
+                src="https://i.imgur.com/hqV69r2.png" 
                 onError={(e) => {
                   (e.currentTarget as HTMLElement).style.display = 'none';
                   const parent = (e.currentTarget as HTMLElement).parentElement;
                   if (parent && !parent.querySelector('.fallback-badge')) {
                     const fallback = document.createElement('span');
                     fallback.className = "fallback-badge text-[15px] font-black text-white/90 select-none bg-white/10 px-2.5 py-1 rounded-lg";
-                    fallback.innerText = "AU";
+                    fallback.innerText = "PX";
                     parent.appendChild(fallback);
                   }
                 }}
@@ -90,9 +91,9 @@ const Navbar: React.FC<NavbarProps> = ({
                 referrerPolicy="no-referrer"
               />
             </div>
-            <h1 className="text-xl font-black tracking-tight text-white group-hover:text-indigo-100 transition-colors">Academia Ugarte</h1>
+            <h1 className="text-xl font-black tracking-tight text-white group-hover:text-indigo-100 transition-colors">Practix</h1>
           </div>
-          <div className="flex bg-indigo-800/65 dark:bg-indigo-950/65 p-1 rounded-xl ml-2 sm:ml-4 text-xs border border-indigo-400/20">
+          <div className={`flex bg-indigo-800/65 dark:bg-indigo-950/65 p-1 rounded-xl ml-2 sm:ml-4 text-xs border border-indigo-400/20 ${isExamView ? 'hidden' : ''}`}>
             <button 
               onClick={() => onNavigate('HOME')}
               className={`px-3 py-1 rounded-lg font-bold transition-all ${currentView !== 'FLASHCARDS_HOME' && currentView !== 'FLASHCARDS_SUBJECTS' && currentView !== 'FLASHCARDS_PLAY' ? 'bg-indigo-600 dark:bg-indigo-800 text-white shadow-sm' : 'text-indigo-200 hover:text-white'}`}
@@ -109,7 +110,7 @@ const Navbar: React.FC<NavbarProps> = ({
         </div>
 
         {/* Contadores de Preguntas y Flashcards */}
-        <div className="flex flex-wrap items-center gap-3">
+        <div className={`flex flex-wrap items-center gap-3 ${isExamView ? 'hidden' : ''}`}>
           {/* Contador de Preguntas */}
           <div className="flex items-center gap-2 bg-indigo-805/40 dark:bg-indigo-950/40 px-3.5 py-1.5 rounded-2xl border border-indigo-400/20 backdrop-blur-sm group">
             <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-indigo-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -151,10 +152,10 @@ const Navbar: React.FC<NavbarProps> = ({
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className={`flex items-center gap-2 ${isExamView ? 'hidden' : ''}`}>
           <button
             onClick={toggleTheme}
-            className="p-2 bg-indigo-800 dark:bg-indigo-950 hover:bg-indigo-600 rounded-lg transition-colors mr-2"
+            className="p-2 bg-indigo-800/60 hover:bg-indigo-600 dark:bg-indigo-955 rounded-lg transition-colors mr-1"
             title={isDark ? "Cambiar a Modo Claro" : "Cambiar a Modo Oscuro"}
           >
             {isDark ? (
@@ -167,7 +168,7 @@ const Navbar: React.FC<NavbarProps> = ({
               </svg>
             )}
           </button>
-          <label className="cursor-pointer bg-indigo-800 dark:bg-indigo-950 hover:bg-indigo-600 dark:hover:bg-indigo-800 px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2">
+          <label className="cursor-pointer bg-indigo-800/60 dark:bg-indigo-955 hover:bg-indigo-600 dark:hover:bg-indigo-800 px-3.5 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2">
             <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
             </svg>
@@ -176,7 +177,7 @@ const Navbar: React.FC<NavbarProps> = ({
           </label>
           <button 
             onClick={onExport}
-            className="bg-indigo-800 dark:bg-indigo-950 hover:bg-indigo-600 dark:hover:bg-indigo-800 px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
+            className="bg-indigo-800/60 dark:bg-indigo-955 hover:bg-indigo-600 dark:hover:bg-indigo-800 px-3.5 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
           >
             <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
@@ -185,7 +186,7 @@ const Navbar: React.FC<NavbarProps> = ({
           </button>
           <button 
             onClick={() => onNavigate('ADMIN')}
-            className="bg-white text-indigo-700 hover:bg-gray-100 dark:bg-indigo-100 dark:hover:bg-white px-4 py-2 rounded-lg text-sm font-bold transition-colors ml-2"
+            className="bg-white text-indigo-700 hover:bg-gray-100 dark:bg-indigo-100 dark:hover:bg-white px-3.5 py-2 rounded-lg text-sm font-bold transition-colors ml-1"
           >
             Panel Admin
           </button>
@@ -193,7 +194,7 @@ const Navbar: React.FC<NavbarProps> = ({
       </div>
       
       {/* Breadcrumbs / Subtitle */}
-      <div className="bg-indigo-800/50 dark:bg-indigo-950/50 py-1.5 px-4 text-xs font-medium text-indigo-100 border-t border-indigo-600/30 dark:border-indigo-800/30">
+      <div className={`bg-indigo-800/50 dark:bg-indigo-950/50 py-1.5 px-4 text-xs font-medium text-indigo-100 border-t border-indigo-600/30 dark:border-indigo-800/30 ${isExamView ? 'hidden' : ''}`}>
         <div className="container mx-auto">
           {currentView === 'HOME' && "Inicio / Cursos"}
           {currentView === 'SUBJECTS' && `Cursos / ${navState.selectedCourse}`}

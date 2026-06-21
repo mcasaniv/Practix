@@ -307,7 +307,7 @@ const MegaQuizView: React.FC<MegaQuizViewProps> = ({
 
   return (
     <div className="max-w-5xl mx-auto" ref={containerRef}>
-      <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-xl border border-gray-100 dark:border-slate-800 p-8 mb-8 sticky top-[80px] z-40 flex flex-col md:flex-row items-center justify-between gap-6">
+      <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-xl border border-gray-100 dark:border-slate-800 p-8 mb-8 flex flex-col md:flex-row items-center justify-between gap-6">
         <div>
           <h2 className="text-3xl font-black text-gray-800 dark:text-gray-100 tracking-tight flex items-center flex-wrap gap-2.5">
             <span>{mode === 'CUSTOM' ? 'Examen Personalizado' : 'Simulacro General'}</span>
