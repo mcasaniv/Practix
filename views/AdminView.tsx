@@ -2,6 +2,7 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Question, ReadingText, Flashcard } from '../types';
 import { ACADEMIC_STRUCTURE } from '../constants';
+import { formatQuestionText, parseHTMLTags } from '../utils';
 
 interface AdminViewProps {
   questions: Question[];
@@ -17,6 +18,63 @@ interface AdminViewProps {
   courseCovers?: Record<string, string>;
   onSaveCourseCovers?: (covers: Record<string, string>) => void;
 }
+
+const TextFormatterBar: React.FC<{
+  targetId: string;
+  value: string;
+  onChange: (val: string) => void;
+}> = ({ targetId, value, onChange }) => {
+  const insertTag = (tag: 'b' | 'i' | 'u') => {
+    const el = document.getElementById(targetId) as HTMLTextAreaElement | null;
+    if (!el) return;
+    const start = el.selectionStart;
+    const end = el.selectionEnd;
+    const selectedText = value.substring(start, end);
+    const replacement = `<${tag}>${selectedText}</${tag}>`;
+    const newVal = value.substring(0, start) + replacement + value.substring(end);
+    onChange(newVal);
+    
+    // Refocus and place selection inside tag or after
+    setTimeout(() => {
+      el.focus();
+      const offset = selectedText ? replacement.length : tag.length + 2; 
+      const newCursorPos = start + offset;
+      el.setSelectionRange(newCursorPos, newCursorPos);
+    }, 10);
+  };
+
+  return (
+    <div className="flex gap-1 mb-1 bg-gray-100 dark:bg-slate-800 border dark:border-slate-700/60 p-1 rounded-lg w-max shadow-sm shrink-0">
+      <button
+        type="button"
+        onClick={() => insertTag('b')}
+        className="px-2 py-0.5 text-xs font-bold rounded hover:bg-gray-250 dark:hover:bg-slate-700 text-gray-750 dark:text-gray-300 transition-all flex items-center gap-0.5 active:scale-95 border border-transparent hover:border-gray-300/30"
+        title="Negrita <b>"
+      >
+        <span className="font-extrabold text-[12px] tracking-tight">B</span>
+        <span className="text-[8px] opacity-30 font-mono">{'<b>'}</span>
+      </button>
+      <button
+        type="button"
+        onClick={() => insertTag('i')}
+        className="px-2 py-0.5 text-xs italic rounded hover:bg-gray-250 dark:hover:bg-slate-700 text-gray-750 dark:text-gray-300 transition-all flex items-center gap-0.5 active:scale-95 border border-transparent hover:border-gray-300/30"
+        title="Inclinado (Itálica) <i>"
+      >
+        <span className="font-serif font-black text-[12px] tracking-tight">I</span>
+        <span className="text-[8px] opacity-30 font-not-italic font-mono font-normal">{'<i>'}</span>
+      </button>
+      <button
+        type="button"
+        onClick={() => insertTag('u')}
+        className="px-2 py-0.5 text-xs underline rounded hover:bg-gray-250 dark:hover:bg-slate-700 text-gray-750 dark:text-gray-300 transition-all flex items-center gap-0.5 active:scale-95 border border-transparent hover:border-gray-300/30"
+        title="Subrayado <u>"
+      >
+        <span className="font-bold underline text-[12px] tracking-tight">U</span>
+        <span className="text-[8px] opacity-30 no-underline font-mono font-normal">{'<u>'}</span>
+      </button>
+    </div>
+  );
+};
 
 const AdminView: React.FC<AdminViewProps> = ({ 
   questions, 
@@ -547,16 +605,23 @@ const AdminView: React.FC<AdminViewProps> = ({
 
               <div className="space-y-6">
                 <div>
-                  <label className="block text-xs font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-2">Enunciado</label>
-                  <textarea value={questionText} onChange={(e) => setQuestionText(e.target.value)} className="w-full bg-gray-50 dark:bg-slate-800 border dark:border-slate-700 rounded-xl p-4 min-h-[100px] outline-none dark:text-gray-200 whitespace-pre-wrap" />
+                  <div className="flex items-center justify-between mb-2 gap-4 flex-wrap">
+                    <label className="block text-xs font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest">Enunciado</label>
+                    <TextFormatterBar targetId="admin-question-text" value={questionText} onChange={setQuestionText} />
+                  </div>
+                  <textarea id="admin-question-text" value={questionText} onChange={(e) => setQuestionText(e.target.value)} className="w-full bg-gray-50 dark:bg-slate-800 border dark:border-slate-700 rounded-xl p-4 min-h-[100px] outline-none dark:text-gray-200 whitespace-pre-wrap" />
                 </div>
                 <div className="space-y-3">
                   <label className="block text-xs font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-1">Alternativas</label>
                   {options.map((opt, idx) => (
                     <div key={idx} className="flex flex-col gap-2 p-3 bg-gray-50 dark:bg-slate-800/50 rounded-xl border dark:border-slate-700">
+                      <div className="flex items-center justify-between gap-4 flex-wrap">
+                        <span className="text-xs font-bold text-gray-400 dark:text-gray-550">Alternativa {String.fromCharCode(65 + idx)}</span>
+                        <TextFormatterBar targetId={`admin-opt-text-${idx}`} value={opt} onChange={(val) => handleOptionChange(idx, val)} />
+                      </div>
                       <div className="flex gap-3 items-center">
                         <input type="radio" name="correct" checked={correctIndex === idx} onChange={() => setCorrectIndex(idx)} className="w-5 h-5 accent-indigo-600 shrink-0" />
-                        <textarea value={opt} onChange={(e) => handleOptionChange(idx, e.target.value)} placeholder={`Alt ${String.fromCharCode(65 + idx)}`} className="flex-grow bg-white dark:bg-slate-800 border dark:border-slate-700 rounded-lg p-3 outline-none dark:text-gray-200 min-h-[50px] whitespace-pre-wrap" />
+                        <textarea id={`admin-opt-text-${idx}`} value={opt} onChange={(e) => handleOptionChange(idx, e.target.value)} placeholder={`Alt ${String.fromCharCode(65 + idx)}`} className="flex-grow bg-white dark:bg-slate-800 border dark:border-slate-700 rounded-lg p-3 outline-none dark:text-gray-200 min-h-[50px] whitespace-pre-wrap" />
                       </div>
                       <div className="flex gap-3 items-center pl-8">
                         <span className="text-xs text-gray-400 font-bold uppercase">Img:</span>
@@ -566,8 +631,11 @@ const AdminView: React.FC<AdminViewProps> = ({
                   ))}
                 </div>
                 <div>
-                  <label className="block text-xs font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-2">Explicación</label>
-                  <textarea value={explanation} onChange={(e) => setExplanation(e.target.value)} className="w-full bg-gray-50 dark:bg-slate-800 border dark:border-slate-700 rounded-xl p-4 min-h-[80px] outline-none dark:text-gray-200 whitespace-pre-wrap mb-2" />
+                  <div className="flex items-center justify-between mb-2 gap-4 flex-wrap">
+                    <label className="block text-xs font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest">Explicación</label>
+                    <TextFormatterBar targetId="admin-explanation-text" value={explanation} onChange={setExplanation} />
+                  </div>
+                  <textarea id="admin-explanation-text" value={explanation} onChange={(e) => setExplanation(e.target.value)} className="w-full bg-gray-50 dark:bg-slate-800 border dark:border-slate-700 rounded-xl p-4 min-h-[80px] outline-none dark:text-gray-200 whitespace-pre-wrap mb-2" />
                   <input type="url" value={explanationImageUrl} onChange={(e) => setExplanationImageUrl(e.target.value)} placeholder="Link imagen resolución (opcional)" className="w-full bg-gray-50 dark:bg-slate-800 border dark:border-slate-700 rounded-xl p-3 outline-none dark:text-gray-200" />
                 </div>
                 <button onClick={handleAddOrUpdate} className="w-full py-4 rounded-xl font-bold bg-indigo-600 text-white hover:bg-indigo-700 shadow-lg transition-all">
@@ -606,7 +674,7 @@ const AdminView: React.FC<AdminViewProps> = ({
                         </svg>
                       </button>
                     </div>
-                    <p className="text-gray-700 dark:text-gray-300 text-sm font-medium line-clamp-2 mt-1">{q.questionText}</p>
+                    <p className="text-gray-700 dark:text-gray-300 text-sm font-medium line-clamp-2 mt-1">{parseHTMLTags(q.questionText)}</p>
                     <div className="mt-2 text-[10px] text-gray-400 uppercase font-black tracking-tighter flex items-center gap-1.5 flex-wrap">
                       <span>{q.subject}</span>
                       {q.week !== undefined && q.week !== null && (
@@ -625,13 +693,13 @@ const AdminView: React.FC<AdminViewProps> = ({
               <h3 className="text-xl font-bold text-gray-800 dark:text-gray-100 mb-6 flex items-center gap-2">👁️ Vista Previa Real</h3>
               <div ref={previewRef} className="space-y-4 max-h-[40vh] overflow-y-auto pr-2">
                 <div className="p-4 bg-gray-50 dark:bg-slate-800 border dark:border-slate-700 rounded-xl text-sm whitespace-pre-wrap">
-                  {questionText || 'Escribe algo...'}
+                  {questionText ? formatQuestionText(questionText) : <span className="text-gray-400 italic">Escribe algo...</span>}
                 </div>
                 <div className="space-y-2">
                   {options.map((opt, i) => opt && (
                     <div key={i} className="p-3 bg-white dark:bg-slate-900 border dark:border-slate-800 rounded-lg text-xs whitespace-pre-wrap flex items-center gap-2">
                       <span className="font-bold opacity-50">{String.fromCharCode(65 + i)})</span>
-                      <span>{opt}</span>
+                      <span>{parseHTMLTags(opt)}</span>
                     </div>
                   ))}
                 </div>
@@ -695,7 +763,7 @@ const AdminView: React.FC<AdminViewProps> = ({
                     <button onClick={() => handleDeleteExisting(q.id)} className="p-1 text-rose-400">🗑️</button>
                   </div>
                 </div>
-                <p className="text-sm font-medium mb-4 line-clamp-3 whitespace-pre-wrap dark:text-gray-200">{q.questionText}</p>
+                <p className="text-sm font-medium mb-4 line-clamp-3 whitespace-pre-wrap dark:text-gray-200">{parseHTMLTags(q.questionText)}</p>
                 <div className="mt-auto flex flex-wrap gap-2 items-center justify-between text-[10px] uppercase font-black text-gray-400 dark:text-gray-500 pt-3 border-t dark:border-slate-700/50">
                   <span className="truncate max-w-[150px]">Tema: {q.topic}</span>
                   {q.week !== undefined && q.week !== null && (

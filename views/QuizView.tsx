@@ -1,6 +1,7 @@
 
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Question, ReadingText } from '../types';
+import { formatQuestionText, parseHTMLTags } from '../utils';
 
 interface QuizViewProps {
   topicName: string;
@@ -61,28 +62,8 @@ const QuizView: React.FC<QuizViewProps> = ({ topicName, subjectName, questions, 
 
   const scoreValue = calculateScore();
 
-  // Utilidad simple para procesar Markdown de imagen: ![alt](url)
   const renderTextWithMarkdown = (text: string) => {
-    const imgRegex = /!\[.*?\]\((.*?)\)/g;
-    const parts = text.split(imgRegex);
-    const matches = Array.from(text.matchAll(imgRegex));
-
-    if (matches.length === 0) return text;
-
-    return parts.map((part, i) => {
-      if (i % 2 !== 0) {
-        return (
-                          <img 
-                            key={i} 
-                            src={part} 
-                            alt="Markdown Img" 
-                            className="my-4 max-w-full h-auto rounded-xl shadow-sm border dark:border-slate-800 mx-auto block" 
-                            referrerPolicy="no-referrer"
-                          />
-        );
-      }
-      return <span key={i}>{part}</span>;
-    });
+    return formatQuestionText(text);
   };
 
   return (
@@ -186,7 +167,7 @@ const QuizView: React.FC<QuizViewProps> = ({ topicName, subjectName, questions, 
                             {isUserSelection && <div className="w-2 h-2 bg-white rounded-full"></div>}
                           </div>
                           <div className="flex-grow flex flex-col gap-2">
-                            <span className="whitespace-pre-wrap">{opt}</span>
+                            <span className="whitespace-pre-wrap">{parseHTMLTags(opt)}</span>
                              {q.optionsImageUrls && q.optionsImageUrls[optIdx] && (
                               <img src={q.optionsImageUrls[optIdx]} alt={`Opción ${String.fromCharCode(65 + optIdx)}`} className="max-w-full h-auto rounded-lg border dark:border-slate-700 max-h-[200px] object-contain self-start" referrerPolicy="no-referrer" />
                             )}
@@ -198,9 +179,9 @@ const QuizView: React.FC<QuizViewProps> = ({ topicName, subjectName, questions, 
 
                   {isFinished && (
                     <div className="mt-6 ml-0 md:ml-14 bg-indigo-50/50 dark:bg-indigo-900/20 p-5 rounded-xl border border-indigo-100 dark:border-indigo-900/50">
-                      <p className="text-indigo-800 dark:text-indigo-200 mb-2 font-bold">Respuesta correcta: {q.options[q.correctIndex]}</p>
+                      <p className="text-indigo-800 dark:text-indigo-200 mb-2 font-bold flex items-center gap-1">Respuesta correcta: <span>{parseHTMLTags(q.options[q.correctIndex])}</span></p>
                       <div className="text-gray-600 dark:text-gray-400 text-sm italic leading-relaxed whitespace-pre-wrap">
-                        {q.explanation}
+                        {parseHTMLTags(q.explanation)}
                          {q.explanationImageUrl && (
                           <img src={q.explanationImageUrl} alt="Resolución" className="mt-4 max-w-full h-auto rounded-xl border dark:border-slate-700 max-h-[300px] object-contain block" referrerPolicy="no-referrer" />
                         )}

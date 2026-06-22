@@ -2,6 +2,7 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Question, ReadingText, ExamMode } from '../types';
 import { AREA_EXAM_CONFIGS } from '../constants';
+import { formatQuestionText, parseHTMLTags } from '../utils';
 
 interface MegaQuizViewProps {
   questions: Question[];
@@ -473,7 +474,7 @@ const MegaQuizView: React.FC<MegaQuizViewProps> = ({
                   </div>
                 )}
 
-                <p className="text-2xl font-bold text-gray-800 dark:text-gray-100 leading-relaxed mb-10 whitespace-pre-wrap">{item.question.questionText}</p>
+                <p className="text-2xl font-bold text-gray-800 dark:text-gray-100 leading-relaxed mb-10 whitespace-pre-wrap">{formatQuestionText(item.question.questionText)}</p>
 
                 <div className="grid grid-cols-1 gap-4">
                   {item.question.options.map((opt, optIdx) => {
@@ -495,7 +496,7 @@ const MegaQuizView: React.FC<MegaQuizViewProps> = ({
                           {String.fromCharCode(65 + optIdx)}
                         </div>
                         <span className={`text-lg font-bold transition-all ${isSelected ? 'text-indigo-900 dark:text-indigo-100' : 'text-gray-600 dark:text-gray-400'}`}>
-                          {opt}
+                          {parseHTMLTags(opt)}
                         </span>
                       </button>
                     );
@@ -562,7 +563,7 @@ const MegaQuizView: React.FC<MegaQuizViewProps> = ({
                     </div>
                   )}
                   
-                  <p className="text-xl font-bold text-gray-800 dark:text-gray-100 leading-relaxed mb-8">{q.questionText}</p>
+                  <p className="text-xl font-bold text-gray-800 dark:text-gray-100 leading-relaxed mb-8">{formatQuestionText(q.questionText)}</p>
                   
                   <div className="grid grid-cols-1 gap-3">
                     {q.options.map((opt, optIdx) => {
@@ -575,7 +576,7 @@ const MegaQuizView: React.FC<MegaQuizViewProps> = ({
                       return (
                         <div key={optIdx} className={`text-left p-5 rounded-2xl border-2 transition-all flex items-center gap-4 ${bgColor}`}>
                           <div className={`w-8 h-8 rounded-xl border-2 flex items-center justify-center font-black ${isUserSelection ? 'bg-indigo-600 border-indigo-600 text-white' : 'text-gray-400'}`}>{String.fromCharCode(65 + optIdx)}</div>
-                          <span className="font-medium text-gray-700 dark:text-gray-200">{opt}</span>
+                          <span className="font-medium text-gray-700 dark:text-gray-200">{parseHTMLTags(opt)}</span>
                         </div>
                       );
                     })}
@@ -583,10 +584,10 @@ const MegaQuizView: React.FC<MegaQuizViewProps> = ({
                   
                   <div className="mt-8 bg-indigo-50/30 dark:bg-indigo-900/20 p-6 rounded-2xl border dark:border-indigo-900/30">
                     <p className="text-indigo-900 dark:text-indigo-200 font-bold mb-2 uppercase tracking-widest text-xs">Respuesta Correcta:</p>
-                    <p className="text-gray-800 dark:text-gray-100 font-bold text-lg mb-4">{q.options[q.correctIndex]}</p>
+                    <p className="text-gray-800 dark:text-gray-100 font-bold text-lg mb-4">{parseHTMLTags(q.options[q.correctIndex])}</p>
                     <div className="h-px bg-indigo-100 dark:bg-indigo-800 mb-4"></div>
                     <p className="text-indigo-900 dark:text-indigo-200 font-bold mb-2 uppercase tracking-widest text-xs">Explicación:</p>
-                    <div className="text-gray-500 dark:text-gray-400 italic text-sm whitespace-pre-wrap leading-relaxed">{q.explanation}</div>
+                    <div className="text-gray-500 dark:text-gray-400 italic text-sm whitespace-pre-wrap leading-relaxed">{parseHTMLTags(q.explanation)}</div>
                   </div>
                 </div>
               </div>
