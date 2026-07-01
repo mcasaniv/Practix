@@ -183,6 +183,7 @@ const AdminView: React.FC<AdminViewProps> = ({
   const [fcBulkText, setFcBulkText] = useState('');
   const [fcBulkCourse, setFcBulkCourse] = useState('');
   const [fcBulkSubject, setFcBulkSubject] = useState('');
+  const [fcBulkTopic, setFcBulkTopic] = useState('');
   const [fcBulkFormat, setFcBulkFormat] = useState<'SEMICOLON' | 'JSON'>('SEMICOLON');
   const [fcDeleteId, setFcDeleteId] = useState<string | null>(null);
   const [fcEditing, setFcEditing] = useState<Flashcard | null>(null);
@@ -388,13 +389,13 @@ const AdminView: React.FC<AdminViewProps> = ({
           parsed.forEach((item: any) => {
             const front = item.front || item.anverso || item.pregunta || item.q || '';
             const back = item.back || item.reverso || item.respuesta || item.a || '';
-            const topic = item.topic || item.tema || '';
+            const topic = item.topic || item.tema || fcBulkTopic.trim() || '';
             if (front && back) {
               cards.push({
                 id: crypto.randomUUID(),
                 course: fcBulkCourse,
                 subject: fcBulkSubject,
-                topic: topic || undefined,
+                topic: topic.trim() || undefined,
                 front: front.trim(),
                 back: back.trim(),
                 createdAt: Date.now()
@@ -410,36 +411,72 @@ const AdminView: React.FC<AdminViewProps> = ({
         return;
       }
     } else {
-      // SEMICOLON
+      // SEMICOLON / FREE-FORM TEXT
       const lines = fcBulkText.split('\n');
       lines.forEach(line => {
-        if (!line.trim()) return;
-        const index = line.indexOf(';');
-        if (index === -1) {
-          const tabIndex = line.indexOf('\t');
-          if (tabIndex !== -1) {
-            const front = line.substring(0, tabIndex).trim();
-            const back = line.substring(tabIndex + 1).trim();
-            if (front && back) {
-              cards.push({
-                id: crypto.randomUUID(),
-                course: fcBulkCourse,
-                subject: fcBulkSubject,
-                front,
-                back,
-                createdAt: Date.now()
-              });
+        const trimmed = line.trim();
+        if (!trimmed) return;
+
+        let front = '';
+        let back = '';
+
+        // 1. Try semicolon ";"
+        const semiIdx = trimmed.indexOf(';');
+        if (semiIdx !== -1) {
+          front = trimmed.substring(0, semiIdx).trim();
+          back = trimmed.substring(semiIdx + 1).trim();
+        } 
+        // 2. Try tab "\t"
+        else if (trimmed.indexOf('\t') !== -1) {
+          const tabIdx = trimmed.indexOf('\t');
+          front = trimmed.substring(0, tabIdx).trim();
+          back = trimmed.substring(tabIdx + 1).trim();
+        } 
+        // 3. Try double or more spaces
+        else if (/\s{2,}/.test(trimmed)) {
+          const matchDouble = trimmed.match(/\s{2,}/);
+          if (matchDouble && matchDouble.index !== undefined) {
+            front = trimmed.substring(0, matchDouble.index).trim();
+            back = trimmed.substring(matchDouble.index + matchDouble[0].length).trim();
+          }
+        } 
+        // 4. Try question mark "?" (ends with ? followed by space or end)
+        else if (trimmed.includes('?')) {
+          const questIdx = trimmed.indexOf('?');
+          // Split at question mark but keep "?" as part of the question
+          front = trimmed.substring(0, questIdx + 1).trim();
+          back = trimmed.substring(questIdx + 1).trim();
+        } 
+        // 5. Try other separators: " - ", " – ", " — ", " : ", " = "
+        else {
+          const separators = [" - ", " – ", " — ", " : ", " = "];
+          let foundSep = false;
+          for (const sep of separators) {
+            const sepIdx = trimmed.indexOf(sep);
+            if (sepIdx !== -1) {
+              front = trimmed.substring(0, sepIdx).trim();
+              back = trimmed.substring(sepIdx + sep.length).trim();
+              foundSep = true;
+              break;
             }
           }
-          return;
+          
+          // 6. Fallback: Last space character " "
+          if (!foundSep) {
+            const lastSpaceIdx = trimmed.lastIndexOf(' ');
+            if (lastSpaceIdx !== -1) {
+              front = trimmed.substring(0, lastSpaceIdx).trim();
+              back = trimmed.substring(lastSpaceIdx + 1).trim();
+            }
+          }
         }
-        const front = line.substring(0, index).trim();
-        const back = line.substring(index + 1).trim();
+
         if (front && back) {
           cards.push({
             id: crypto.randomUUID(),
             course: fcBulkCourse,
             subject: fcBulkSubject,
+            topic: fcBulkTopic.trim() || undefined,
             front,
             back,
             createdAt: Date.now()
@@ -455,6 +492,7 @@ const AdminView: React.FC<AdminViewProps> = ({
 
     onSaveFlashcardsBatch(cards);
     setFcBulkText('');
+    setFcBulkTopic('');
     showToast(`Se importaron ${cards.length} flashcards.`);
     setActiveTab('FLASHCARDS_MANAGE');
   };
@@ -850,7 +888,7 @@ const AdminView: React.FC<AdminViewProps> = ({
               </h2>
               
               <div className="space-y-4 mb-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div>
                     <label className="block text-xs font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-2">Curso Destino</label>
                     <select value={fcBulkCourse} onChange={(e) => { setFcBulkCourse(e.target.value); setFcBulkSubject(''); }} className="w-full bg-gray-50 dark:bg-slate-800 border dark:border-slate-700 rounded-xl p-3 outline-none dark:text-gray-200">
@@ -865,6 +903,16 @@ const AdminView: React.FC<AdminViewProps> = ({
                       {fcBulkAvailableSubjects.map(s => <option key={s} value={s}>{s}</option>)}
                     </select>
                   </div>
+                  <div>
+                    <label className="block text-xs font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-2">Nombre del Mazo / Tema</label>
+                    <input 
+                      type="text" 
+                      value={fcBulkTopic} 
+                      onChange={(e) => setFcBulkTopic(e.target.value)} 
+                      placeholder="Ej. Biología Celular" 
+                      className="w-full bg-gray-50 dark:bg-slate-800 border dark:border-slate-700 rounded-xl p-3 outline-none dark:text-gray-200 focus:border-indigo-500 font-medium text-sm"
+                    />
+                  </div>
                 </div>
 
                 <div>
@@ -874,7 +922,7 @@ const AdminView: React.FC<AdminViewProps> = ({
                       onClick={() => setFcBulkFormat('SEMICOLON')}
                       className={`py-2 text-xs font-bold rounded-lg transition-all ${fcBulkFormat === 'SEMICOLON' ? 'bg-white dark:bg-slate-700 text-indigo-700 dark:text-indigo-300 shadow-sm' : 'text-gray-500 dark:text-gray-400'}`}
                     >
-                      Punto y Coma (Frente;Atrás)
+                      Punto y Coma o Texto Libre
                     </button>
                     <button 
                       onClick={() => setFcBulkFormat('JSON')}
@@ -892,8 +940,8 @@ const AdminView: React.FC<AdminViewProps> = ({
                     onChange={(e) => setFcBulkText(e.target.value)} 
                     placeholder={
                       fcBulkFormat === 'SEMICOLON' 
-                        ? 'Ej:\n¿Cuál es el elemento químico H?;Hidrógeno\n¿Qué es la mitosis?;División celular celular\n¿Ley de la gravedad?;$F = G \\frac{m_1 m_2}{r^1}$' 
-                        : '[\n  { "front": "¿Qué es la fotosíntesis?", "back": "Proceso químico solar de plantas..." },\n  { "front": "Fórmula del agua", "back": "$H_2O$" }\n]'
+                        ? 'Ejemplos de formatos soportados:\n1) Con punto y coma: ¿Quién es el elemento H?;Hidrógeno\n2) Con signo de interrogación: ¿Quién acuño el término Biología? Lamarck y Treviranus\n3) Con espacio o tabulación: Padre de la zoología Aritóteles\n4) Con guión o dos puntos: Padre de la botánica - Teofrasto'
+                        : '[\n  { "front": "¿Qué es la fotosíntesis?", "back": "Proceso químico solar de plantas...", "topic": "Mazo Personalizado" },\n  { "front": "Fórmula del agua", "back": "$H_2O$" }\n]'
                     }
                     className="w-full bg-gray-50 dark:bg-slate-800 border dark:border-slate-700 rounded-xl p-4 min-h-[180px] outline-none dark:text-gray-200 font-mono text-xs whitespace-pre" 
                   />
