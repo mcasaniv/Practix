@@ -430,6 +430,7 @@ const App: React.FC = () => {
             questions={db.questions.filter(q => q.topic === nav.selectedTopic && q.subject === nav.selectedSubject)}
             readingTexts={db.readingTexts || []}
             onFinish={handleFinishQuiz}
+            onBack={handleBack}
           />
         );
       case 'MIXED_QUIZ':
@@ -440,6 +441,7 @@ const App: React.FC = () => {
             questions={nav.mixedQuestions || []}
             readingTexts={db.readingTexts || []}
             onFinish={handleFinishQuiz}
+            onBack={handleBack}
           />
         );
       case 'MEGA_QUIZ':
@@ -452,6 +454,7 @@ const App: React.FC = () => {
             onSetSelectedArea={handleSetSelectedArea}
             selectedExamSubjects={nav.selectedExamSubjects}
             onFinishMega={(total) => setDb(prev => ({ ...prev, totalPracticed: (prev.totalPracticed || 0) + total }))}
+            onBack={handleBack}
           />
         );
       case 'ADMIN':
@@ -509,23 +512,27 @@ const App: React.FC = () => {
     }
   };
 
+  const showNavbar = nav.view !== 'FLASHCARDS_PLAY' && nav.view !== 'QUIZ' && nav.view !== 'MEGA_QUIZ' && nav.view !== 'MIXED_QUIZ';
+
   return (
     <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-slate-950 transition-colors duration-300">
-      <Navbar 
-        onNavigate={handleNavigate} 
-        onBack={handleBack} 
-        onImport={handleImport} 
-        onExport={handleExport}
-        onResetPracticed={handleResetPracticed}
-        onResetFlashcardsPracticed={handleResetFlashcardsPracticed}
-        currentView={nav.view}
-        navState={nav}
-        isDark={isDark}
-        toggleTheme={() => setIsDark(!isDark)}
-        totalPracticed={db.totalPracticed || 0}
-        totalFlashcardsPracticed={db.totalFlashcardsPracticed || 0}
-        onToast={showToast}
-      />
+      {showNavbar && (
+        <Navbar 
+          onNavigate={handleNavigate} 
+          onBack={handleBack} 
+          onImport={handleImport} 
+          onExport={handleExport}
+          onResetPracticed={handleResetPracticed}
+          onResetFlashcardsPracticed={handleResetFlashcardsPracticed}
+          currentView={nav.view}
+          navState={nav}
+          isDark={isDark}
+          toggleTheme={() => setIsDark(!isDark)}
+          totalPracticed={db.totalPracticed || 0}
+          totalFlashcardsPracticed={db.totalFlashcardsPracticed || 0}
+          onToast={showToast}
+        />
+      )}
       <main className="flex-grow container mx-auto px-4 py-8 relative">
         {toastMessage && (
           <div className="fixed bottom-4 right-4 bg-gray-800 text-white px-6 py-3 rounded-xl shadow-2xl z-50 animate-fade-in-up flex items-center gap-3">

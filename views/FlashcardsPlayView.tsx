@@ -24,6 +24,7 @@ const FlashcardsPlayView: React.FC<FlashcardsPlayViewProps> = ({
   const [currentCardIndex, setCurrentCardIndex] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
   const [isFinished, setIsFinished] = useState(false);
+  const [isTransitioning, setIsTransitioning] = useState(false);
   
   // Track categorization session ratings for current run
   const [ratings, setRatings] = useState<Record<string, 'EASY' | 'MEDIUM' | 'HARD'>>({});
@@ -42,6 +43,7 @@ const FlashcardsPlayView: React.FC<FlashcardsPlayViewProps> = ({
       setCurrentCardIndex(0);
       setIsFlipped(false);
       setIsFinished(false);
+      setIsTransitioning(false);
       setRatings({});
     }
   }, [sessionKey]);
@@ -74,7 +76,7 @@ const FlashcardsPlayView: React.FC<FlashcardsPlayViewProps> = ({
   // Keyboard controls
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (isFinished) return;
+      if (isFinished || isTransitioning) return;
 
       const key = e.key;
       const code = e.code;
@@ -97,7 +99,7 @@ const FlashcardsPlayView: React.FC<FlashcardsPlayViewProps> = ({
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [currentCardIndex, isFlipped, isFinished, currentCards]);
+  }, [currentCardIndex, isFlipped, isFinished, currentCards, isTransitioning]);
 
   if (flashcards.length === 0) {
     return (
@@ -130,7 +132,7 @@ const FlashcardsPlayView: React.FC<FlashcardsPlayViewProps> = ({
   const activeCard = currentCards[currentCardIndex];
 
   const handleRate = (difficulty: 'EASY' | 'MEDIUM' | 'HARD') => {
-    if (!activeCard) return;
+    if (!activeCard || isTransitioning) return;
 
     // Save categorization back in parents/db
     onUpdateCardDifficulty(activeCard.id, difficulty);
@@ -141,14 +143,18 @@ const FlashcardsPlayView: React.FC<FlashcardsPlayViewProps> = ({
       [activeCard.id]: difficulty
     }));
 
-    // Reset card flip & change index - IMMEDIATE and RESPONSIVE transition as requested
+    // Start transitioning back (flipping to front face) before changing the card index
     setIsFlipped(false);
+    setIsTransitioning(true);
     
-    if (currentCardIndex + 1 < currentCards.length) {
-      setCurrentCardIndex(prev => prev + 1);
-    } else {
-      setIsFinished(true);
-    }
+    setTimeout(() => {
+      if (currentCardIndex + 1 < currentCards.length) {
+        setCurrentCardIndex(prev => prev + 1);
+      } else {
+        setIsFinished(true);
+      }
+      setIsTransitioning(false);
+    }, 300); // 300ms transition delay ensures back face is turned away/hidden, making it extremely clean
   };
 
   const handleRestart = () => {
@@ -157,6 +163,7 @@ const FlashcardsPlayView: React.FC<FlashcardsPlayViewProps> = ({
     setCurrentCardIndex(0);
     setIsFlipped(false);
     setIsFinished(false);
+    setIsTransitioning(false);
     setRatings({});
   };
 
@@ -176,6 +183,7 @@ const FlashcardsPlayView: React.FC<FlashcardsPlayViewProps> = ({
       setCurrentCardIndex(0);
       setIsFlipped(false);
       setIsFinished(false);
+      setIsTransitioning(false);
       setRatings({});
     }
   };
@@ -363,7 +371,10 @@ const FlashcardsPlayView: React.FC<FlashcardsPlayViewProps> = ({
       <div className="perspective-1000 w-full max-w-xl mx-auto h-[350px] mb-8 relative">
         <div 
           ref={cardRef}
-          onClick={() => setIsFlipped(!isFlipped)}
+          onClick={() => {
+            if (isTransitioning) return;
+            setIsFlipped(!isFlipped);
+          }}
           className={`w-full h-full transform-style-3d transition-transform duration-500 cursor-pointer absolute ${
             isFlipped ? 'rotate-y-180' : ''
           }`}
@@ -422,7 +433,11 @@ const FlashcardsPlayView: React.FC<FlashcardsPlayViewProps> = ({
       <div className="max-w-xl mx-auto space-y-5">
         {/* Toggle Flip button - always available and supports spacebar */}
         <button
-          onClick={() => setIsFlipped(!isFlipped)}
+          onClick={() => {
+            if (isTransitioning) return;
+            setIsFlipped(!isFlipped);
+          }}
+          disabled={isTransitioning}
           className={`w-full py-4 ${isFlipped ? 'bg-indigo-100 text-indigo-700 dark:bg-slate-800 dark:text-indigo-400 hover:bg-indigo-200/60' : 'bg-indigo-600 hover:bg-indigo-700 text-white'} font-bold rounded-2xl shadow-lg transition-all active:scale-[0.98] flex items-center justify-center gap-2`}
         >
           <span>{isFlipped ? 'Ocultar Respuesta' : 'Revelar Respuesta'}</span>

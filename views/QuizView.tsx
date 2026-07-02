@@ -9,9 +9,10 @@ interface QuizViewProps {
   questions: Question[];
   readingTexts: ReadingText[];
   onFinish: (subject: string, topic: string, score: number, total: number) => void;
+  onBack: () => void;
 }
 
-const QuizView: React.FC<QuizViewProps> = ({ topicName, subjectName, questions, readingTexts, onFinish }) => {
+const QuizView: React.FC<QuizViewProps> = ({ topicName, subjectName, questions, readingTexts, onFinish, onBack }) => {
   const [answers, setAnswers] = useState<Record<string, number>>({});
   const [isFinished, setIsFinished] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -68,6 +69,15 @@ const QuizView: React.FC<QuizViewProps> = ({ topicName, subjectName, questions, 
 
   return (
     <div className="max-w-4xl mx-auto" ref={containerRef}>
+      <button
+        onClick={onBack}
+        className="flex items-center gap-1.5 text-xs font-bold text-gray-500 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 uppercase tracking-wider mb-4 transition-colors"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 19l-7-7 7-7" />
+        </svg>
+        Salir del Simulacro
+      </button>
       <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-800 p-6 mb-8 flex flex-col md:flex-row items-center justify-between gap-4">
         <div>
           <h2 className="text-2xl font-black text-gray-800 dark:text-gray-100">{topicName}</h2>
