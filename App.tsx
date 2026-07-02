@@ -14,9 +14,25 @@ import FlashcardsHomeView from './views/FlashcardsHomeView';
 import FlashcardsPlayView from './views/FlashcardsPlayView';
 
 const sanitizeDatabase = (data: AppDatabase): AppDatabase => {
-  const questions = data.questions ? [...data.questions] : [];
-  const readingTexts = data.readingTexts ? [...data.readingTexts] : [];
-  const flashcards = data.flashcards ? [...data.flashcards] : [];
+  // Migrate legacy Ecología records to Anatomía
+  const questions = (data.questions ? [...data.questions] : []).map(q => {
+    if (q.subject === 'Ecología') {
+      return { ...q, subject: 'Anatomía' };
+    }
+    return q;
+  });
+  const readingTexts = (data.readingTexts ? [...data.readingTexts] : []).map(t => {
+    if (t.subject === 'Ecología') {
+      return { ...t, subject: 'Anatomía' };
+    }
+    return t;
+  });
+  const flashcards = (data.flashcards ? [...data.flashcards] : []).map(f => {
+    if (f.subject === 'Ecología') {
+      return { ...f, subject: 'Anatomía' };
+    }
+    return f;
+  });
 
   const seenQuestionIds = new Set<string>();
   const sanitizedQuestions = questions.map(q => {
@@ -61,11 +77,24 @@ const sanitizeDatabase = (data: AppDatabase): AppDatabase => {
     return { ...f, id: fId };
   });
 
+  const migratedResults: Record<string, TopicResult> = {};
+  if (data.results) {
+    Object.entries(data.results).forEach(([key, val]) => {
+      if (key.startsWith('Ecología|')) {
+        const newKey = key.replace('Ecología|', 'Anatomía|');
+        migratedResults[newKey] = val;
+      } else {
+        migratedResults[key] = val;
+      }
+    });
+  }
+
   return {
     ...data,
     questions: sanitizedQuestions,
     readingTexts: sanitizedReadingTexts,
-    flashcards: sanitizedFlashcards
+    flashcards: sanitizedFlashcards,
+    results: migratedResults
   };
 };
 

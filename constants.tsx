@@ -17,7 +17,7 @@ export const ACADEMIC_STRUCTURE: CourseStructure[] = [
   },
   {
     name: 'Ciencias',
-    subjects: ['Física', 'Química', 'Biología', 'Ecología'],
+    subjects: ['Física', 'Química', 'Biología', 'Anatomía'],
     icon: 'https://i.pinimg.com/736x/38/ff/ce/38ffce57704b4a2122fc782795ce319d.jpg',
     color: 'bg-emerald-100 text-emerald-700 border-emerald-200'
   },
