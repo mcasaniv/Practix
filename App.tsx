@@ -478,6 +478,7 @@ const App: React.FC = () => {
           <MegaQuizView 
             questions={db.questions}
             readingTexts={db.readingTexts || []}
+            results={db.results || {}}
             mode={nav.examMode}
             selectedArea={selectedArea}
             onSetSelectedArea={handleSetSelectedArea}

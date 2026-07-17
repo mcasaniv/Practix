@@ -1,12 +1,13 @@
 
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { Question, ReadingText, ExamMode } from '../types';
+import { Question, ReadingText, ExamMode, TopicResult } from '../types';
 import { AREA_EXAM_CONFIGS } from '../constants';
 import { formatQuestionText, parseHTMLTags } from '../utils';
 
 interface MegaQuizViewProps {
   questions: Question[];
   readingTexts: ReadingText[];
+  results?: Record<string, TopicResult>;
   onFinishMega: (total: number) => void;
   mode?: ExamMode;
   selectedExamSubjects?: string[];
@@ -18,6 +19,7 @@ interface MegaQuizViewProps {
 const MegaQuizView: React.FC<MegaQuizViewProps> = ({ 
   questions, 
   readingTexts, 
+  results = {},
   onFinishMega, 
   mode = 'GENERAL',
   selectedExamSubjects,
@@ -30,6 +32,19 @@ const MegaQuizView: React.FC<MegaQuizViewProps> = ({
   const [resolutionIndex, setResolutionIndex] = useState(0); // For sequential view after exam
   const containerRef = useRef<HTMLDivElement>(null);
   
+  const [questionSource, setQuestionSource] = useState<'ALL' | 'PRACTICED'>('ALL');
+
+  const questionPool = useMemo(() => {
+    if (questionSource === 'PRACTICED') {
+      return questions.filter(q => results && results[`${q.subject}|${q.topic}`] !== undefined);
+    }
+    return questions;
+  }, [questions, results, questionSource]);
+
+  const practicedQuestionsCount = useMemo(() => {
+    return questions.filter(q => results && results[`${q.subject}|${q.topic}`] !== undefined).length;
+  }, [questions, results]);
+
   const selectedQuestions = useMemo(() => {
     const finalSelection: { question: Question; weight: number; category: string; readingText?: ReadingText }[] = [];
     
@@ -41,7 +56,7 @@ const MegaQuizView: React.FC<MegaQuizViewProps> = ({
 
     Object.entries(configToUse).forEach(([categoryName, config]) => {
       if (categoryName === 'Comprensión Lectora') {
-        const pool = questions.filter(q => q.subject === 'Comprensión Lectora' && q.readingTextId);
+        const pool = questionPool.filter(q => q.subject === 'Comprensión Lectora' && q.readingTextId);
         const groupedByText: Record<string, Question[]> = {};
          
         pool.forEach(q => {
@@ -65,7 +80,7 @@ const MegaQuizView: React.FC<MegaQuizViewProps> = ({
           qs2.forEach(q => finalSelection.push({ question: q, weight: config.weight, category: categoryName, readingText: text2 }));
         }
       } else if (categoryName === 'Inglés Lectura') {
-        const pool = questions.filter(q => q.subject === 'Inglés Lectura' && q.readingTextId);
+        const pool = questionPool.filter(q => q.subject === 'Inglés Lectura' && q.readingTextId);
         const groupedByText: Record<string, Question[]> = {};
         
         pool.forEach(q => {
@@ -97,8 +112,8 @@ const MegaQuizView: React.FC<MegaQuizViewProps> = ({
           anatCount = 1;
         }
 
-        const bioPool = questions.filter(q => q.subject === 'Biología');
-        const anatPool = questions.filter(q => q.subject === 'Anatomía');
+        const bioPool = questionPool.filter(q => q.subject === 'Biología');
+        const anatPool = questionPool.filter(q => q.subject === 'Anatomía');
 
         const shuffledBio = [...bioPool].sort(() => 0.5 - Math.random());
         const shuffledAnat = [...anatPool].sort(() => 0.5 - Math.random());
@@ -125,7 +140,7 @@ const MegaQuizView: React.FC<MegaQuizViewProps> = ({
         const selected = [...selectedBio, ...selectedAnat];
         selected.forEach(q => finalSelection.push({ question: q, weight: config.weight, category: categoryName }));
       } else {
-        const pool = questions.filter(q => config.subjects.includes(q.subject));
+        const pool = questionPool.filter(q => config.subjects.includes(q.subject));
         const shuffled = [...pool].sort(() => 0.5 - Math.random());
         const selected = shuffled.slice(0, config.count);
         selected.forEach(q => finalSelection.push({ question: q, weight: config.weight, category: categoryName }));
@@ -144,7 +159,7 @@ const MegaQuizView: React.FC<MegaQuizViewProps> = ({
       const textIdB = b.readingText?.id || '';
       return textIdA.localeCompare(textIdB);
     });
-  }, [questions, readingTexts, selectedExamSubjects, selectedArea]);
+  }, [questionPool, readingTexts, selectedExamSubjects, selectedArea]);
 
   const INITIAL_TIME = useMemo(() => {
     if (mode === 'GENERAL') return 9000;
@@ -244,9 +259,9 @@ const MegaQuizView: React.FC<MegaQuizViewProps> = ({
     return { totalScore, categoryBreakdown, topicStats, bestTopics, weakTopics };
   };
 
-  const results = useMemo(() => calculateDetailedResults(), [step, answers, selectedQuestions]);
+  const detailedResults = useMemo(() => calculateDetailedResults(), [step, answers, selectedQuestions]);
 
-  if (selectedQuestions.length === 0) {
+  if (step !== 'WELCOME' && selectedQuestions.length === 0) {
     return <div className="max-w-2xl mx-auto py-20 text-center bg-white dark:bg-slate-900 rounded-3xl border dark:border-slate-800 shadow-xl">⚠️ No hay preguntas suficientes.</div>;
   }
 
@@ -275,28 +290,67 @@ const MegaQuizView: React.FC<MegaQuizViewProps> = ({
             <p className="text-gray-500 dark:text-gray-400 text-lg">Este examen consta de <span className="text-indigo-600 font-black">{selectedQuestions.length}</span> preguntas seleccionadas por áreas.</p>
           </div>
 
-          {/* Selector de Área */}
-          <div className="flex flex-col items-center mb-8 max-w-sm mx-auto">
-            <label className="text-xs font-black uppercase text-gray-400 tracking-wider mb-2.5">
-              Área Académica Seleccionada:
-            </label>
-            <div className="grid grid-cols-3 gap-1.5 w-full bg-gray-50 dark:bg-slate-800 p-1 rounded-2xl border border-gray-100 dark:border-slate-850">
-              {(['Biomédicas', 'Ingenierías', 'Sociales'] as const).map(area => {
-                const isActive = selectedArea === area;
-                return (
-                  <button
-                    key={area}
-                    onClick={() => onSetSelectedArea(area)}
-                    className={`py-2 px-2.5 rounded-xl font-black text-xs transition-all uppercase tracking-wider ${
-                      isActive
-                        ? 'bg-indigo-600 text-white shadow-md'
-                        : 'text-gray-500 hover:text-indigo-600 dark:text-gray-400 dark:hover:text-indigo-450'
-                    }`}
-                  >
-                    {area}
-                  </button>
-                );
-              })}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8 max-w-2xl mx-auto">
+            {/* Selector de Área */}
+            <div className="flex flex-col items-center">
+              <label className="text-xs font-black uppercase text-gray-400 tracking-wider mb-2.5">
+                Área Académica:
+              </label>
+              <div className="grid grid-cols-3 gap-1.5 w-full bg-gray-50 dark:bg-slate-800 p-1 rounded-2xl border border-gray-100 dark:border-slate-850">
+                {(['Biomédicas', 'Ingenierías', 'Sociales'] as const).map(area => {
+                  const isActive = selectedArea === area;
+                  return (
+                    <button
+                      key={area}
+                      onClick={() => onSetSelectedArea(area)}
+                      className={`py-2 px-2 rounded-xl font-black text-xs transition-all uppercase tracking-wider ${
+                        isActive
+                          ? 'bg-indigo-600 text-white shadow-md'
+                          : 'text-gray-500 hover:text-indigo-600 dark:text-gray-400 dark:hover:text-indigo-450'
+                      }`}
+                    >
+                      {area}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Banco de Preguntas / Origen */}
+            <div className="flex flex-col items-center">
+              <label className="text-xs font-black uppercase text-gray-400 tracking-wider mb-2.5">
+                Banco de Preguntas:
+              </label>
+              <div className="grid grid-cols-2 gap-1.5 w-full bg-gray-50 dark:bg-slate-800 p-1 rounded-2xl border border-gray-100 dark:border-slate-850">
+                <button
+                  type="button"
+                  onClick={() => setQuestionSource('ALL')}
+                  className={`py-1 px-2.5 rounded-xl font-black text-xs transition-all uppercase tracking-wider flex flex-col items-center justify-center min-h-[44px] ${
+                    questionSource === 'ALL'
+                      ? 'bg-indigo-600 text-white shadow-md'
+                      : 'text-gray-500 hover:text-indigo-600 dark:text-gray-400 dark:hover:text-indigo-450'
+                  }`}
+                >
+                  <span>Completo</span>
+                  <span className={`text-[9px] font-bold ${questionSource === 'ALL' ? 'text-indigo-200' : 'text-gray-400'}`}>
+                    {questions.length} Preguntas
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setQuestionSource('PRACTICED')}
+                  className={`py-1 px-2.5 rounded-xl font-black text-xs transition-all uppercase tracking-wider flex flex-col items-center justify-center min-h-[44px] ${
+                    questionSource === 'PRACTICED'
+                      ? 'bg-indigo-600 text-white shadow-md'
+                      : 'text-gray-500 hover:text-indigo-600 dark:text-gray-400 dark:hover:text-indigo-450'
+                  }`}
+                >
+                  <span>Practicadas</span>
+                  <span className={`text-[9px] font-bold ${questionSource === 'PRACTICED' ? 'text-indigo-200' : 'text-gray-400'}`}>
+                    {practicedQuestionsCount} Preguntas
+                  </span>
+                </button>
+              </div>
             </div>
           </div>
 
@@ -326,9 +380,26 @@ const MegaQuizView: React.FC<MegaQuizViewProps> = ({
             </table>
           </div>
 
+          {selectedQuestions.length === 0 ? (
+            <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50 rounded-2xl p-5 text-center text-amber-800 dark:text-amber-300 font-bold text-sm mb-8 flex flex-col items-center gap-2">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+              <span>No hay preguntas suficientes en las prácticas ya realizadas para el área seleccionada.</span>
+              <span className="text-xs font-normal text-amber-700/85 dark:text-amber-400/85">
+                Por favor, practica algunos temas de esta área en el Inicio primero, o cambia la opción a <strong>"Completo"</strong> para generar el simulacro utilizando todas las preguntas de la plataforma.
+              </span>
+            </div>
+          ) : null}
+
           <button 
             onClick={() => setStep('QUIZ')}
-            className="w-full bg-indigo-600 text-white py-6 rounded-2xl font-black text-xl hover:bg-indigo-700 shadow-xl shadow-indigo-200 dark:shadow-none active:scale-[0.98] transition-all flex items-center justify-center gap-4"
+            disabled={selectedQuestions.length === 0}
+            className={`w-full py-6 rounded-2xl font-black text-xl shadow-xl transition-all flex items-center justify-center gap-4 ${
+              selectedQuestions.length === 0 
+                ? 'bg-gray-100 dark:bg-slate-800 text-gray-400 dark:text-slate-600 cursor-not-allowed shadow-none border border-gray-200 dark:border-slate-700' 
+                : 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-200 dark:shadow-none active:scale-[0.98]'
+            }`}
           >
             <span>🚀 Comenzar Examen</span>
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -391,7 +462,7 @@ const MegaQuizView: React.FC<MegaQuizViewProps> = ({
         ) : (
           <div className="text-center px-8 py-3 bg-indigo-50 dark:bg-indigo-900/30 border-2 border-indigo-200 dark:border-indigo-800 rounded-2xl">
             <span className="text-[10px] uppercase font-black text-indigo-400 block tracking-widest">Puntaje Total</span>
-            <span className="text-4xl font-black text-indigo-700 dark:text-indigo-200">{results.totalScore.toFixed(4)} / {maxPossibleScore.toFixed(4)}</span>
+            <span className="text-4xl font-black text-indigo-700 dark:text-indigo-200">{detailedResults.totalScore.toFixed(4)} / {maxPossibleScore.toFixed(4)}</span>
           </div>
         )}
       </div>
@@ -421,7 +492,7 @@ const MegaQuizView: React.FC<MegaQuizViewProps> = ({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50 dark:divide-slate-800">
-                  {Object.entries(results.categoryBreakdown).map(([cat, stats]) => (
+                  {Object.entries(detailedResults.categoryBreakdown).map(([cat, stats]) => (
                     <tr key={cat} className="hover:bg-gray-50/50 dark:hover:bg-slate-800/50 transition-colors">
                       <td className="p-6">
                         <div className="font-black text-gray-700 dark:text-gray-200">{cat}</div>
@@ -451,14 +522,14 @@ const MegaQuizView: React.FC<MegaQuizViewProps> = ({
             </div>
           </div>
 
-          <div className={`grid grid-cols-1 ${results.bestTopics.length > 0 && results.weakTopics.length > 0 ? 'md:grid-cols-2' : ''} gap-6`}>
-            {results.bestTopics.length > 0 && (
+          <div className={`grid grid-cols-1 ${detailedResults.bestTopics.length > 0 && detailedResults.weakTopics.length > 0 ? 'md:grid-cols-2' : ''} gap-6`}>
+            {detailedResults.bestTopics.length > 0 && (
               <div className="bg-emerald-50 dark:bg-emerald-900/10 p-8 rounded-3xl border border-emerald-100 dark:border-emerald-900/30 shadow-sm flex flex-col h-full">
                 <h3 className="text-emerald-800 dark:text-emerald-300 font-black text-lg mb-6 flex items-center gap-2 shrink-0">
                   <span className="text-2xl">🏆</span> Mejores Temas
                 </h3>
                 <div className="space-y-4">
-                  {results.bestTopics.map((t, idx) => (
+                  {detailedResults.bestTopics.map((t, idx) => (
                     <div key={idx} className="flex justify-between items-start bg-white/50 dark:bg-slate-900/50 p-4 rounded-xl border border-emerald-100 dark:border-emerald-900/20 shadow-sm shadow-emerald-100/50 dark:shadow-none hover:translate-x-1 transition-transform">
                       <span className="text-gray-700 dark:text-gray-300 font-bold text-xs leading-tight pr-2">{t.name}</span>
                       <span className="bg-emerald-500 text-white px-3 py-1 rounded-full font-black text-[10px] shrink-0">{t.percentage.toFixed(0)}%</span>
@@ -468,13 +539,13 @@ const MegaQuizView: React.FC<MegaQuizViewProps> = ({
               </div>
             )}
             
-            {results.weakTopics.length > 0 && (
+            {detailedResults.weakTopics.length > 0 && (
               <div className="bg-rose-50 dark:bg-rose-900/10 p-8 rounded-3xl border border-rose-100 dark:border-rose-900/30 shadow-sm flex flex-col h-full">
                 <h3 className="text-rose-800 dark:text-rose-300 font-black text-lg mb-6 flex items-center gap-2 shrink-0">
                   <span className="text-2xl">📉</span> Temas a Reforzar
                 </h3>
                 <div className="space-y-4">
-                  {results.weakTopics.map((t, idx) => (
+                  {detailedResults.weakTopics.map((t, idx) => (
                     <div key={idx} className="flex justify-between items-start bg-white/50 dark:bg-slate-900/50 p-4 rounded-xl border border-rose-100 dark:border-rose-900/20 shadow-sm shadow-rose-100/50 dark:shadow-none hover:translate-x-1 transition-transform">
                       <span className="text-gray-700 dark:text-gray-300 font-bold text-xs leading-tight pr-2">{t.name}</span>
                       <span className="bg-rose-500 text-white px-3 py-1 rounded-full font-black text-[10px] shrink-0">{t.percentage.toFixed(0)}%</span>
