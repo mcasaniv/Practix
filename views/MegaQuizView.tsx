@@ -97,48 +97,6 @@ const MegaQuizView: React.FC<MegaQuizViewProps> = ({
           const qs1 = [...groupedByText[textIds[0]]].sort(() => 0.5 - Math.random()).slice(0, 2);
           qs1.forEach(q => finalSelection.push({ question: q, weight: config.weight, category: categoryName, readingText: text1 }));
         }
-      } else if (categoryName === 'Biología') {
-        // Specific distribution for Biología (combining General Biología + Anatomía)
-        // Biomédicas: 9 total = 6 Biología + 3 Anatomía
-        // Ingenierías: 5 total = 3 Biología + 2 Anatomía
-        // Sociales: 3 total = 2 Biología + 1 Anatomía
-        let bioCount = 6;
-        let anatCount = 3;
-        if (selectedArea === 'Ingenierías') {
-          bioCount = 3;
-          anatCount = 2;
-        } else if (selectedArea === 'Sociales') {
-          bioCount = 2;
-          anatCount = 1;
-        }
-
-        const bioPool = questionPool.filter(q => q.subject === 'Biología');
-        const anatPool = questionPool.filter(q => q.subject === 'Anatomía');
-
-        const shuffledBio = [...bioPool].sort(() => 0.5 - Math.random());
-        const shuffledAnat = [...anatPool].sort(() => 0.5 - Math.random());
-
-        let selectedBio = shuffledBio.slice(0, bioCount);
-        let selectedAnat = shuffledAnat.slice(0, anatCount);
-
-        // Fallback: if we don't have enough of one, fill with the other
-        if (selectedBio.length < bioCount && shuffledAnat.length > anatCount) {
-          const extraAnatNeeded = bioCount - selectedBio.length;
-          selectedAnat = [
-            ...selectedAnat,
-            ...shuffledAnat.slice(anatCount, anatCount + extraAnatNeeded)
-          ];
-        }
-        if (selectedAnat.length < anatCount && shuffledBio.length > bioCount) {
-          const extraBioNeeded = anatCount - selectedAnat.length;
-          selectedBio = [
-            ...selectedBio,
-            ...shuffledBio.slice(bioCount, bioCount + extraBioNeeded)
-          ];
-        }
-
-        const selected = [...selectedBio, ...selectedAnat];
-        selected.forEach(q => finalSelection.push({ question: q, weight: config.weight, category: categoryName }));
       } else {
         const pool = questionPool.filter(q => config.subjects.includes(q.subject));
         const shuffled = [...pool].sort(() => 0.5 - Math.random());

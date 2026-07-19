@@ -12,27 +12,45 @@ import MegaQuizView from './views/MegaQuizView';
 import ExamSetupView from './views/ExamSetupView';
 import FlashcardsHomeView from './views/FlashcardsHomeView';
 import FlashcardsPlayView from './views/FlashcardsPlayView';
+import { StatsView } from './views/StatsView';
 
 const sanitizeDatabase = (data: AppDatabase): AppDatabase => {
-  // Migrate legacy Ecología records to Anatomía
-  const questions = (data.questions ? [...data.questions] : []).map(q => {
-    if (q.subject === 'Ecología') {
-      return { ...q, subject: 'Anatomía' };
-    }
-    return q;
-  });
-  const readingTexts = (data.readingTexts ? [...data.readingTexts] : []).map(t => {
-    if (t.subject === 'Ecología') {
-      return { ...t, subject: 'Anatomía' };
-    }
-    return t;
-  });
-  const flashcards = (data.flashcards ? [...data.flashcards] : []).map(f => {
-    if (f.subject === 'Ecología') {
-      return { ...f, subject: 'Anatomía' };
-    }
-    return f;
-  });
+  // Migrate legacy Ecología and Anatomía records to Biología, and filter out Francés
+  const questions = (data.questions ? [...data.questions] : [])
+    .filter(q => q.subject !== 'Francés')
+    .map(q => {
+      let subj = q.subject;
+      let crs = q.course;
+      if (subj === 'Ecología' || subj === 'Anatomía') {
+        subj = 'Biología';
+      }
+      if (subj === 'Comprensión Lectora') {
+        crs = 'Razonamiento';
+      }
+      return { ...q, subject: subj, course: crs };
+    });
+  const readingTexts = (data.readingTexts ? [...data.readingTexts] : [])
+    .filter(t => t.subject !== 'Francés')
+    .map(t => {
+      let subj = t.subject;
+      if (subj === 'Ecología' || subj === 'Anatomía') {
+        subj = 'Biología';
+      }
+      return { ...t, subject: subj };
+    });
+  const flashcards = (data.flashcards ? [...data.flashcards] : [])
+    .filter(f => f.subject !== 'Francés')
+    .map(f => {
+      let subj = f.subject;
+      let crs = f.course;
+      if (subj === 'Ecología' || subj === 'Anatomía') {
+        subj = 'Biología';
+      }
+      if (subj === 'Comprensión Lectora') {
+        crs = 'Razonamiento';
+      }
+      return { ...f, subject: subj, course: crs };
+    });
 
   const seenQuestionIds = new Set<string>();
   const sanitizedQuestions = questions.map(q => {
@@ -81,9 +99,26 @@ const sanitizeDatabase = (data: AppDatabase): AppDatabase => {
   if (data.results) {
     Object.entries(data.results).forEach(([key, val]) => {
       if (key.startsWith('Ecología|')) {
-        const newKey = key.replace('Ecología|', 'Anatomía|');
-        migratedResults[newKey] = val;
-      } else {
+        const newKey = key.replace('Ecología|', 'Biología|');
+        if (migratedResults[newKey]) {
+          migratedResults[newKey] = {
+            score: migratedResults[newKey].score + val.score,
+            total: migratedResults[newKey].total + val.total
+          };
+        } else {
+          migratedResults[newKey] = val;
+        }
+      } else if (key.startsWith('Anatomía|')) {
+        const newKey = key.replace('Anatomía|', 'Biología|');
+        if (migratedResults[newKey]) {
+          migratedResults[newKey] = {
+            score: migratedResults[newKey].score + val.score,
+            total: migratedResults[newKey].total + val.total
+          };
+        } else {
+          migratedResults[newKey] = val;
+        }
+      } else if (!key.startsWith('Francés|')) {
         migratedResults[key] = val;
       }
     });
@@ -390,7 +425,7 @@ const App: React.FC = () => {
 
   const handleBack = useCallback(() => {
     setNav(prev => {
-      if (prev.view === 'ADMIN' || prev.view === 'MEGA_QUIZ' || prev.view === 'EXAM_SETUP') return { ...prev, view: 'HOME', examMode: undefined, selectedExamSubjects: undefined };
+      if (prev.view === 'ADMIN' || prev.view === 'MEGA_QUIZ' || prev.view === 'EXAM_SETUP' || prev.view === 'STATS') return { ...prev, view: 'HOME', examMode: undefined, selectedExamSubjects: undefined };
       if (prev.view === 'QUIZ' || prev.view === 'MIXED_QUIZ') return { ...prev, view: 'TOPICS', mixedQuestions: undefined };
       if (prev.view === 'TOPICS') return { ...prev, view: 'SUBJECTS', selectedTopic: undefined };
       if (prev.view === 'SUBJECTS') return { ...prev, view: 'HOME', selectedSubject: undefined };
@@ -537,6 +572,16 @@ const App: React.FC = () => {
           />
         );
       }
+      case 'STATS':
+        return (
+          <StatsView 
+            questions={db.questions}
+            results={db.results || {}}
+            selectedArea={selectedArea}
+            onSetSelectedArea={handleSetSelectedArea}
+            academicStructure={academicStructure}
+          />
+        );
       default:
         return <HomeView onSelectCourse={(course) => handleNavigate('SUBJECTS', { selectedCourse: course })} onStartMegaQuiz={() => handleNavigate('MEGA_QUIZ')} />;
     }

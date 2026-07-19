@@ -95,16 +95,25 @@ const Navbar: React.FC<NavbarProps> = ({
           </div>
           <div className={`flex bg-indigo-800/65 dark:bg-indigo-950/65 p-1 rounded-xl ml-2 sm:ml-4 text-xs border border-indigo-400/20 ${isExamView ? 'hidden' : ''}`}>
             <button 
+              id="nav-btn-practice"
               onClick={() => onNavigate('HOME')}
-              className={`px-3 py-1 rounded-lg font-bold transition-all ${currentView !== 'FLASHCARDS_HOME' && currentView !== 'FLASHCARDS_SUBJECTS' && currentView !== 'FLASHCARDS_PLAY' ? 'bg-indigo-600 dark:bg-indigo-800 text-white shadow-sm' : 'text-indigo-200 hover:text-white'}`}
+              className={`px-3 py-1 rounded-lg font-bold transition-all ${!['FLASHCARDS_HOME', 'FLASHCARDS_SUBJECTS', 'FLASHCARDS_PLAY', 'STATS'].includes(currentView) ? 'bg-indigo-600 dark:bg-indigo-800 text-white shadow-sm' : 'text-indigo-200 hover:text-white'}`}
             >
               Práctica
             </button>
             <button 
+              id="nav-btn-flashcards"
               onClick={() => onNavigate('FLASHCARDS_HOME')}
-              className={`px-3 py-1 rounded-lg font-bold transition-all ${currentView === 'FLASHCARDS_HOME' || currentView === 'FLASHCARDS_SUBJECTS' || currentView === 'FLASHCARDS_PLAY' ? 'bg-indigo-600 dark:bg-indigo-800 text-white shadow-sm' : 'text-indigo-200 hover:text-white'}`}
+              className={`px-3 py-1 rounded-lg font-bold transition-all ${['FLASHCARDS_HOME', 'FLASHCARDS_SUBJECTS', 'FLASHCARDS_PLAY'].includes(currentView) ? 'bg-indigo-600 dark:bg-indigo-800 text-white shadow-sm' : 'text-indigo-200 hover:text-white'}`}
             >
               Flashcards
+            </button>
+            <button 
+              id="nav-btn-stats"
+              onClick={() => onNavigate('STATS')}
+              className={`px-3 py-1 rounded-lg font-bold transition-all ${currentView === 'STATS' ? 'bg-indigo-600 dark:bg-indigo-800 text-white shadow-sm' : 'text-indigo-200 hover:text-white'}`}
+            >
+              Estadísticas
             </button>
           </div>
         </div>
@@ -197,6 +206,7 @@ const Navbar: React.FC<NavbarProps> = ({
       <div className={`bg-indigo-800/50 dark:bg-indigo-950/50 py-1.5 px-4 text-xs font-medium text-indigo-100 border-t border-indigo-600/30 dark:border-indigo-800/30 ${isExamView ? 'hidden' : ''}`}>
         <div className="container mx-auto">
           {currentView === 'HOME' && "Inicio / Cursos"}
+          {currentView === 'STATS' && "Estadísticas / Progreso Académico"}
           {currentView === 'SUBJECTS' && `Cursos / ${navState.selectedCourse}`}
           {currentView === 'TOPICS' && `Cursos / ${navState.selectedCourse} / ${navState.selectedSubject}`}
           {currentView === 'QUIZ' && `Cursos / ${navState.selectedCourse} / ${navState.selectedSubject} / ${navState.selectedTopic}`}

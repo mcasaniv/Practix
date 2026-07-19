@@ -5,7 +5,7 @@ import { CourseStructure } from './types';
 export const ACADEMIC_STRUCTURE: CourseStructure[] = [
   {
     name: 'Comunicación',
-    subjects: ['Lenguaje', 'Literatura', 'Comprensión Lectora'],
+    subjects: ['Lenguaje', 'Literatura'],
     icon: 'https://i.pinimg.com/736x/84/9c/c5/849cc5a52cf9d59bc41debd9003770a6.jpg',
     color: 'bg-blue-100 text-blue-700 border-blue-200'
   },
@@ -17,7 +17,7 @@ export const ACADEMIC_STRUCTURE: CourseStructure[] = [
   },
   {
     name: 'Ciencias',
-    subjects: ['Física', 'Química', 'Biología', 'Anatomía'],
+    subjects: ['Física', 'Química', 'Biología'],
     icon: 'https://i.pinimg.com/736x/38/ff/ce/38ffce57704b4a2122fc782795ce319d.jpg',
     color: 'bg-emerald-100 text-emerald-700 border-emerald-200'
   },
@@ -35,13 +35,13 @@ export const ACADEMIC_STRUCTURE: CourseStructure[] = [
   },
   {
     name: 'Razonamiento',
-    subjects: ['Razonamiento Matemático', 'Razonamiento Verbal', 'Raz. Lógico'],
-    icon: 'https://i.pinimg.com/736x/93/bc/75/93bc75ffd6e50150860b176ad1469faf.jpg',
+    subjects: ['Razonamiento Matemático', 'Razonamiento Verbal', 'Raz. Lógico', 'Comprensión Lectora'],
+    icon: 'https://i.pinimg.com/736x/93/bc/75/93bc75ffd6e50150860b176ad1459faf.jpg',
     color: 'bg-purple-100 text-purple-700 border-purple-200'
   },
   {
     name: 'Idioma',
-    subjects: ['Inglés', 'Francés', 'Inglés Lectura'],
+    subjects: ['Inglés', 'Inglés Lectura'],
     icon: 'https://i.pinimg.com/736x/4d/9b/a5/4d9ba51ddd6e842980652b102e7d475c.jpg',
     color: 'bg-cyan-100 text-cyan-700 border-cyan-200'
   },
