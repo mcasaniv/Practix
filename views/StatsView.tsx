@@ -161,6 +161,7 @@ export const StatsView: React.FC<StatsViewProps> = ({
         practicedQuestions: number;
         accuracy: number;
         weight: number;
+        questionCount: number;
         categoryName: string | null;
       }[] = [];
 
@@ -194,11 +195,16 @@ export const StatsView: React.FC<StatsViewProps> = ({
         correctQInCourse += correctQInSubj;
         practicedQInCourse += practicedQInSubj;
 
+        let portionMaxPoints = 0;
+        let portionQuestions = 0;
+
         if (mapResult) {
           // Approximate weight contribution for this subject
           // If a category has multiple subjects (e.g. Historia lists HP and HU), divide weight and count among them
           const totalSubjectsInCat = config[mapResult.category].subjects.length || 1;
-          const portionMaxPoints = (subjCount * subjWeight) / totalSubjectsInCat;
+          portionMaxPoints = (subjCount * subjWeight) / totalSubjectsInCat;
+          portionQuestions = subjCount / totalSubjectsInCat;
+
           courseMaxExamPoints += portionMaxPoints;
           
           const subjMastery = practicedQInSubj > 0 ? (correctQInSubj / practicedQInSubj) : 0;
@@ -220,7 +226,8 @@ export const StatsView: React.FC<StatsViewProps> = ({
           correctQuestions: correctQInSubj,
           practicedQuestions: practicedQInSubj,
           accuracy: subjExpectedAccuracy * 100,
-          weight: subjWeight,
+          weight: portionMaxPoints,
+          questionCount: portionQuestions,
           categoryName
         });
       });
@@ -512,8 +519,11 @@ export const StatsView: React.FC<StatsViewProps> = ({
                                   {subj.practicedTopics} / {subj.totalTopics} Temas Practicados
                                 </span>
                               </div>
-                              <span className="text-[10px] bg-indigo-50 dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 font-black px-2 py-0.5 rounded-full uppercase tracking-wider">
-                                Peso: {subj.weight.toFixed(2)}
+                              <span className="text-[10px] bg-indigo-50 dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 font-black px-2.5 py-1 rounded-full uppercase tracking-wider flex items-center gap-1">
+                                <span>Peso: {subj.weight.toFixed(2)} pts</span>
+                                {subj.questionCount > 0 && (
+                                  <span className="text-indigo-400 dark:text-indigo-500 font-bold">({subj.questionCount % 1 === 0 ? subj.questionCount : subj.questionCount.toFixed(1)} preg.)</span>
+                                )}
                               </span>
                             </div>
 

@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { Question, ReadingText, ExamMode, TopicResult } from '../types';
+import { Question, ReadingText, ExamMode, TopicResult, SavedExam } from '../types';
 import { AREA_EXAM_CONFIGS } from '../constants';
 import { formatQuestionText, parseHTMLTags } from '../utils';
 
@@ -14,6 +14,8 @@ interface MegaQuizViewProps {
   selectedArea: 'Biomédicas' | 'Ingenierías' | 'Sociales';
   onSetSelectedArea: (area: 'Biomédicas' | 'Ingenierías' | 'Sociales') => void;
   onBack: () => void;
+  retakeExam?: SavedExam;
+  onSaveExamResult?: (exam: SavedExam) => void;
 }
 
 const MegaQuizView: React.FC<MegaQuizViewProps> = ({ 
@@ -25,14 +27,23 @@ const MegaQuizView: React.FC<MegaQuizViewProps> = ({
   selectedExamSubjects,
   selectedArea,
   onSetSelectedArea,
-  onBack
+  onBack,
+  retakeExam,
+  onSaveExamResult
 }) => {
   const [step, setStep] = useState<'WELCOME' | 'QUIZ' | 'FINISHED'>('WELCOME');
   const [answers, setAnswers] = useState<Record<string, number>>({});
   const [resolutionIndex, setResolutionIndex] = useState(0); // For sequential view after exam
   const containerRef = useRef<HTMLDivElement>(null);
+  const currentExamIdRef = useRef<string>(retakeExam ? retakeExam.id : crypto.randomUUID());
   
   const [questionSource, setQuestionSource] = useState<'ALL' | 'PRACTICED'>('ALL');
+
+  useEffect(() => {
+    if (retakeExam?.area && (retakeExam.area === 'Biomédicas' || retakeExam.area === 'Ingenierías' || retakeExam.area === 'Sociales')) {
+      onSetSelectedArea(retakeExam.area as any);
+    }
+  }, [retakeExam]);
 
   const questionPool = useMemo(() => {
     if (questionSource === 'PRACTICED') {
@@ -45,7 +56,31 @@ const MegaQuizView: React.FC<MegaQuizViewProps> = ({
     return questions.filter(q => results && results[`${q.subject}|${q.topic}`] !== undefined).length;
   }, [questions, results]);
 
-  const selectedQuestions = useMemo(() => {
+  const candidateQuestions = useMemo(() => {
+    if (retakeExam && retakeExam.questionIds.length > 0) {
+      const activeAreaConfig = AREA_EXAM_CONFIGS[selectedArea] || AREA_EXAM_CONFIGS['Biomédicas'];
+      const qMap = new Map(questionPool.map(q => [q.id, q]));
+      const finalSelection: { question: Question; weight: number; category: string; readingText?: ReadingText }[] = [];
+
+      retakeExam.questionIds.forEach(id => {
+        const q = qMap.get(id);
+        if (q) {
+          let catName = q.subject;
+          let weight = 1.25;
+          for (const [cat, cfg] of Object.entries(activeAreaConfig)) {
+            if (cfg.subjects.includes(q.subject) || cat === q.subject) {
+              catName = cat;
+              weight = cfg.weight;
+              break;
+            }
+          }
+          const readingText = q.readingTextId ? readingTexts.find(r => r.id === q.readingTextId) : undefined;
+          finalSelection.push({ question: q, weight, category: catName, readingText });
+        }
+      });
+      return finalSelection;
+    }
+
     const finalSelection: { question: Question; weight: number; category: string; readingText?: ReadingText }[] = [];
     
     const activeAreaConfig = AREA_EXAM_CONFIGS[selectedArea] || AREA_EXAM_CONFIGS['Biomédicas'];
@@ -117,23 +152,46 @@ const MegaQuizView: React.FC<MegaQuizViewProps> = ({
       const textIdB = b.readingText?.id || '';
       return textIdA.localeCompare(textIdB);
     });
-  }, [questionPool, readingTexts, selectedExamSubjects, selectedArea]);
+  }, [questionPool, readingTexts, selectedExamSubjects, selectedArea, retakeExam]);
 
-  const INITIAL_TIME = useMemo(() => {
-    if (mode === 'GENERAL') return 9000;
-    // For custom mode, give ~1.875 minutes per question (same ratio as 80/9000)
-    return Math.max(selectedQuestions.length * 112.5, 300); // Min 5 minutes
-  }, [mode, selectedQuestions.length]);
+  const [activeQuestions, setActiveQuestions] = useState<{ question: Question; weight: number; category: string; readingText?: ReadingText }[]>([]);
+
+  const selectedQuestions = step === 'WELCOME' ? candidateQuestions : activeQuestions;
+
+  const handleStartExam = () => {
+    if (candidateQuestions.length === 0) return;
+    const examQuestions = [...candidateQuestions];
+    setActiveQuestions(examQuestions);
+    setAnswers({});
+    const duration = mode === 'GENERAL' ? 9000 : Math.max(examQuestions.length * 112.5, 300);
+    setTimeLeft(duration);
+    setStep('QUIZ');
+
+    // Register initial exam record
+    const examId = currentExamIdRef.current;
+    const examRecord: SavedExam = {
+      id: examId,
+      title: retakeExam?.title || `${mode === 'CUSTOM' ? 'Examen Personalizado' : 'Simulacro General'} - ${selectedArea}`,
+      course: 'Exámenes',
+      subject: 'Exámenes Simulacros',
+      area: selectedArea,
+      mode: mode || 'GENERAL',
+      questionIds: examQuestions.map(item => item.question.id),
+      totalQuestions: examQuestions.length,
+      createdAt: retakeExam?.createdAt || Date.now(),
+      selectedExamSubjects: selectedExamSubjects,
+      attemptsCount: (retakeExam?.attemptsCount || 0) + 1
+    };
+    if (onSaveExamResult) {
+      onSaveExamResult(examRecord);
+    }
+  };
 
   const maxPossibleScore = useMemo(() => {
     return selectedQuestions.reduce((acc, curr) => acc + curr.weight, 0);
   }, [selectedQuestions]);
 
-  const [timeLeft, setTimeLeft] = useState(INITIAL_TIME);
-
-  useEffect(() => {
-    setTimeLeft(INITIAL_TIME);
-  }, [INITIAL_TIME]);
+  const [timeLeft, setTimeLeft] = useState(9000);
 
   useEffect(() => {
     if (step !== 'QUIZ') return;
@@ -178,6 +236,30 @@ const MegaQuizView: React.FC<MegaQuizViewProps> = ({
     setStep('FINISHED');
     setResolutionIndex(0); // Reset resolution index
     onFinishMega(selectedQuestions.length);
+
+    const resultsCalc = calculateDetailedResults();
+    const examId = currentExamIdRef.current;
+    const finalRecord: SavedExam = {
+      id: examId,
+      title: retakeExam?.title || `${mode === 'CUSTOM' ? 'Examen Personalizado' : 'Simulacro General'} - ${selectedArea}`,
+      course: 'Exámenes',
+      subject: 'Exámenes Simulacros',
+      area: selectedArea,
+      mode: mode || 'GENERAL',
+      questionIds: selectedQuestions.map(item => item.question.id),
+      totalQuestions: selectedQuestions.length,
+      score: resultsCalc.totalScore,
+      maxScore: maxPossibleScore,
+      solvedAt: Date.now(),
+      createdAt: retakeExam?.createdAt || Date.now(),
+      selectedExamSubjects: selectedExamSubjects,
+      attemptsCount: retakeExam?.attemptsCount ? retakeExam.attemptsCount + 1 : 1
+    };
+
+    if (onSaveExamResult) {
+      onSaveExamResult(finalRecord);
+    }
+
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -351,7 +433,7 @@ const MegaQuizView: React.FC<MegaQuizViewProps> = ({
           ) : null}
 
           <button 
-            onClick={() => setStep('QUIZ')}
+            onClick={handleStartExam}
             disabled={selectedQuestions.length === 0}
             className={`w-full py-6 rounded-2xl font-black text-xl shadow-xl transition-all flex items-center justify-center gap-4 ${
               selectedQuestions.length === 0 

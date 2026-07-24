@@ -1,30 +1,41 @@
 
 import React, { useMemo, useState } from 'react';
-import { Question, TopicResult, ReadingText } from '../types';
+import { Question, TopicResult, ReadingText, SavedExam } from '../types';
 
 interface TopicsViewProps {
   subjectName: string;
+  courseName?: string;
   questions: Question[];
   readingTexts: ReadingText[];
   results: Record<string, TopicResult>;
+  savedExams?: SavedExam[];
   onSelectTopic: (topic: string) => void;
   onStartMixedQuiz: (questions: Question[]) => void;
   onDeleteTopic: (topic: string) => void;
   onMoveTopic: (topic: string, direction: 'UP' | 'DOWN') => void;
+  onRetakeExam?: (exam: SavedExam) => void;
+  onDeleteSavedExam?: (examId: string) => void;
+  onStartNewExam?: () => void;
 }
 
 const TopicsView: React.FC<TopicsViewProps> = ({ 
   subjectName, 
+  courseName,
   questions, 
   readingTexts,
   results,
+  savedExams = [],
   onSelectTopic, 
   onStartMixedQuiz,
   onDeleteTopic, 
-  onMoveTopic 
+  onMoveTopic,
+  onRetakeExam,
+  onDeleteSavedExam,
+  onStartNewExam
 }) => {
   const [mixedCount, setMixedCount] = useState<number>(Math.min(10, questions.length));
   const [topicToDelete, setTopicToDelete] = useState<string | null>(null);
+  const [examToDelete, setExamToDelete] = useState<string | null>(null);
   const [groupByWeeks, setGroupByWeeks] = useState<boolean>(true);
 
   const handleStartMixed = () => {
@@ -139,6 +150,140 @@ const TopicsView: React.FC<TopicsViewProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Exámenes Registrados y Resueltos Section */}
+      {(subjectName === 'Exámenes Simulacros' || courseName === 'Exámenes' || (savedExams && savedExams.length > 0)) && (
+        <div className="mb-10 bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800 rounded-3xl p-6 md:p-8 shadow-sm">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 pb-4 border-b border-gray-100 dark:border-slate-800">
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <span className="p-2 bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400 rounded-xl text-lg">📝</span>
+                <h3 className="text-2xl font-black text-gray-800 dark:text-gray-100">Exámenes Registrados y Resueltos</h3>
+              </div>
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                Historial de exámenes generados en la plataforma. Puedes volver a tomarlos en cualquier momento.
+              </p>
+            </div>
+            {onStartNewExam && (
+              <button
+                onClick={onStartNewExam}
+                className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm px-5 py-3 rounded-xl transition-all shadow-md active:scale-95 shrink-0 flex items-center gap-2"
+              >
+                <span>🚀</span>
+                <span>Generar Nuevo Simulacro</span>
+              </button>
+            )}
+          </div>
+
+          {(!savedExams || savedExams.length === 0) ? (
+            <div className="text-center py-10 bg-gray-50 dark:bg-slate-800/50 rounded-2xl border-2 border-dashed border-gray-200 dark:border-slate-800 p-8">
+              <div className="text-4xl mb-3">📂</div>
+              <h4 className="text-base font-bold text-gray-700 dark:text-gray-300">Aún no hay exámenes registrados</h4>
+              <p className="text-xs text-gray-400 dark:text-gray-500 mt-1 max-w-md mx-auto mb-4">
+                Al iniciar un Simulacro General o Examen Personalizado en la plataforma, se registrará aquí automáticamente para que puedas volver a tomarlo cuando quieras.
+              </p>
+              {onStartNewExam && (
+                <button
+                  onClick={onStartNewExam}
+                  className="bg-indigo-600 text-white font-bold text-xs px-5 py-2.5 rounded-lg hover:bg-indigo-700 transition-all shadow-sm"
+                >
+                  Iniciar mi primer simulacro
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {savedExams.map((exam) => {
+                const isSolved = exam.score !== undefined && exam.score !== null;
+                const percentage = isSolved && exam.maxScore ? Math.round((exam.score! / exam.maxScore) * 100) : 0;
+                
+                let scoreBadgeClass = "bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800";
+                if (isSolved) {
+                  if (percentage >= 70) scoreBadgeClass = "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800";
+                  else if (percentage < 50) scoreBadgeClass = "bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800";
+                }
+
+                const createdDateStr = new Date(exam.createdAt).toLocaleDateString('es-ES', {
+                  day: 'numeric',
+                  month: 'short',
+                  year: 'numeric',
+                  hour: '2-digit',
+                  minute: '2-digit'
+                });
+
+                return (
+                  <div 
+                    key={exam.id} 
+                    className="bg-gray-50 dark:bg-slate-800/70 border border-gray-200/80 dark:border-slate-700/80 rounded-2xl p-5 shadow-sm hover:shadow-md transition-all flex flex-col justify-between"
+                  >
+                    <div>
+                      <div className="flex items-center justify-between gap-2 mb-3">
+                        <span className="text-[10px] font-black uppercase px-2.5 py-1 rounded-md bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 tracking-wider">
+                          {exam.mode === 'CUSTOM' ? 'Personalizado' : 'Simulacro General'}
+                        </span>
+                        <span className="text-[10px] font-black uppercase px-2.5 py-1 rounded-md bg-gray-200 dark:bg-slate-700 text-gray-700 dark:text-gray-300 tracking-wider">
+                          {exam.area}
+                        </span>
+                      </div>
+
+                      <h4 className="text-lg font-bold text-gray-800 dark:text-gray-100 mb-1 leading-snug">
+                        {exam.title}
+                      </h4>
+
+                      <p className="text-xs text-gray-400 dark:text-gray-500 mb-4">
+                        {exam.totalQuestions} preguntas • Registrado: {createdDateStr}
+                        {exam.attemptsCount && exam.attemptsCount > 1 ? ` • Intento #${exam.attemptsCount}` : ''}
+                      </p>
+
+                      <div className="mb-4">
+                        {isSolved ? (
+                          <div className={`p-3 rounded-xl border flex items-center justify-between ${scoreBadgeClass}`}>
+                            <span className="text-xs font-black uppercase tracking-wider">Puntaje Obtenido</span>
+                            <span className="text-sm font-black">
+                              {exam.score?.toFixed(2)} / {exam.maxScore?.toFixed(2)} pts ({percentage}%)
+                            </span>
+                          </div>
+                        ) : (
+                          <div className="p-3 rounded-xl border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-gray-500 dark:text-gray-400 flex items-center justify-between">
+                            <span className="text-xs font-bold uppercase tracking-wider">Estado</span>
+                            <span className="text-xs font-black text-amber-600 dark:text-amber-400">Pendiente de resolver</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 pt-3 border-t border-gray-200/60 dark:border-slate-700/60 mt-2">
+                      {onRetakeExam && (
+                        <button
+                          onClick={() => onRetakeExam(exam)}
+                          className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs py-2.5 px-4 rounded-xl transition-all shadow-sm active:scale-95 flex items-center justify-center gap-1.5"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                          </svg>
+                          <span>Volver a tomar examen</span>
+                        </button>
+                      )}
+
+                      {onDeleteSavedExam && (
+                        <button
+                          onClick={() => setExamToDelete(exam.id)}
+                          className="p-2.5 text-rose-500 hover:bg-rose-100/60 dark:hover:bg-rose-900/30 rounded-xl transition-colors"
+                          title="Eliminar examen del registro"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
 
       {questions.length > 0 && (
         <div className="bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-100 dark:border-indigo-800/50 rounded-2xl p-6 mb-8 flex flex-col md:flex-row items-center justify-between gap-6 shadow-sm">
@@ -344,6 +489,34 @@ const TopicsView: React.FC<TopicsViewProps> = ({
                   setTopicToDelete(null);
                 }}
                 className="px-4 py-2 bg-rose-600 text-white font-medium rounded-lg hover:bg-rose-700 active:scale-95 transition-all shadow-sm"
+              >
+                Eliminar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {examToDelete !== null && onDeleteSavedExam && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 max-w-sm w-full shadow-xl border border-gray-100 dark:border-slate-800">
+            <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Eliminar Examen Registrado</h3>
+            <p className="text-gray-600 dark:text-gray-400 mb-6 text-sm">
+              ¿Seguro que deseas eliminar este examen del historial registrado? Esta acción no afectará tu puntaje general.
+            </p>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setExamToDelete(null)}
+                className="px-4 py-2 text-gray-600 dark:text-gray-400 font-medium hover:bg-gray-100 dark:hover:bg-slate-800 rounded-lg transition-colors text-xs"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => {
+                  onDeleteSavedExam(examToDelete);
+                  setExamToDelete(null);
+                }}
+                className="px-4 py-2 bg-rose-600 text-white font-bold rounded-lg hover:bg-rose-700 active:scale-95 transition-all shadow-sm text-xs"
               >
                 Eliminar
               </button>

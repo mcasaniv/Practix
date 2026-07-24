@@ -41,6 +41,23 @@ export interface Flashcard {
   order?: number;
 }
 
+export interface SavedExam {
+  id: string;
+  title: string;
+  course: string;
+  subject: string;
+  area: string;
+  mode: ExamMode;
+  questionIds: string[];
+  totalQuestions: number;
+  score?: number;
+  maxScore?: number;
+  solvedAt?: number;
+  createdAt: number;
+  selectedExamSubjects?: string[];
+  attemptsCount?: number;
+}
+
 export interface AppDatabase {
   questions: Question[];
   readingTexts?: ReadingText[];
@@ -49,6 +66,7 @@ export interface AppDatabase {
   totalFlashcardsPracticed?: number;
   flashcards?: Flashcard[];
   courseCovers?: Record<string, string>;
+  savedExams?: SavedExam[];
 }
 
 export type ViewType = 'HOME' | 'SUBJECTS' | 'TOPICS' | 'QUIZ' | 'ADMIN' | 'MEGA_QUIZ' | 'MIXED_QUIZ' | 'EXAM_SETUP' | 'FLASHCARDS_HOME' | 'FLASHCARDS_SUBJECTS' | 'FLASHCARDS_PLAY' | 'STATS';
@@ -63,6 +81,7 @@ export interface NavigationState {
   mixedQuestions?: Question[];
   examMode?: ExamMode;
   selectedExamSubjects?: string[];
+  retakeExam?: SavedExam;
 }
 
 export interface CourseStructure {
