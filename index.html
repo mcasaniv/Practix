@@ -62,6 +62,46 @@
       .rotate-y-180 {
         transform: rotateY(180deg);
       }
+
+      /* PDF & Print Styles */
+      @media print {
+        body, html {
+          background-color: #ffffff !important;
+          color: #000000 !important;
+          margin: 0 !important;
+          padding: 0 !important;
+        }
+        .no-print, nav, header, button, .no-print-wrapper > div:first-child {
+          display: none !important;
+        }
+        .no-print-wrapper {
+          position: absolute !important;
+          left: 0 !important;
+          top: 0 !important;
+          width: 100% !important;
+          height: auto !important;
+          background: #ffffff !important;
+          overflow: visible !important;
+        }
+        .printable-exam-container {
+          box-shadow: none !important;
+          border-radius: 0 !important;
+          padding: 0 !important;
+          margin: 0 !important;
+          width: 100% !important;
+          max-width: 100% !important;
+          background: #ffffff !important;
+          color: #000000 !important;
+        }
+        .break-inside-avoid {
+          break-inside: avoid !important;
+          page-break-inside: avoid !important;
+        }
+        @page {
+          margin: 12mm 12mm 12mm 12mm;
+          size: auto;
+        }
+      }
     </style>
   <script type="importmap">
 {

@@ -56,6 +56,7 @@ export interface SavedExam {
   createdAt: number;
   selectedExamSubjects?: string[];
   attemptsCount?: number;
+  userAnswers?: Record<string, number>;
 }
 
 export interface AppDatabase {
@@ -82,6 +83,7 @@ export interface NavigationState {
   examMode?: ExamMode;
   selectedExamSubjects?: string[];
   retakeExam?: SavedExam;
+  isReviewMode?: boolean;
 }
 
 export interface CourseStructure {

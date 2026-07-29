@@ -511,9 +511,10 @@ const App: React.FC = () => {
             onStartMixedQuiz={(questions) => handleNavigate('MIXED_QUIZ', { mixedQuestions: questions })}
             onDeleteTopic={(topic) => deleteTopic(topic, nav.selectedSubject!)}
             onMoveTopic={(topic, dir) => moveTopic(topic, nav.selectedSubject!, dir)}
-            onRetakeExam={(exam) => handleNavigate('MEGA_QUIZ', { retakeExam: exam, examMode: exam.mode })}
+            onRetakeExam={(exam) => handleNavigate('MEGA_QUIZ', { retakeExam: exam, examMode: exam.mode, isReviewMode: false })}
+            onViewExamResolution={(exam) => handleNavigate('MEGA_QUIZ', { retakeExam: exam, examMode: exam.mode, isReviewMode: true })}
             onDeleteSavedExam={handleDeleteSavedExam}
-            onStartNewExam={() => handleNavigate('MEGA_QUIZ', { examMode: 'GENERAL', retakeExam: undefined })}
+            onStartNewExam={() => handleNavigate('MEGA_QUIZ', { examMode: 'GENERAL', retakeExam: undefined, isReviewMode: false })}
           />
         );
       case 'QUIZ':
@@ -549,6 +550,7 @@ const App: React.FC = () => {
             onSetSelectedArea={handleSetSelectedArea}
             selectedExamSubjects={nav.selectedExamSubjects}
             retakeExam={nav.retakeExam}
+            isReviewMode={nav.isReviewMode}
             onSaveExamResult={handleSaveExamResult}
             onFinishMega={(total) => setDb(prev => ({ ...prev, totalPracticed: (prev.totalPracticed || 0) + total }))}
             onBack={handleBack}

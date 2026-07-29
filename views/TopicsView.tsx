@@ -1,6 +1,7 @@
 
 import React, { useMemo, useState } from 'react';
 import { Question, TopicResult, ReadingText, SavedExam } from '../types';
+import { PrintExamModal } from '../components/PrintExamModal';
 
 interface TopicsViewProps {
   subjectName: string;
@@ -14,6 +15,7 @@ interface TopicsViewProps {
   onDeleteTopic: (topic: string) => void;
   onMoveTopic: (topic: string, direction: 'UP' | 'DOWN') => void;
   onRetakeExam?: (exam: SavedExam) => void;
+  onViewExamResolution?: (exam: SavedExam) => void;
   onDeleteSavedExam?: (examId: string) => void;
   onStartNewExam?: () => void;
 }
@@ -30,12 +32,14 @@ const TopicsView: React.FC<TopicsViewProps> = ({
   onDeleteTopic, 
   onMoveTopic,
   onRetakeExam,
+  onViewExamResolution,
   onDeleteSavedExam,
   onStartNewExam
 }) => {
   const [mixedCount, setMixedCount] = useState<number>(Math.min(10, questions.length));
   const [topicToDelete, setTopicToDelete] = useState<string | null>(null);
   const [examToDelete, setExamToDelete] = useState<string | null>(null);
+  const [examToPrint, setExamToPrint] = useState<SavedExam | null>(null);
   const [groupByWeeks, setGroupByWeeks] = useState<boolean>(true);
 
   const handleStartMixed = () => {
@@ -152,7 +156,7 @@ const TopicsView: React.FC<TopicsViewProps> = ({
       </div>
 
       {/* Exámenes Registrados y Resueltos Section */}
-      {(subjectName === 'Exámenes Simulacros' || courseName === 'Exámenes' || (savedExams && savedExams.length > 0)) && (
+      {(subjectName === 'Exámenes Simulacros' || courseName === 'Exámenes') && (
         <div className="mb-10 bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800 rounded-3xl p-6 md:p-8 shadow-sm">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 pb-4 border-b border-gray-100 dark:border-slate-800">
             <div>
@@ -252,18 +256,41 @@ const TopicsView: React.FC<TopicsViewProps> = ({
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2 pt-3 border-t border-gray-200/60 dark:border-slate-700/60 mt-2">
+                    <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-gray-200/60 dark:border-slate-700/60 mt-2">
+                      {onViewExamResolution && (
+                        <button
+                          onClick={() => onViewExamResolution(exam)}
+                          className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-2.5 px-3 rounded-xl transition-all shadow-sm active:scale-95 flex items-center justify-center gap-1.5"
+                          title="Ver resolución detallada de preguntas y respuestas"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                          </svg>
+                          <span>Ver resolución</span>
+                        </button>
+                      )}
+
                       {onRetakeExam && (
                         <button
                           onClick={() => onRetakeExam(exam)}
-                          className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs py-2.5 px-4 rounded-xl transition-all shadow-sm active:scale-95 flex items-center justify-center gap-1.5"
+                          className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs py-2.5 px-3 rounded-xl transition-all shadow-sm active:scale-95 flex items-center justify-center gap-1.5"
+                          title="Volver a rendir este examen"
                         >
                           <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                           </svg>
-                          <span>Volver a tomar examen</span>
+                          <span>Volver a tomar</span>
                         </button>
                       )}
+
+                      <button
+                        onClick={() => setExamToPrint(exam)}
+                        className="bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-800 dark:text-slate-100 font-bold text-xs py-2.5 px-3 rounded-xl transition-all shadow-sm active:scale-95 flex items-center justify-center gap-1.5"
+                        title="Imprimir o Exportar a PDF"
+                      >
+                        <span>🖨️</span>
+                        <span>PDF</span>
+                      </button>
 
                       {onDeleteSavedExam && (
                         <button
@@ -523,6 +550,15 @@ const TopicsView: React.FC<TopicsViewProps> = ({
             </div>
           </div>
         </div>
+      )}
+
+      {examToPrint !== null && (
+        <PrintExamModal
+          exam={examToPrint}
+          allQuestions={questions}
+          readingTexts={readingTexts}
+          onClose={() => setExamToPrint(null)}
+        />
       )}
     </div>
   );

@@ -3,6 +3,7 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Question, ReadingText, ExamMode, TopicResult, SavedExam } from '../types';
 import { AREA_EXAM_CONFIGS } from '../constants';
 import { formatQuestionText, parseHTMLTags } from '../utils';
+import { PrintExamModal } from '../components/PrintExamModal';
 
 interface MegaQuizViewProps {
   questions: Question[];
@@ -15,6 +16,7 @@ interface MegaQuizViewProps {
   onSetSelectedArea: (area: 'Biomédicas' | 'Ingenierías' | 'Sociales') => void;
   onBack: () => void;
   retakeExam?: SavedExam;
+  isReviewMode?: boolean;
   onSaveExamResult?: (exam: SavedExam) => void;
 }
 
@@ -29,11 +31,15 @@ const MegaQuizView: React.FC<MegaQuizViewProps> = ({
   onSetSelectedArea,
   onBack,
   retakeExam,
+  isReviewMode = false,
   onSaveExamResult
 }) => {
-  const [step, setStep] = useState<'WELCOME' | 'QUIZ' | 'FINISHED'>('WELCOME');
-  const [answers, setAnswers] = useState<Record<string, number>>({});
+  const [step, setStep] = useState<'WELCOME' | 'QUIZ' | 'FINISHED'>(
+    isReviewMode ? 'FINISHED' : 'WELCOME'
+  );
+  const [answers, setAnswers] = useState<Record<string, number>>(() => retakeExam?.userAnswers || {});
   const [resolutionIndex, setResolutionIndex] = useState(0); // For sequential view after exam
+  const [showPrintModal, setShowPrintModal] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const currentExamIdRef = useRef<string>(retakeExam ? retakeExam.id : crypto.randomUUID());
   
@@ -156,7 +162,16 @@ const MegaQuizView: React.FC<MegaQuizViewProps> = ({
 
   const [activeQuestions, setActiveQuestions] = useState<{ question: Question; weight: number; category: string; readingText?: ReadingText }[]>([]);
 
-  const selectedQuestions = step === 'WELCOME' ? candidateQuestions : activeQuestions;
+  useEffect(() => {
+    if (isReviewMode && candidateQuestions.length > 0) {
+      setActiveQuestions(candidateQuestions);
+      if (retakeExam?.userAnswers) {
+        setAnswers(retakeExam.userAnswers);
+      }
+    }
+  }, [isReviewMode, candidateQuestions, retakeExam]);
+
+  const selectedQuestions = (step === 'WELCOME' || activeQuestions.length === 0) ? candidateQuestions : activeQuestions;
 
   const handleStartExam = () => {
     if (candidateQuestions.length === 0) return;
@@ -253,7 +268,8 @@ const MegaQuizView: React.FC<MegaQuizViewProps> = ({
       solvedAt: Date.now(),
       createdAt: retakeExam?.createdAt || Date.now(),
       selectedExamSubjects: selectedExamSubjects,
-      attemptsCount: retakeExam?.attemptsCount ? retakeExam.attemptsCount + 1 : 1
+      attemptsCount: retakeExam?.attemptsCount ? retakeExam.attemptsCount + 1 : 1,
+      userAnswers: answers
     };
 
     if (onSaveExamResult) {
@@ -496,19 +512,49 @@ const MegaQuizView: React.FC<MegaQuizViewProps> = ({
               <p className="text-indigo-600 font-bold text-sm">{selectedQuestions.length} preguntas en total</p>
             </div>
           )}
+          {step === 'FINISHED' && isReviewMode && retakeExam && (
+            <div className="flex items-center gap-2 mt-1.5 text-xs text-gray-500 dark:text-gray-400 font-medium">
+              <span>📅 Rendido el {new Date(retakeExam.solvedAt).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+              {retakeExam.attemptsCount && retakeExam.attemptsCount > 1 && (
+                <span className="bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-gray-300 px-2 py-0.5 rounded font-bold">
+                  Intento #{retakeExam.attemptsCount}
+                </span>
+              )}
+            </div>
+          )}
         </div>
         {step === 'QUIZ' ? (
           <button onClick={handleFinalize} className="bg-rose-500 text-white px-8 py-3 rounded-xl font-black hover:bg-rose-600 shadow-xl active:scale-95 transition-all text-sm uppercase tracking-widest">Forzar Finalizar</button>
         ) : (
-          <div className="text-center px-8 py-3 bg-indigo-50 dark:bg-indigo-900/30 border-2 border-indigo-200 dark:border-indigo-800 rounded-2xl">
-            <span className="text-[10px] uppercase font-black text-indigo-400 block tracking-widest">Puntaje Total</span>
-            <span className="text-4xl font-black text-indigo-700 dark:text-indigo-200">{detailedResults.totalScore.toFixed(4)} / {maxPossibleScore.toFixed(4)}</span>
+          <div className="flex flex-wrap items-center justify-end gap-3">
+            <button
+              onClick={() => setShowPrintModal(true)}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm px-5 py-3 rounded-2xl transition-all shadow-lg active:scale-95 flex items-center gap-2"
+            >
+              <span>🖨️</span>
+              <span>Imprimir / Exportar PDF</span>
+            </button>
+            {retakeExam && !isReviewMode && (
+              <div className="text-center px-4 py-2.5 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-2xl">
+                <span className="text-[10px] uppercase font-black text-gray-400 block tracking-widest">Puntaje Anterior</span>
+                <span className="text-xl font-black text-gray-500 dark:text-gray-400">{retakeExam.score.toFixed(2)}</span>
+              </div>
+            )}
+            <div className="text-center px-6 py-2.5 bg-indigo-50 dark:bg-indigo-900/30 border-2 border-indigo-200 dark:border-indigo-800 rounded-2xl">
+              <span className="text-[10px] uppercase font-black text-indigo-400 block tracking-widest">
+                {isReviewMode ? 'Puntaje Obtenido' : retakeExam ? 'Nuevo Puntaje' : 'Puntaje Total'}
+              </span>
+              <span className="text-2xl md:text-3xl font-black text-indigo-700 dark:text-indigo-200">
+                {(isReviewMode && retakeExam ? retakeExam.score : detailedResults.totalScore).toFixed(2)} / {(isReviewMode && retakeExam ? retakeExam.maxScore : maxPossibleScore).toFixed(2)}
+              </span>
+            </div>
           </div>
         )}
       </div>
 
-      {step === 'FINISHED' && isShowStats && (
+      {step === 'FINISHED' && (
         <div className="space-y-12 mb-12 animate-fade-in">
+          {/* Stats section */}
           <div className="bg-white dark:bg-slate-900 rounded-3xl border border-gray-100 dark:border-slate-800 shadow-xl overflow-hidden">
             <div className="px-8 py-6 border-b border-gray-100 dark:border-slate-800 bg-gray-50/50 dark:bg-slate-800/50">
               <h3 className="text-xl font-black text-gray-800 dark:text-gray-100 flex items-center gap-3">
@@ -595,22 +641,206 @@ const MegaQuizView: React.FC<MegaQuizViewProps> = ({
               </div>
             )}
           </div>
-          
+
+          {/* Quick Navigator Grid */}
+          <div className="bg-white dark:bg-slate-900 rounded-3xl border border-gray-100 dark:border-slate-800 p-6 md:p-8 shadow-xl">
+            <div className="flex flex-wrap items-center justify-between gap-4 mb-6 pb-4 border-b border-gray-100 dark:border-slate-800">
+              <h3 className="text-lg font-black text-gray-800 dark:text-gray-100 flex items-center gap-2">
+                <span>🎯</span> Navegación Rápida de Preguntas
+              </h3>
+              <div className="flex items-center gap-4 text-xs font-bold">
+                <span className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400">
+                  <span className="w-3 h-3 rounded-full bg-emerald-500 inline-block"></span>
+                  Correctas ({selectedQuestions.filter(i => answers[i.question.id] === i.question.correctIndex).length})
+                </span>
+                <span className="flex items-center gap-1.5 text-rose-600 dark:text-rose-400">
+                  <span className="w-3 h-3 rounded-full bg-rose-500 inline-block"></span>
+                  Errores ({selectedQuestions.filter(i => answers[i.question.id] !== undefined && answers[i.question.id] !== i.question.correctIndex).length})
+                </span>
+                <span className="flex items-center gap-1.5 text-gray-400">
+                  <span className="w-3 h-3 rounded-full bg-gray-300 dark:bg-slate-700 inline-block"></span>
+                  Omitidas ({selectedQuestions.filter(i => answers[i.question.id] === undefined).length})
+                </span>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap gap-2 max-h-60 overflow-y-auto p-1">
+              {selectedQuestions.map((item, idx) => {
+                const userChoice = answers[item.question.id];
+                const isCorrect = userChoice === item.question.correctIndex;
+                const isAnswered = userChoice !== undefined;
+
+                let badgeStyle = "bg-gray-100 dark:bg-slate-800 text-gray-500 border-gray-200 dark:border-slate-700";
+                if (isAnswered) {
+                  badgeStyle = isCorrect
+                    ? "bg-emerald-500 text-white border-emerald-600 shadow-sm"
+                    : "bg-rose-500 text-white border-rose-600 shadow-sm";
+                }
+
+                return (
+                  <button
+                    key={item.question.id}
+                    onClick={() => {
+                      const el = document.getElementById(`res-q-${idx}`);
+                      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }}
+                    className={`w-9 h-9 rounded-xl border text-xs font-black transition-all hover:scale-110 active:scale-95 flex items-center justify-center ${badgeStyle}`}
+                    title={`Ir a pregunta ${idx + 1}`}
+                  >
+                    {idx + 1}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* All Questions List Header */}
+          <div className="bg-indigo-600 text-white rounded-3xl p-6 shadow-xl flex items-center justify-between">
+            <h3 className="text-xl font-black flex items-center gap-3">
+              <span>📖</span> Resolución Completa ({selectedQuestions.length} Preguntas)
+            </h3>
+            <span className="text-xs uppercase font-bold bg-white/20 px-4 py-1.5 rounded-full tracking-wider">
+              Todas las soluciones
+            </span>
+          </div>
+
+          {/* All Questions rendered in list */}
+          <div className="space-y-12">
+            {selectedQuestions.map((item, idx) => {
+              const q = item.question;
+              const selected = answers[q.id];
+              const isAnswered = selected !== undefined;
+              const isCorrect = selected === q.correctIndex;
+
+              return (
+                <div key={q.id} id={`res-q-${idx}`} className="bg-white dark:bg-slate-900 rounded-3xl shadow-xl border border-gray-100 dark:border-slate-800 overflow-hidden scroll-mt-24 transition-all">
+                  {/* Reading text header if first question of a reading text */}
+                  {item.readingText && (idx === 0 || selectedQuestions[idx - 1].readingText?.id !== item.readingText.id) && (
+                    <div className="bg-amber-50 dark:bg-amber-900/10 border-l-8 border-amber-400 p-8 md:p-12 border-b border-gray-100 dark:border-slate-800">
+                      <div className="flex items-center gap-2 mb-4 text-amber-600 dark:text-amber-400 font-black text-xs uppercase tracking-widest">
+                        <span>📖</span> TEXTO DE {item.readingText.subject.toUpperCase()}
+                      </div>
+                      <h4 className="text-2xl font-black text-gray-800 dark:text-gray-100 mb-6 font-serif">{item.readingText.title}</h4>
+                      <div className="text-gray-700 dark:text-gray-200 leading-relaxed font-serif whitespace-pre-wrap text-xl italic bg-white/40 dark:bg-slate-900/40 p-6 rounded-xl border border-amber-100 dark:border-amber-900/30">
+                        {item.readingText.content}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Reading text mini banner if subsequent question */}
+                  {item.readingText && idx > 0 && selectedQuestions[idx - 1].readingText?.id === item.readingText.id && (
+                    <div className="bg-amber-50/30 dark:bg-amber-950/20 border-l-4 border-amber-400 px-8 py-3.5 text-xs text-amber-800 dark:text-amber-300 font-bold border-b border-gray-100 dark:border-slate-800 flex items-center gap-2">
+                      <span>📖</span> Referente a la lectura anterior: <span className="underline italic">{item.readingText.title}</span>
+                    </div>
+                  )}
+
+                  <div className="p-8 md:p-12">
+                    <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
+                      <div className="flex flex-wrap items-center gap-3">
+                        <span className="bg-gray-800 text-white font-black w-10 h-10 rounded-xl flex items-center justify-center shrink-0">{idx + 1}</span>
+                        <span className="bg-indigo-50 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400 text-[10px] font-black px-2.5 py-1 rounded uppercase tracking-tighter">{item.category}</span>
+                        <span className="bg-gray-100 dark:bg-slate-800 text-gray-500 dark:text-gray-400 text-[9px] font-bold px-2 py-0.5 rounded uppercase">
+                          {q.subject}: {q.topic}
+                        </span>
+                      </div>
+
+                      {/* Result Badge */}
+                      {isAnswered ? (
+                        isCorrect ? (
+                          <span className="bg-emerald-500 text-white text-xs font-black px-4 py-1.5 rounded-full flex items-center gap-1.5 shadow-sm">
+                            <span>✓</span> Correcta
+                          </span>
+                        ) : (
+                          <span className="bg-rose-500 text-white text-xs font-black px-4 py-1.5 rounded-full flex items-center gap-1.5 shadow-sm">
+                            <span>✗</span> Incorrecta
+                          </span>
+                        )
+                      ) : (
+                        <span className="bg-gray-200 dark:bg-slate-800 text-gray-500 dark:text-gray-400 text-xs font-black px-4 py-1.5 rounded-full flex items-center gap-1.5">
+                          <span>—</span> Sin responder
+                        </span>
+                      )}
+                    </div>
+
+                    {q.imageUrl && (
+                      <div className="mb-8 rounded-3xl overflow-hidden border dark:border-slate-800 bg-gray-50 dark:bg-slate-800/50">
+                        <img src={q.imageUrl} alt="Question" className="max-w-full h-auto mx-auto max-h-[400px] object-contain" referrerPolicy="no-referrer" />
+                      </div>
+                    )}
+
+                    <p className="text-xl font-bold text-gray-800 dark:text-gray-100 leading-relaxed mb-8">{formatQuestionText(q.questionText)}</p>
+
+                    <div className="grid grid-cols-1 gap-3">
+                      {q.options.map((opt, optIdx) => {
+                        const isUserSelection = selected === optIdx;
+                        const isCorrectAnswer = optIdx === q.correctIndex;
+
+                        let styleClasses = "bg-gray-50/70 dark:bg-slate-800/50 border-gray-100 dark:border-slate-800 text-gray-600 dark:text-gray-300 opacity-60";
+                        
+                        if (isCorrectAnswer) {
+                          styleClasses = "bg-emerald-50 dark:bg-emerald-900/30 border-emerald-500 ring-2 ring-emerald-500 font-bold text-emerald-900 dark:text-emerald-100";
+                        } else if (isUserSelection && !isCorrectAnswer) {
+                          styleClasses = "bg-rose-50 dark:bg-rose-900/30 border-rose-500 ring-2 ring-rose-500 font-bold text-rose-900 dark:text-rose-100";
+                        }
+
+                        return (
+                          <div key={optIdx} className={`p-4 md:p-5 rounded-2xl border-2 transition-all flex items-center justify-between gap-4 ${styleClasses}`}>
+                            <div className="flex items-center gap-4">
+                              <div className={`w-8 h-8 rounded-xl border-2 flex items-center justify-center font-black shrink-0 ${
+                                isCorrectAnswer 
+                                  ? 'bg-emerald-600 border-emerald-600 text-white' 
+                                  : isUserSelection 
+                                  ? 'bg-rose-600 border-rose-600 text-white' 
+                                  : 'border-gray-300 dark:border-slate-700 text-gray-400'
+                              }`}>
+                                {String.fromCharCode(65 + optIdx)}
+                              </div>
+                              <span className="text-base leading-relaxed">{parseHTMLTags(opt)}</span>
+                            </div>
+
+                            {/* Option Tag */}
+                            {isCorrectAnswer && (
+                              <span className="text-xs font-black uppercase tracking-wider bg-emerald-500 text-white px-3 py-1 rounded-full shrink-0">
+                                Respuesta Correcta
+                              </span>
+                            )}
+                            {isUserSelection && !isCorrectAnswer && (
+                              <span className="text-xs font-black uppercase tracking-wider bg-rose-500 text-white px-3 py-1 rounded-full shrink-0">
+                                Tu Selección
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* Explanation box */}
+                    <div className="mt-8 bg-indigo-50/40 dark:bg-indigo-900/20 p-6 rounded-2xl border border-indigo-100 dark:border-indigo-900/30">
+                      <p className="text-indigo-900 dark:text-indigo-200 font-black mb-1.5 uppercase tracking-widest text-xs flex items-center gap-1.5">
+                        <span>💡</span> Explicación & Fundamento:
+                      </p>
+                      <div className="text-gray-700 dark:text-gray-300 text-sm whitespace-pre-wrap leading-relaxed">
+                        {parseHTMLTags(q.explanation)}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
           <div className="flex justify-center p-8">
             <button 
-              onClick={() => {
-                setResolutionIndex(0);
-                window.scrollTo({ top: 0, behavior: 'smooth' });
-              }}
-              className="bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 px-12 py-6 rounded-3xl font-black text-sm uppercase tracking-widest hover:bg-white dark:hover:bg-slate-800 border-2 border-indigo-200 dark:border-indigo-800 transition-all shadow-xl"
+              onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+              className="bg-indigo-600 text-white px-12 py-5 rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-xl flex items-center gap-2"
             >
-              Reiniciar Resolución
+              <span>⬆️</span> Volver al Inicio de la Resolución
             </button>
           </div>
         </div>
       )}
 
-      {step === 'QUIZ' ? (
+      {step === 'QUIZ' && (
         <div className="space-y-12 pb-32">
           {selectedQuestions.map((item, idx) => (
             <div key={item.question.id} className="bg-white dark:bg-slate-900 rounded-3xl shadow-xl border border-gray-100 dark:border-slate-800 overflow-hidden animate-fade-in">
@@ -688,104 +918,30 @@ const MegaQuizView: React.FC<MegaQuizViewProps> = ({
             </button>
           </div>
         </div>
-      ) : !isShowStats ? (
-        <div className="space-y-12 pb-20 animate-fade-in">
-          <div className="bg-white dark:bg-slate-900 rounded-3xl border border-indigo-100 dark:border-indigo-900/30 p-4 mb-4 flex items-center justify-between shadow-sm">
-            <h3 className="font-black text-indigo-600 uppercase tracking-widest text-sm flex items-center gap-2">
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-              </svg>
-              Resolución de Examen
-            </h3>
-            <span className="bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 font-black px-4 py-1 rounded-full text-xs uppercase tracking-widest">
-              Pregunta {resolutionIndex + 1} de {selectedQuestions.length}
-            </span>
-          </div>
+      )}
 
-          {resolutionItem?.readingText && (
-            <div className="bg-amber-50 dark:bg-amber-900/10 border-l-8 border-amber-400 rounded-r-3xl p-8 md:p-12 shadow-sm">
-              <div className="flex items-center gap-2 mb-4 text-amber-600 dark:text-amber-400 font-black text-xs uppercase tracking-widest">
-                <span>📖</span> TEXTO DE {resolutionItem.readingText.subject.toUpperCase()}
-              </div>
-              <h4 className="text-2xl font-black text-gray-800 dark:text-gray-100 mb-6 font-serif">{resolutionItem.readingText.title}</h4>
-              <div className="text-gray-700 dark:text-gray-200 leading-relaxed font-serif whitespace-pre-wrap text-xl italic bg-white/40 dark:bg-slate-900/40 p-6 rounded-xl border border-amber-100 dark:border-amber-900/30">
-                {resolutionItem.readingText.content}
-              </div>
-            </div>
-          )}
-
-          {resolutionItem && (() => {
-            const q = resolutionItem.question;
-            const selected = answers[q.id];
-            const isCorrect = selected === q.correctIndex;
-            
-            return (
-              <div key={q.id} className={`bg-white dark:bg-slate-900 rounded-3xl border transition-all duration-300 ${isCorrect ? 'border-emerald-200 shadow-emerald-50 dark:border-emerald-800' : 'border-rose-200 shadow-rose-50 dark:border-rose-800'}`}>
-                <div className="p-6 md:p-10">
-                  <div className="flex flex-wrap items-center gap-3 mb-6">
-                    <span className="bg-gray-800 text-white font-black w-10 h-10 rounded-xl flex items-center justify-center shrink-0">{resolutionIndex + 1}</span>
-                    <span className="bg-indigo-50 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400 text-[10px] font-black px-2 py-0.5 rounded uppercase">{resolutionItem.category}</span>
-                    <span className="bg-gray-100 dark:bg-slate-800 text-gray-500 dark:text-gray-400 text-[9px] font-bold px-2 py-0.5 rounded uppercase">
-                      {q.subject}: {q.topic}
-                    </span>
-                  </div>
-                  
-                  {q.imageUrl && (
-                    <div className="mb-8 rounded-3xl overflow-hidden border dark:border-slate-800 bg-gray-50 dark:bg-slate-800/50">
-                      <img src={q.imageUrl} alt="Question" className="max-w-full h-auto mx-auto max-h-[400px] object-contain" referrerPolicy="no-referrer" />
-                    </div>
-                  )}
-                  
-                  <p className="text-xl font-bold text-gray-800 dark:text-gray-100 leading-relaxed mb-8">{formatQuestionText(q.questionText)}</p>
-                  
-                  <div className="grid grid-cols-1 gap-3">
-                    {q.options.map((opt, optIdx) => {
-                      const isUserSelection = selected === optIdx;
-                      const isCorrectAnswer = optIdx === q.correctIndex;
-                      let bgColor = "bg-gray-50 dark:bg-slate-800 border-gray-100 dark:border-slate-700 opacity-40";
-                      if (isCorrectAnswer) bgColor = "bg-emerald-50 dark:bg-emerald-900/30 border-emerald-500 ring-2 ring-emerald-500";
-                      else if (isUserSelection) bgColor = "bg-rose-50 dark:bg-rose-900/30 border-rose-500 ring-2 ring-rose-500";
-
-                      return (
-                        <div key={optIdx} className={`text-left p-5 rounded-2xl border-2 transition-all flex items-center gap-4 ${bgColor}`}>
-                          <div className={`w-8 h-8 rounded-xl border-2 flex items-center justify-center font-black ${isUserSelection ? 'bg-indigo-600 border-indigo-600 text-white' : 'text-gray-400'}`}>{String.fromCharCode(65 + optIdx)}</div>
-                          <span className="font-medium text-gray-700 dark:text-gray-200">{parseHTMLTags(opt)}</span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                  
-                  <div className="mt-8 bg-indigo-50/30 dark:bg-indigo-900/20 p-6 rounded-2xl border dark:border-indigo-900/30">
-                    <p className="text-indigo-900 dark:text-indigo-200 font-bold mb-2 uppercase tracking-widest text-xs">Respuesta Correcta:</p>
-                    <p className="text-gray-800 dark:text-gray-100 font-bold text-lg mb-4">{parseHTMLTags(q.options[q.correctIndex])}</p>
-                    <div className="h-px bg-indigo-100 dark:bg-indigo-800 mb-4"></div>
-                    <p className="text-indigo-900 dark:text-indigo-200 font-bold mb-2 uppercase tracking-widest text-xs">Explicación:</p>
-                    <div className="text-gray-500 dark:text-gray-400 italic text-sm whitespace-pre-wrap leading-relaxed">{parseHTMLTags(q.explanation)}</div>
-                  </div>
-                </div>
-              </div>
-            );
-          })()}
-
-          <div className="flex items-center justify-between gap-4 py-4 sticky bottom-8 z-30">
-            <button 
-              onClick={prevResolutionQuestion}
-              disabled={resolutionIndex === 0}
-              className={`px-8 py-5 rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl transition-all ${
-                resolutionIndex === 0 ? 'opacity-30 cursor-not-allowed bg-gray-200 text-gray-400' : 'bg-white dark:bg-slate-800 text-gray-700 dark:text-gray-200 hover:bg-gray-50'
-              }`}
-            >
-              Anterior
-            </button>
-            <button 
-              onClick={nextResolutionQuestion}
-              className={`px-12 py-5 rounded-2xl font-black text-sm uppercase tracking-widest transition-all min-w-[200px] bg-indigo-600 text-white hover:bg-indigo-700 shadow-xl`}
-            >
-              {resolutionIndex === selectedQuestions.length - 1 ? 'Ver Estadísticas' : 'Siguiente Pregunta'}
-            </button>
-          </div>
-        </div>
-      ) : null}
+      {showPrintModal && (
+        <PrintExamModal
+          exam={{
+            id: currentExamIdRef.current,
+            title: retakeExam?.title || `${mode === 'CUSTOM' ? 'Examen Personalizado' : 'Simulacro General'} - ${selectedArea}`,
+            course: 'Exámenes',
+            subject: 'Exámenes Simulacros',
+            area: selectedArea,
+            mode: mode || 'GENERAL',
+            questionIds: selectedQuestions.map(item => item.question.id),
+            totalQuestions: selectedQuestions.length,
+            score: detailedResults.totalScore,
+            maxScore: maxPossibleScore,
+            solvedAt: Date.now(),
+            createdAt: retakeExam?.createdAt || Date.now(),
+            selectedExamSubjects: selectedExamSubjects,
+          }}
+          allQuestions={questions}
+          readingTexts={readingTexts}
+          onClose={() => setShowPrintModal(false)}
+        />
+      )}
     </div>
   );
 };
