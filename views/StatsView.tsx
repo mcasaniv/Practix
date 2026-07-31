@@ -1,6 +1,6 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { AREA_EXAM_CONFIGS } from '../constants';
-import { Question, TopicResult, CourseStructure } from '../types';
+import { Question, TopicResult, CourseStructure, UserProfile } from '../types';
 
 interface StatsViewProps {
   questions: Question[];
@@ -8,6 +8,8 @@ interface StatsViewProps {
   selectedArea: 'Biomédicas' | 'Ingenierías' | 'Sociales';
   onSetSelectedArea: (area: 'Biomédicas' | 'Ingenierías' | 'Sociales') => void;
   academicStructure: CourseStructure[];
+  userProfile?: UserProfile;
+  onUpdateProfile?: (profile: UserProfile) => void;
 }
 
 export const StatsView: React.FC<StatsViewProps> = ({
@@ -15,9 +17,33 @@ export const StatsView: React.FC<StatsViewProps> = ({
   results,
   selectedArea,
   onSetSelectedArea,
-  academicStructure
+  academicStructure,
+  userProfile,
+  onUpdateProfile
 }) => {
   const [expandedCourse, setExpandedCourse] = useState<string | null>(null);
+  const [profileName, setProfileName] = useState(userProfile?.name || 'Estudiante Practix');
+  const [profileAvatarUrl, setProfileAvatarUrl] = useState(userProfile?.avatarUrl || '');
+  const [savedAlert, setSavedAlert] = useState(false);
+
+  useEffect(() => {
+    if (userProfile) {
+      setProfileName(userProfile.name || 'Estudiante Practix');
+      setProfileAvatarUrl(userProfile.avatarUrl || '');
+    }
+  }, [userProfile]);
+
+  const handleSaveProfile = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (onUpdateProfile) {
+      onUpdateProfile({
+        name: profileName.trim() || 'Estudiante Practix',
+        avatarUrl: profileAvatarUrl.trim()
+      });
+    }
+    setSavedAlert(true);
+    setTimeout(() => setSavedAlert(false), 3000);
+  };
 
   // Helper to map a subject to its category in the selected exam config
   const getCategoryForSubject = (subjectName: string, config: typeof AREA_EXAM_CONFIGS['Biomédicas']) => {
@@ -321,6 +347,91 @@ export const StatsView: React.FC<StatsViewProps> = ({
             })}
           </div>
         </div>
+      </div>
+
+      {/* User Profile Card for Practix */}
+      <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 md:p-8 border border-gray-100 dark:border-slate-800 shadow-xl space-y-6">
+        <div className="flex items-center gap-3">
+          <div className="bg-purple-100 dark:bg-purple-900/40 text-purple-600 dark:text-purple-300 w-12 h-12 rounded-2xl flex items-center justify-center text-2xl font-black shrink-0">
+            👤
+          </div>
+          <div>
+            <h3 className="text-xl font-black text-gray-800 dark:text-gray-100">
+              Perfil de Jugador (Practix)
+            </h3>
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              Personaliza tu nombre e imagen de perfil para las partidas en el modo Jugar Practix.
+            </p>
+          </div>
+        </div>
+
+        <form onSubmit={handleSaveProfile} className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
+          <div className="md:col-span-4">
+            <label className="block text-[11px] font-black uppercase text-gray-500 dark:text-gray-400 mb-1.5">
+              Nombre de Jugador:
+            </label>
+            <input
+              type="text"
+              value={profileName}
+              onChange={(e) => setProfileName(e.target.value)}
+              placeholder="Ej: Juan Pérez 🚀"
+              className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800 text-gray-800 dark:text-gray-100 font-bold text-sm focus:ring-2 focus:ring-purple-500 outline-none transition-all"
+            />
+          </div>
+
+          <div className="md:col-span-4">
+            <label className="block text-[11px] font-black uppercase text-gray-500 dark:text-gray-400 mb-1.5">
+              URL de Imagen / Avatar:
+            </label>
+            <input
+              type="url"
+              value={profileAvatarUrl}
+              onChange={(e) => setProfileAvatarUrl(e.target.value)}
+              placeholder="https://ejemplo.com/mi-avatar.jpg"
+              className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800 text-gray-800 dark:text-gray-100 font-bold text-sm focus:ring-2 focus:ring-purple-500 outline-none transition-all"
+            />
+          </div>
+
+          <div className="md:col-span-4 flex items-center justify-between gap-3 bg-gray-50 dark:bg-slate-800/80 p-2.5 px-3 rounded-xl border border-gray-200 dark:border-slate-700">
+            <div className="flex items-center gap-2.5 min-w-0">
+              {profileAvatarUrl.trim() ? (
+                <img
+                  src={profileAvatarUrl.trim()}
+                  alt="Avatar"
+                  className="w-9 h-9 rounded-full object-cover border-2 border-purple-500 shrink-0"
+                  referrerPolicy="no-referrer"
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).style.display = 'none';
+                  }}
+                />
+              ) : (
+                <div className="w-9 h-9 rounded-full bg-purple-500/20 text-purple-600 dark:text-purple-300 border border-purple-400 flex items-center justify-center font-black text-sm shrink-0">
+                  👤
+                </div>
+              )}
+              <div className="min-w-0">
+                <span className="text-[9px] font-black uppercase text-gray-400 block tracking-wider">Vista Previa</span>
+                <span className="text-xs font-black text-gray-800 dark:text-gray-200 truncate block">
+                  {profileName.trim() || 'Estudiante'}
+                </span>
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              className="bg-purple-600 hover:bg-purple-500 active:scale-95 text-white font-black px-4 py-2.5 rounded-lg text-xs uppercase tracking-wider transition-all shadow-md shrink-0"
+            >
+              Guardar
+            </button>
+          </div>
+        </form>
+
+        {savedAlert && (
+          <div className="bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 p-3 rounded-xl text-emerald-800 dark:text-emerald-300 font-bold text-xs flex items-center gap-2 animate-fade-in">
+            <span>✓</span>
+            <span>¡Perfil actualizado correctamente! Se usará en tu próximo Jugar Practix.</span>
+          </div>
+        )}
       </div>
 
       {/* Main KPI scorecards */}

@@ -59,6 +59,11 @@ export interface SavedExam {
   userAnswers?: Record<string, number>;
 }
 
+export interface UserProfile {
+  name: string;
+  avatarUrl?: string;
+}
+
 export interface AppDatabase {
   questions: Question[];
   readingTexts?: ReadingText[];
@@ -68,6 +73,7 @@ export interface AppDatabase {
   flashcards?: Flashcard[];
   courseCovers?: Record<string, string>;
   savedExams?: SavedExam[];
+  userProfile?: UserProfile;
 }
 
 export type ViewType = 'HOME' | 'SUBJECTS' | 'TOPICS' | 'QUIZ' | 'ADMIN' | 'MEGA_QUIZ' | 'MIXED_QUIZ' | 'EXAM_SETUP' | 'FLASHCARDS_HOME' | 'FLASHCARDS_SUBJECTS' | 'FLASHCARDS_PLAY' | 'STATS';
@@ -84,6 +90,7 @@ export interface NavigationState {
   selectedExamSubjects?: string[];
   retakeExam?: SavedExam;
   isReviewMode?: boolean;
+  quizMode?: 'CLASSIC' | 'QUIZZIZ';
 }
 
 export interface CourseStructure {

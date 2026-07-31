@@ -10,8 +10,8 @@ interface TopicsViewProps {
   readingTexts: ReadingText[];
   results: Record<string, TopicResult>;
   savedExams?: SavedExam[];
-  onSelectTopic: (topic: string) => void;
-  onStartMixedQuiz: (questions: Question[]) => void;
+  onSelectTopic: (topic: string, mode?: 'CLASSIC' | 'QUIZZIZ') => void;
+  onStartMixedQuiz: (questions: Question[], mode?: 'CLASSIC' | 'QUIZZIZ') => void;
   onDeleteTopic: (topic: string) => void;
   onMoveTopic: (topic: string, direction: 'UP' | 'DOWN') => void;
   onRetakeExam?: (exam: SavedExam) => void;
@@ -42,11 +42,11 @@ const TopicsView: React.FC<TopicsViewProps> = ({
   const [examToPrint, setExamToPrint] = useState<SavedExam | null>(null);
   const [groupByWeeks, setGroupByWeeks] = useState<boolean>(true);
 
-  const handleStartMixed = () => {
+  const handleStartMixed = (mode: 'CLASSIC' | 'QUIZZIZ' = 'CLASSIC') => {
     if (questions.length === 0) return;
     const count = Math.min(Math.max(1, mixedCount), questions.length);
     const shuffled = [...questions].sort(() => 0.5 - Math.random());
-    onStartMixedQuiz(shuffled.slice(0, count));
+    onStartMixedQuiz(shuffled.slice(0, count), mode);
   };
   const topics = useMemo(() => {
     const grouped = questions.reduce((acc, q) => {
@@ -321,8 +321,8 @@ const TopicsView: React.FC<TopicsViewProps> = ({
             </div>
             <p className="text-indigo-700/70 dark:text-indigo-300/70 text-sm">Mezcla preguntas de todos los temas de esta materia.</p>
           </div>
-          <div className="flex items-center gap-4 w-full md:w-auto">
-            <div className="flex flex-col">
+          <div className="flex flex-col sm:flex-row items-center gap-4 w-full md:w-auto">
+            <div className="flex flex-col w-full sm:w-auto">
               <label className="text-xs font-bold text-indigo-800 dark:text-indigo-300 mb-1 uppercase tracking-wider">Cantidad</label>
               <input 
                 type="number" 
@@ -330,15 +330,25 @@ const TopicsView: React.FC<TopicsViewProps> = ({
                 max={questions.length}
                 value={mixedCount}
                 onChange={(e) => setMixedCount(parseInt(e.target.value) || 1)}
-                className="w-24 px-3 py-2 rounded-lg border border-indigo-200 dark:border-indigo-700 bg-white dark:bg-slate-800 text-gray-800 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500 outline-none"
+                className="w-full sm:w-24 px-3 py-2 rounded-lg border border-indigo-200 dark:border-indigo-700 bg-white dark:bg-slate-800 text-gray-800 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500 outline-none"
               />
             </div>
-            <button 
-              onClick={handleStartMixed}
-              className="bg-indigo-600 text-white px-6 py-2.5 rounded-lg font-bold hover:bg-indigo-700 active:scale-95 transition-all shadow-md mt-5 whitespace-nowrap"
-            >
-              Iniciar Mixto
-            </button>
+            <div className="flex flex-wrap items-center gap-2 mt-2 sm:mt-5 w-full sm:w-auto">
+              <button 
+                onClick={() => handleStartMixed('CLASSIC')}
+                className="bg-indigo-600 text-white px-4 py-2.5 rounded-lg text-xs font-bold hover:bg-indigo-700 active:scale-95 transition-all shadow-md flex items-center gap-1.5"
+                title="Examen Mixto Clásico"
+              >
+                <span>📋</span> Examen Clásico
+              </button>
+              <button 
+                onClick={() => handleStartMixed('QUIZZIZ')}
+                className="bg-gradient-to-r from-purple-600 to-indigo-600 text-white px-4 py-2.5 rounded-lg text-xs font-black hover:from-purple-500 hover:to-indigo-500 active:scale-95 transition-all shadow-md flex items-center gap-1.5"
+                title="Modo Juego Practix con tiempo y comodines"
+              >
+                <span>🎮</span> Jugar Practix
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -402,13 +412,23 @@ const TopicsView: React.FC<TopicsViewProps> = ({
                         </div>
 
                         <button 
-                          onClick={() => onSelectTopic(topic.name)}
-                          className="bg-indigo-600 text-white px-5 py-2.5 rounded-lg text-sm font-bold hover:bg-indigo-700 active:scale-95 transition-all shadow-sm flex items-center gap-2"
+                          onClick={() => onSelectTopic(topic.name, 'CLASSIC')}
+                          className="bg-indigo-600 text-white px-4 py-2.5 rounded-lg text-sm font-bold hover:bg-indigo-700 active:scale-95 transition-all shadow-sm flex items-center gap-1.5"
+                          title="Práctica estándar de preguntas"
                         >
                           <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                           </svg>
-                          Iniciar Quiz
+                          Examen Clásico
+                        </button>
+
+                        <button 
+                          onClick={() => onSelectTopic(topic.name, 'QUIZZIZ')}
+                          className="bg-gradient-to-r from-purple-600 to-indigo-600 text-white px-4 py-2.5 rounded-lg text-sm font-black hover:from-purple-500 hover:to-indigo-500 active:scale-95 transition-all shadow-md flex items-center gap-1.5"
+                          title="Modo Juego Practix con tiempo y comodines"
+                        >
+                          <span>🎮</span>
+                          <span>Jugar Practix</span>
                         </button>
 
                         <button 
@@ -472,13 +492,23 @@ const TopicsView: React.FC<TopicsViewProps> = ({
                 </div>
 
                 <button 
-                  onClick={() => onSelectTopic(topic.name)}
-                  className="bg-indigo-600 text-white px-5 py-2.5 rounded-lg text-sm font-bold hover:bg-indigo-700 active:scale-95 transition-all shadow-sm flex items-center gap-2"
+                  onClick={() => onSelectTopic(topic.name, 'CLASSIC')}
+                  className="bg-indigo-600 text-white px-4 py-2.5 rounded-lg text-sm font-bold hover:bg-indigo-700 active:scale-95 transition-all shadow-sm flex items-center gap-1.5"
+                  title="Práctica estándar de preguntas"
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
-                  Iniciar Quiz
+                  Examen Clásico
+                </button>
+
+                <button 
+                  onClick={() => onSelectTopic(topic.name, 'QUIZZIZ')}
+                  className="bg-gradient-to-r from-purple-600 to-indigo-600 text-white px-4 py-2.5 rounded-lg text-sm font-black hover:from-purple-500 hover:to-indigo-500 active:scale-95 transition-all shadow-md flex items-center gap-1.5"
+                  title="Modo Juego Practix con tiempo y comodines"
+                >
+                  <span>🎮</span>
+                  <span>Jugar Practix</span>
                 </button>
 
                 <button 

@@ -1,9 +1,10 @@
 
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { Question, ReadingText, ExamMode, TopicResult, SavedExam } from '../types';
+import { Question, ReadingText, ExamMode, TopicResult, SavedExam, UserProfile } from '../types';
 import { AREA_EXAM_CONFIGS } from '../constants';
 import { formatQuestionText, parseHTMLTags } from '../utils';
 import { PrintExamModal } from '../components/PrintExamModal';
+import { QuizizzGame } from '../components/QuizizzGame';
 
 interface MegaQuizViewProps {
   questions: Question[];
@@ -18,6 +19,7 @@ interface MegaQuizViewProps {
   retakeExam?: SavedExam;
   isReviewMode?: boolean;
   onSaveExamResult?: (exam: SavedExam) => void;
+  userProfile?: UserProfile;
 }
 
 const MegaQuizView: React.FC<MegaQuizViewProps> = ({ 
@@ -32,7 +34,8 @@ const MegaQuizView: React.FC<MegaQuizViewProps> = ({
   onBack,
   retakeExam,
   isReviewMode = false,
-  onSaveExamResult
+  onSaveExamResult,
+  userProfile
 }) => {
   const [step, setStep] = useState<'WELCOME' | 'QUIZ' | 'FINISHED'>(
     isReviewMode ? 'FINISHED' : 'WELCOME'
@@ -171,10 +174,13 @@ const MegaQuizView: React.FC<MegaQuizViewProps> = ({
     }
   }, [isReviewMode, candidateQuestions, retakeExam]);
 
+  const [playMode, setPlayMode] = useState<'CLASSIC' | 'QUIZZIZ'>('CLASSIC');
+
   const selectedQuestions = (step === 'WELCOME' || activeQuestions.length === 0) ? candidateQuestions : activeQuestions;
 
-  const handleStartExam = () => {
+  const handleStartExam = (selectedPlayMode: 'CLASSIC' | 'QUIZZIZ' = 'CLASSIC') => {
     if (candidateQuestions.length === 0) return;
+    setPlayMode(selectedPlayMode);
     const examQuestions = [...candidateQuestions];
     setActiveQuestions(examQuestions);
     setAnswers({});
@@ -448,20 +454,31 @@ const MegaQuizView: React.FC<MegaQuizViewProps> = ({
             </div>
           ) : null}
 
-          <button 
-            onClick={handleStartExam}
-            disabled={selectedQuestions.length === 0}
-            className={`w-full py-6 rounded-2xl font-black text-xl shadow-xl transition-all flex items-center justify-center gap-4 ${
-              selectedQuestions.length === 0 
-                ? 'bg-gray-100 dark:bg-slate-800 text-gray-400 dark:text-slate-600 cursor-not-allowed shadow-none border border-gray-200 dark:border-slate-700' 
-                : 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-200 dark:shadow-none active:scale-[0.98]'
-            }`}
-          >
-            <span>🚀 Comenzar Examen</span>
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M13 5l7 7-7 7M5 5l7 7-7 7" />
-            </svg>
-          </button>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <button 
+              onClick={() => handleStartExam('CLASSIC')}
+              disabled={selectedQuestions.length === 0}
+              className={`py-5 px-6 rounded-2xl font-black text-lg shadow-xl transition-all flex items-center justify-center gap-3 ${
+                selectedQuestions.length === 0 
+                  ? 'bg-gray-100 dark:bg-slate-800 text-gray-400 dark:text-slate-600 cursor-not-allowed shadow-none border border-gray-200 dark:border-slate-700' 
+                  : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-200 dark:shadow-none active:scale-[0.98]'
+              }`}
+            >
+              <span>📋 Examen Tradicional</span>
+            </button>
+
+            <button 
+              onClick={() => handleStartExam('QUIZZIZ')}
+              disabled={selectedQuestions.length === 0}
+              className={`py-5 px-6 rounded-2xl font-black text-lg shadow-xl transition-all flex items-center justify-center gap-3 ${
+                selectedQuestions.length === 0 
+                  ? 'bg-gray-100 dark:bg-slate-800 text-gray-400 dark:text-slate-600 cursor-not-allowed shadow-none border border-gray-200 dark:border-slate-700' 
+                  : 'bg-gradient-to-r from-purple-600 via-pink-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white shadow-purple-200 dark:shadow-none active:scale-[0.98]'
+              }`}
+            >
+              <span>🎮 Jugar Practix Interactivo</span>
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -840,7 +857,21 @@ const MegaQuizView: React.FC<MegaQuizViewProps> = ({
         </div>
       )}
 
-      {step === 'QUIZ' && (
+      {step === 'QUIZ' && playMode === 'QUIZZIZ' && (
+        <QuizizzGame
+          title={`${mode === 'CUSTOM' ? 'Examen Personalizado' : 'Simulacro General'} - ${selectedArea}`}
+          subtitle="Modo Practix Interactivo"
+          questions={selectedQuestions.map(item => item.question)}
+          readingTexts={readingTexts}
+          userProfile={userProfile}
+          onFinish={(score, total) => {
+            handleFinalize();
+          }}
+          onBack={() => setStep('WELCOME')}
+        />
+      )}
+
+      {step === 'QUIZ' && playMode === 'CLASSIC' && (
         <div className="space-y-12 pb-32">
           {selectedQuestions.map((item, idx) => (
             <div key={item.question.id} className="bg-white dark:bg-slate-900 rounded-3xl shadow-xl border border-gray-100 dark:border-slate-800 overflow-hidden animate-fade-in">

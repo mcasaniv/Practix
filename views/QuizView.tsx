@@ -1,7 +1,8 @@
 
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { Question, ReadingText } from '../types';
+import { Question, ReadingText, UserProfile } from '../types';
 import { formatQuestionText, parseHTMLTags } from '../utils';
+import { QuizizzGame } from '../components/QuizizzGame';
 
 interface QuizViewProps {
   topicName: string;
@@ -10,9 +11,21 @@ interface QuizViewProps {
   readingTexts: ReadingText[];
   onFinish: (subject: string, topic: string, score: number, total: number) => void;
   onBack: () => void;
+  initialMode?: 'CLASSIC' | 'QUIZZIZ';
+  userProfile?: UserProfile;
 }
 
-const QuizView: React.FC<QuizViewProps> = ({ topicName, subjectName, questions, readingTexts, onFinish, onBack }) => {
+const QuizView: React.FC<QuizViewProps> = ({ 
+  topicName, 
+  subjectName, 
+  questions, 
+  readingTexts, 
+  onFinish, 
+  onBack,
+  initialMode = 'CLASSIC',
+  userProfile
+}) => {
+  const [practiceMode, setPracticeMode] = useState<'CLASSIC' | 'QUIZZIZ'>(initialMode);
   const [answers, setAnswers] = useState<Record<string, number>>({});
   const [isFinished, setIsFinished] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -27,7 +40,23 @@ const QuizView: React.FC<QuizViewProps> = ({ topicName, subjectName, questions, 
         throwOnError: false
       });
     }
-  }, [questions, isFinished, answers]);
+  }, [questions, isFinished, answers, practiceMode]);
+
+  if (practiceMode === 'QUIZZIZ') {
+    return (
+      <QuizizzGame
+        title={`${subjectName} - ${topicName}`}
+        subtitle="Práctica interactiva estilo Practix con tiempo, rachas y comodines"
+        questions={questions}
+        readingTexts={readingTexts}
+        userProfile={userProfile}
+        onFinish={(score, total) => {
+          onFinish(subjectName, topicName, score, total);
+        }}
+        onBack={onBack}
+      />
+    );
+  }
 
   const groupedQuestions = useMemo(() => {
     const groups: { text?: ReadingText, questions: Question[] }[] = [];
@@ -69,15 +98,41 @@ const QuizView: React.FC<QuizViewProps> = ({ topicName, subjectName, questions, 
 
   return (
     <div className="max-w-4xl mx-auto" ref={containerRef}>
-      <button
-        onClick={onBack}
-        className="flex items-center gap-1.5 text-xs font-bold text-gray-500 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 uppercase tracking-wider mb-4 transition-colors"
-      >
-        <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 19l-7-7 7-7" />
-        </svg>
-        Salir del Simulacro
-      </button>
+      <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
+        <button
+          onClick={onBack}
+          className="flex items-center gap-1.5 text-xs font-bold text-gray-500 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 uppercase tracking-wider transition-colors"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 19l-7-7 7-7" />
+          </svg>
+          Salir del Simulacro
+        </button>
+
+        {/* Practice Mode Switcher */}
+        <div className="flex items-center bg-gray-100 dark:bg-slate-800 p-1 rounded-2xl border border-gray-200 dark:border-slate-700 shadow-inner">
+          <button
+            onClick={() => setPracticeMode('CLASSIC')}
+            className={`px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 ${
+              practiceMode === 'CLASSIC'
+                ? 'bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-300 shadow-sm'
+                : 'text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'
+            }`}
+          >
+            <span>📋</span> Modo Clásico
+          </button>
+          <button
+            onClick={() => setPracticeMode('QUIZZIZ')}
+            className={`px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 ${
+              practiceMode === 'QUIZZIZ'
+                ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md scale-105'
+                : 'text-gray-500 dark:text-gray-400 hover:text-purple-600 dark:hover:text-purple-400'
+            }`}
+          >
+            <span>🎮</span> Modo Practix
+          </button>
+        </div>
+      </div>
       <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-800 p-6 mb-8 flex flex-col md:flex-row items-center justify-between gap-4">
         <div>
           <h2 className="text-2xl font-black text-gray-800 dark:text-gray-100">{topicName}</h2>

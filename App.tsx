@@ -351,6 +351,13 @@ const App: React.FC = () => {
     showToast('Examen eliminado del registro.');
   }, [setDb, showToast]);
 
+  const handleUpdateUserProfile = useCallback((profile: UserProfile) => {
+    setDb(prev => ({
+      ...prev,
+      userProfile: profile
+    }));
+  }, [setDb]);
+
   const handleResetPracticed = useCallback(() => {
     setDb(prev => ({ ...prev, totalPracticed: 0 }));
   }, []);
@@ -507,8 +514,8 @@ const App: React.FC = () => {
             readingTexts={db.readingTexts || []}
             results={db.results || {}}
             savedExams={db.savedExams || []}
-            onSelectTopic={(topic) => handleNavigate('QUIZ', { selectedTopic: topic })}
-            onStartMixedQuiz={(questions) => handleNavigate('MIXED_QUIZ', { mixedQuestions: questions })}
+            onSelectTopic={(topic, mode) => handleNavigate('QUIZ', { selectedTopic: topic, quizMode: mode })}
+            onStartMixedQuiz={(questions, mode) => handleNavigate('MIXED_QUIZ', { mixedQuestions: questions, quizMode: mode })}
             onDeleteTopic={(topic) => deleteTopic(topic, nav.selectedSubject!)}
             onMoveTopic={(topic, dir) => moveTopic(topic, nav.selectedSubject!, dir)}
             onRetakeExam={(exam) => handleNavigate('MEGA_QUIZ', { retakeExam: exam, examMode: exam.mode, isReviewMode: false })}
@@ -524,6 +531,8 @@ const App: React.FC = () => {
             subjectName={nav.selectedSubject!}
             questions={db.questions.filter(q => q.topic === nav.selectedTopic && q.subject === nav.selectedSubject)}
             readingTexts={db.readingTexts || []}
+            initialMode={nav.quizMode || 'CLASSIC'}
+            userProfile={db.userProfile}
             onFinish={handleFinishQuiz}
             onBack={handleBack}
           />
@@ -535,6 +544,8 @@ const App: React.FC = () => {
             subjectName={nav.selectedSubject!}
             questions={nav.mixedQuestions || []}
             readingTexts={db.readingTexts || []}
+            initialMode={nav.quizMode || 'CLASSIC'}
+            userProfile={db.userProfile}
             onFinish={handleFinishQuiz}
             onBack={handleBack}
           />
@@ -552,6 +563,7 @@ const App: React.FC = () => {
             retakeExam={nav.retakeExam}
             isReviewMode={nav.isReviewMode}
             onSaveExamResult={handleSaveExamResult}
+            userProfile={db.userProfile}
             onFinishMega={(total) => setDb(prev => ({ ...prev, totalPracticed: (prev.totalPracticed || 0) + total }))}
             onBack={handleBack}
           />
@@ -614,6 +626,8 @@ const App: React.FC = () => {
             selectedArea={selectedArea}
             onSetSelectedArea={handleSetSelectedArea}
             academicStructure={academicStructure}
+            userProfile={db.userProfile}
+            onUpdateProfile={handleUpdateUserProfile}
           />
         );
       default:
