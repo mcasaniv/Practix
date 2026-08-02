@@ -312,43 +312,6 @@ export const StatsView: React.FC<StatsViewProps> = ({
   return (
     <div className="max-w-6xl mx-auto space-y-10 py-4 animate-fade-in">
       
-      {/* Header section with academic area switcher */}
-      <div className="flex flex-col md:flex-row items-center justify-between gap-6 bg-white dark:bg-slate-900 p-8 rounded-3xl border border-gray-100 dark:border-slate-850 shadow-xl">
-        <div className="space-y-1.5 text-center md:text-left">
-          <h2 className="text-3xl font-black tracking-tight text-gray-800 dark:text-gray-100">
-            Estadísticas del Progreso
-          </h2>
-          <p className="text-gray-500 dark:text-gray-400 text-sm max-w-md">
-            Mide tu preparación y estima tu puntaje ponderado de admisión en tiempo real según el peso de cada curso.
-          </p>
-        </div>
-
-        <div className="flex flex-col items-center shrink-0">
-          <label className="text-[10px] font-black uppercase text-indigo-400 dark:text-indigo-300 tracking-widest mb-2.5">
-            Área de Postulación seleccionada:
-          </label>
-          <div className="grid grid-cols-3 gap-1.5 bg-gray-50 dark:bg-slate-800/80 p-1 rounded-2xl border border-gray-100 dark:border-slate-850">
-            {(['Biomédicas', 'Ingenierías', 'Sociales'] as const).map(area => {
-              const isActive = selectedArea === area;
-              return (
-                <button
-                  key={area}
-                  id={`area-tab-${area}`}
-                  onClick={() => onSetSelectedArea(area)}
-                  className={`py-2 px-4 rounded-xl font-black text-xs transition-all uppercase tracking-wider ${
-                    isActive
-                      ? 'bg-indigo-600 text-white shadow-md'
-                      : 'text-gray-500 hover:text-indigo-600 dark:text-gray-400 dark:hover:text-indigo-300'
-                  }`}
-                >
-                  {area}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      </div>
-
       {/* User Profile Card for Practix */}
       <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 md:p-8 border border-gray-100 dark:border-slate-800 shadow-xl space-y-6">
         <div className="flex items-center gap-3">
@@ -434,6 +397,43 @@ export const StatsView: React.FC<StatsViewProps> = ({
         )}
       </div>
 
+      {/* Header section with academic area switcher */}
+      <div className="flex flex-col md:flex-row items-center justify-between gap-6 bg-white dark:bg-slate-900 p-8 rounded-3xl border border-gray-100 dark:border-slate-850 shadow-xl">
+        <div className="space-y-1.5 text-center md:text-left">
+          <h2 className="text-3xl font-black tracking-tight text-gray-800 dark:text-gray-100">
+            Estadísticas del Progreso
+          </h2>
+          <p className="text-gray-500 dark:text-gray-400 text-sm max-w-md">
+            Mide tu preparación y estima tu puntaje ponderado de admisión en tiempo real según el peso de cada curso.
+          </p>
+        </div>
+
+        <div className="flex flex-col items-center shrink-0">
+          <label className="text-[10px] font-black uppercase text-indigo-400 dark:text-indigo-300 tracking-widest mb-2.5">
+            Área de Postulación seleccionada:
+          </label>
+          <div className="grid grid-cols-3 gap-1.5 bg-gray-50 dark:bg-slate-800/80 p-1 rounded-2xl border border-gray-100 dark:border-slate-850">
+            {(['Biomédicas', 'Ingenierías', 'Sociales'] as const).map(area => {
+              const isActive = selectedArea === area;
+              return (
+                <button
+                  key={area}
+                  id={`area-tab-${area}`}
+                  onClick={() => onSetSelectedArea(area)}
+                  className={`py-2 px-4 rounded-xl font-black text-xs transition-all uppercase tracking-wider ${
+                    isActive
+                      ? 'bg-indigo-600 text-white shadow-md'
+                      : 'text-gray-500 hover:text-indigo-600 dark:text-gray-400 dark:hover:text-indigo-300'
+                  }`}
+                >
+                  {area}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
       {/* Main KPI scorecards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         
@@ -445,10 +445,10 @@ export const StatsView: React.FC<StatsViewProps> = ({
             </span>
             <div className="flex items-baseline gap-1.5">
               <span className="text-5xl font-black tracking-tight">
-                {areaStats.totalEarnedPoints.toFixed(2)}
+                {(areaStats.totalEarnedPoints ?? 0).toFixed(2)}
               </span>
               <span className="text-indigo-200 text-lg font-bold">
-                / {areaStats.totalMaxPoints.toFixed(2)} pts
+                / {(areaStats.totalMaxPoints ?? 0).toFixed(2)} pts
               </span>
             </div>
             <p className="text-indigo-100/75 text-xs mt-3 leading-relaxed">
@@ -489,7 +489,7 @@ export const StatsView: React.FC<StatsViewProps> = ({
           <div className="mt-4">
             <div className="flex justify-between items-center text-xs font-black text-gray-400 mb-1.5">
               <span>AVANCE</span>
-              <span className="text-indigo-600 dark:text-indigo-450">{generalSummary.progressPercentage.toFixed(1)}%</span>
+              <span className="text-indigo-600 dark:text-indigo-450">{(generalSummary.progressPercentage ?? 0).toFixed(1)}%</span>
             </div>
             <div className="w-full bg-gray-100 dark:bg-slate-800 rounded-full h-2">
               <div 
@@ -508,7 +508,7 @@ export const StatsView: React.FC<StatsViewProps> = ({
             </span>
             <div className="flex items-baseline gap-1.5">
               <span className="text-5xl font-black tracking-tight text-gray-800 dark:text-gray-100">
-                {areaStats.overallAccuracy.toFixed(1)}%
+                {(areaStats.overallAccuracy ?? 0).toFixed(1)}%
               </span>
             </div>
             <p className="text-gray-500 dark:text-gray-400 text-xs mt-3 leading-relaxed">
@@ -520,7 +520,7 @@ export const StatsView: React.FC<StatsViewProps> = ({
               <span>PRECISIÓN DE RESPUESTA</span>
               <span className={`font-black ${
                 areaStats.overallAccuracy >= 75 ? 'text-emerald-500' : areaStats.overallAccuracy >= 50 ? 'text-amber-500' : 'text-rose-500'
-              }`}>{areaStats.overallAccuracy.toFixed(0)}%</span>
+              }`}>{(areaStats.overallAccuracy ?? 0).toFixed(0)}%</span>
             </div>
             <div className="w-full bg-gray-100 dark:bg-slate-800 rounded-full h-2">
               <div 
@@ -580,7 +580,7 @@ export const StatsView: React.FC<StatsViewProps> = ({
                     <div className="text-left sm:text-right">
                       <span className="text-[9px] uppercase font-black text-indigo-400 block tracking-wider leading-none">Peso Estimado</span>
                       <span className="text-sm font-black text-indigo-600 dark:text-indigo-400">
-                        {course.earnedExamPoints.toFixed(2)} <span className="text-xs font-normal text-gray-400">/ {course.maxExamPoints.toFixed(2)} pts</span>
+                        {(course.earnedExamPoints ?? 0).toFixed(2)} <span className="text-xs font-normal text-gray-400">/ {(course.maxExamPoints ?? 0).toFixed(2)} pts</span>
                       </span>
                     </div>
 
@@ -592,7 +592,7 @@ export const StatsView: React.FC<StatsViewProps> = ({
                           ? course.accuracy >= 75 ? 'text-emerald-500' : course.accuracy >= 50 ? 'text-amber-500' : 'text-rose-500'
                           : 'text-gray-400'
                       }`}>
-                        {course.practicedQuestions > 0 ? `${course.accuracy.toFixed(1)}%` : 'Sin práctica'}
+                        {course.practicedQuestions > 0 ? `${(course.accuracy ?? 0).toFixed(1)}%` : 'Sin práctica'}
                       </span>
                     </div>
 
@@ -631,9 +631,9 @@ export const StatsView: React.FC<StatsViewProps> = ({
                                 </span>
                               </div>
                               <span className="text-[10px] bg-indigo-50 dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 font-black px-2.5 py-1 rounded-full uppercase tracking-wider flex items-center gap-1">
-                                <span>Peso: {subj.weight.toFixed(2)} pts</span>
+                                <span>Peso: {(subj.weight ?? 0).toFixed(2)} pts</span>
                                 {subj.questionCount > 0 && (
-                                  <span className="text-indigo-400 dark:text-indigo-500 font-bold">({subj.questionCount % 1 === 0 ? subj.questionCount : subj.questionCount.toFixed(1)} preg.)</span>
+                                  <span className="text-indigo-400 dark:text-indigo-500 font-bold">({subj.questionCount % 1 === 0 ? subj.questionCount : (subj.questionCount ?? 0).toFixed(1)} preg.)</span>
                                 )}
                               </span>
                             </div>
@@ -646,7 +646,7 @@ export const StatsView: React.FC<StatsViewProps> = ({
                                     ? subj.accuracy >= 75 ? 'text-emerald-500' : subj.accuracy >= 50 ? 'text-amber-500' : 'text-rose-500'
                                     : 'text-gray-400'
                                 }>
-                                  {subj.practicedQuestions > 0 ? `${subj.accuracy.toFixed(0)}%` : 'PENDIENTE'}
+                                  {subj.practicedQuestions > 0 ? `${(subj.accuracy ?? 0).toFixed(0)}%` : 'PENDIENTE'}
                                 </span>
                               </div>
                               <div className="w-full bg-gray-100 dark:bg-slate-800 rounded-full h-1.5">
@@ -707,15 +707,15 @@ export const StatsView: React.FC<StatsViewProps> = ({
                       {item.count}
                     </td>
                     <td className="py-4 text-center font-mono text-xs text-gray-600 dark:text-gray-400">
-                      {item.weight.toFixed(4)}
+                      {(item.weight ?? 0).toFixed(4)}
                     </td>
                     <td className="py-4 text-center font-black text-indigo-600 dark:text-indigo-400">
-                      {item.totalPoints.toFixed(2)} pts
+                      {(item.totalPoints ?? 0).toFixed(2)} pts
                     </td>
                     <td className="py-4 text-right">
                       {item.practiced ? (
                         <span className={`font-black ${statusColor}`}>
-                          {percentage.toFixed(1)}% Acierto
+                          {(percentage ?? 0).toFixed(1)}% Acierto
                         </span>
                       ) : (
                         <span className="text-gray-400 dark:text-gray-600 text-xs font-bold uppercase tracking-wider">

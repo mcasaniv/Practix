@@ -211,7 +211,7 @@ export const PrintExamModal: React.FC<PrintExamModalProps> = ({
                   <div>
                     <span className="font-bold text-slate-500 uppercase tracking-wider block text-[10px]">Examen Resuelto</span>
                     <span className="text-sm font-black text-slate-800">
-                      Puntaje Obtenido: {exam.score?.toFixed(2)} / {exam.maxScore?.toFixed(2)} pts ({percentage}%)
+                      Puntaje Obtenido: {(exam.score ?? 0).toFixed(2)} / {(exam.maxScore ?? 0).toFixed(2)} pts ({percentage}%)
                     </span>
                   </div>
                   <div className="flex items-center gap-4">

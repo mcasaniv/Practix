@@ -83,7 +83,7 @@ const MegaQuizView: React.FC<MegaQuizViewProps> = ({
               break;
             }
           }
-          const readingText = q.readingTextId ? readingTexts.find(r => r.id === q.readingTextId) : undefined;
+          const readingText = q.readingTextId ? (readingTexts || []).find(r => Boolean(r && r.id === q.readingTextId)) : undefined;
           finalSelection.push({ question: q, weight, category: catName, readingText });
         }
       });
@@ -113,13 +113,13 @@ const MegaQuizView: React.FC<MegaQuizViewProps> = ({
         const textIds = Object.keys(groupedByText).sort(() => 0.5 - Math.random());
         
         if (textIds[0]) {
-          const text1 = readingTexts.find(t => t.id === textIds[0]);
+          const text1 = (readingTexts || []).find(t => Boolean(t && t.id === textIds[0]));
           const qs1 = [...groupedByText[textIds[0]]].sort(() => 0.5 - Math.random()).slice(0, 3);
           qs1.forEach(q => finalSelection.push({ question: q, weight: config.weight, category: categoryName, readingText: text1 }));
         }
 
         if (textIds[1]) {
-          const text2 = readingTexts.find(t => t.id === textIds[1]);
+          const text2 = (readingTexts || []).find(t => Boolean(t && t.id === textIds[1]));
           const qs2 = [...groupedByText[textIds[1]]].sort(() => 0.5 - Math.random()).slice(0, 2);
           qs2.forEach(q => finalSelection.push({ question: q, weight: config.weight, category: categoryName, readingText: text2 }));
         }
@@ -137,7 +137,7 @@ const MegaQuizView: React.FC<MegaQuizViewProps> = ({
         const textIds = Object.keys(groupedByText).sort(() => 0.5 - Math.random());
         
         if (textIds[0]) {
-          const text1 = readingTexts.find(t => t.id === textIds[0]);
+          const text1 = (readingTexts || []).find(t => Boolean(t && t.id === textIds[0]));
           const qs1 = [...groupedByText[textIds[0]]].sort(() => 0.5 - Math.random()).slice(0, 2);
           qs1.forEach(q => finalSelection.push({ question: q, weight: config.weight, category: categoryName, readingText: text1 }));
         }
@@ -554,7 +554,7 @@ const MegaQuizView: React.FC<MegaQuizViewProps> = ({
             {retakeExam && !isReviewMode && (
               <div className="text-center px-4 py-2.5 bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-2xl">
                 <span className="text-[10px] uppercase font-black text-gray-400 block tracking-widest">Puntaje Anterior</span>
-                <span className="text-xl font-black text-gray-500 dark:text-gray-400">{retakeExam.score.toFixed(2)}</span>
+                <span className="text-xl font-black text-gray-500 dark:text-gray-400">{(retakeExam.score ?? 0).toFixed(2)}</span>
               </div>
             )}
             <div className="text-center px-6 py-2.5 bg-indigo-50 dark:bg-indigo-900/30 border-2 border-indigo-200 dark:border-indigo-800 rounded-2xl">
@@ -562,7 +562,7 @@ const MegaQuizView: React.FC<MegaQuizViewProps> = ({
                 {isReviewMode ? 'Puntaje Obtenido' : retakeExam ? 'Nuevo Puntaje' : 'Puntaje Total'}
               </span>
               <span className="text-2xl md:text-3xl font-black text-indigo-700 dark:text-indigo-200">
-                {(isReviewMode && retakeExam ? retakeExam.score : detailedResults.totalScore).toFixed(2)} / {(isReviewMode && retakeExam ? retakeExam.maxScore : maxPossibleScore).toFixed(2)}
+                {((isReviewMode && retakeExam ? retakeExam.score : detailedResults.totalScore) ?? 0).toFixed(2)} / {((isReviewMode && retakeExam ? retakeExam.maxScore : maxPossibleScore) ?? 0).toFixed(2)}
               </span>
             </div>
           </div>
@@ -616,7 +616,7 @@ const MegaQuizView: React.FC<MegaQuizViewProps> = ({
                       </td>
                       <td className="p-6 text-center font-bold text-gray-400">{stats.total}</td>
                       <td className="p-6 text-right font-mono font-black text-indigo-600 dark:text-indigo-400">
-                        {stats.points.toFixed(4)}
+                        {(stats.points ?? 0).toFixed(4)}
                       </td>
                     </tr>
                   ))}
@@ -635,7 +635,7 @@ const MegaQuizView: React.FC<MegaQuizViewProps> = ({
                   {detailedResults.bestTopics.map((t, idx) => (
                     <div key={idx} className="flex justify-between items-start bg-white/50 dark:bg-slate-900/50 p-4 rounded-xl border border-emerald-100 dark:border-emerald-900/20 shadow-sm shadow-emerald-100/50 dark:shadow-none hover:translate-x-1 transition-transform">
                       <span className="text-gray-700 dark:text-gray-300 font-bold text-xs leading-tight pr-2">{t.name}</span>
-                      <span className="bg-emerald-500 text-white px-3 py-1 rounded-full font-black text-[10px] shrink-0">{t.percentage.toFixed(0)}%</span>
+                      <span className="bg-emerald-500 text-white px-3 py-1 rounded-full font-black text-[10px] shrink-0">{(t.percentage ?? 0).toFixed(0)}%</span>
                     </div>
                   ))}
                 </div>
@@ -651,7 +651,7 @@ const MegaQuizView: React.FC<MegaQuizViewProps> = ({
                   {detailedResults.weakTopics.map((t, idx) => (
                     <div key={idx} className="flex justify-between items-start bg-white/50 dark:bg-slate-900/50 p-4 rounded-xl border border-rose-100 dark:border-rose-900/20 shadow-sm shadow-rose-100/50 dark:shadow-none hover:translate-x-1 transition-transform">
                       <span className="text-gray-700 dark:text-gray-300 font-bold text-xs leading-tight pr-2">{t.name}</span>
-                      <span className="bg-rose-500 text-white px-3 py-1 rounded-full font-black text-[10px] shrink-0">{t.percentage.toFixed(0)}%</span>
+                      <span className="bg-rose-500 text-white px-3 py-1 rounded-full font-black text-[10px] shrink-0">{(t.percentage ?? 0).toFixed(0)}%</span>
                     </div>
                   ))}
                 </div>

@@ -78,6 +78,10 @@ export const QuizizzGame: React.FC<QuizizzGameProps> = ({
   // Reading text modal
   const [showReadingModal, setShowReadingModal] = useState<boolean>(false);
 
+  // Solucionario / Resolution review state
+  const [showSolucionario, setShowSolucionario] = useState<boolean>(false);
+  const [solucionarioFilter, setSolucionarioFilter] = useState<'ALL' | 'CORRECT' | 'WRONG'>('ALL');
+
   // Meme feedback
   const [meme, setMeme] = useState<{ text: string; emoji: string } | null>(null);
 
@@ -87,10 +91,10 @@ export const QuizizzGame: React.FC<QuizizzGameProps> = ({
   const playerName = userProfile?.name?.trim() || 'Estudiante Practix';
   const playerAvatarUrl = userProfile?.avatarUrl?.trim() || '';
 
-  const currentQuestion = questions[currentIndex];
+  const currentQuestion = questions && questions.length > 0 ? questions[currentIndex] : undefined;
   const currentReadingText = useMemo(() => {
     if (!currentQuestion?.readingTextId) return undefined;
-    return readingTexts.find(t => t.id === currentQuestion.readingTextId);
+    return readingTexts?.find(t => t && t.id === currentQuestion.readingTextId);
   }, [currentQuestion, readingTexts]);
 
   // Web Audio synth effects
@@ -229,7 +233,7 @@ export const QuizizzGame: React.FC<QuizizzGameProps> = ({
 
   // Handle option pick
   const handleOptionSelect = (index: number, isTimeout = false) => {
-    if (gameState !== 'PLAYING') return;
+    if (gameState !== 'PLAYING' || !currentQuestion) return;
     if (timerRef.current) clearInterval(timerRef.current);
 
     setSelectedOption(index);
@@ -250,7 +254,7 @@ export const QuizizzGame: React.FC<QuizizzGameProps> = ({
     }
 
     // Save answer
-    if (!isTimeout) {
+    if (!isTimeout && currentQuestion.id) {
       setAnswers(prev => ({ ...prev, [currentQuestion.id]: index }));
     }
 
@@ -306,26 +310,20 @@ export const QuizizzGame: React.FC<QuizizzGameProps> = ({
       setGameState('SUMMARY');
       
       // Calculate final score count
-      let correctCount = 0;
+      let finalCount = 0;
       questions.forEach(q => {
-        if (answers[q.id] === q.correctIndex) correctCount++;
+        if (q && q.id && answers[q.id] === q.correctIndex) finalCount++;
       });
-      if (selectedOption === currentQuestion.correctIndex) {
-        correctCount = Object.values(answers).filter((val, i) => {
-          const q = questions.find(item => item.id === Object.keys(answers)[i]);
-          return q && val === q.correctIndex;
-        }).length;
-      }
-      onFinish(correctCount, questions.length);
+      onFinish(finalCount, questions.length);
     }
   };
 
   // Powerup Trigger: 50/50
   const useFiftyFifty = () => {
-    if (!powerUps.fiftyFifty || gameState !== 'PLAYING') return;
+    if (!powerUps.fiftyFifty || gameState !== 'PLAYING' || !currentQuestion) return;
     playSound('powerup');
     const correctIdx = currentQuestion.correctIndex;
-    const wrongIndices = currentQuestion.options
+    const wrongIndices = (currentQuestion.options || [])
       .map((_, i) => i)
       .filter(i => i !== correctIdx);
     
@@ -364,10 +362,11 @@ export const QuizizzGame: React.FC<QuizizzGameProps> = ({
   // Accuracy calculation
   const correctCount = useMemo(() => {
     let count = 0;
-    Object.keys(answers).forEach(k => {
-      const q = questions.find(item => item.id === k);
-      if (q && answers[k] === q.correctIndex) count++;
-    });
+    if (questions && questions.length > 0) {
+      questions.forEach(q => {
+        if (q && q.id && answers[q.id] === q.correctIndex) count++;
+      });
+    }
     return count;
   }, [answers, questions]);
 
@@ -653,7 +652,7 @@ export const QuizizzGame: React.FC<QuizizzGameProps> = ({
               </div>
             )}
 
-            <p className="text-xl md:text-2xl font-black leading-relaxed text-slate-100 mb-8">
+            <p className="text-xl md:text-2xl font-black leading-relaxed text-slate-100 mb-8 whitespace-pre-wrap">
               {formatQuestionText(currentQuestion.questionText)}
             </p>
 
@@ -689,7 +688,7 @@ export const QuizizzGame: React.FC<QuizizzGameProps> = ({
                     <div className="w-10 h-10 rounded-xl bg-black/20 border border-white/20 flex items-center justify-center text-lg font-black shrink-0">
                       {theme.icon}
                     </div>
-                    <span className="text-base font-bold leading-relaxed flex-grow">
+                    <span className="text-base font-bold leading-relaxed flex-grow whitespace-pre-wrap">
                       {parseHTMLTags(opt)}
                     </span>
 
@@ -821,12 +820,21 @@ export const QuizizzGame: React.FC<QuizizzGameProps> = ({
           {/* Actions */}
           <div className="flex flex-wrap items-center justify-center gap-4 pt-4">
             <button
+              onClick={() => setShowSolucionario(true)}
+              className="bg-gradient-to-r from-amber-500 to-amber-400 hover:from-amber-400 hover:to-amber-300 text-slate-950 font-black text-base px-8 py-4 rounded-2xl shadow-xl transition-all transform hover:scale-105 active:scale-95 flex items-center gap-2"
+            >
+              <span>📖</span> Ver Solucionario y Resolución
+            </button>
+
+            <button
               onClick={() => {
                 setGameState('LOBBY');
                 setUserScore(0);
                 setStreak(0);
                 setMaxStreak(0);
                 setAnswers({});
+                setShowSolucionario(false);
+                setSolucionarioFilter('ALL');
                 setPowerUps({
                   fiftyFifty: true,
                   freezeTime: true,
@@ -845,6 +853,253 @@ export const QuizizzGame: React.FC<QuizizzGameProps> = ({
             >
               <span>⬅️</span> Volver a los Temas
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* SOLUCIONARIO MODAL */}
+      {showSolucionario && (
+        <div className="fixed inset-0 z-50 bg-slate-950/95 backdrop-blur-md flex flex-col p-4 md:p-8 overflow-y-auto animate-fade-in">
+          <div className="max-w-4xl w-full mx-auto space-y-6 py-6 my-auto">
+            {/* Header */}
+            <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-2xl flex flex-col sm:flex-row items-center justify-between gap-4 sticky top-0 z-10">
+              <div>
+                <span className="text-xs font-black uppercase tracking-widest text-amber-400 block mb-1">
+                  Solucionario y Resolución
+                </span>
+                <h2 className="text-2xl font-black text-white">{title}</h2>
+                <p className="text-xs text-slate-400 font-bold mt-1">
+                  Revisa cada pregunta, tus respuestas y las explicaciones detalladas.
+                </p>
+              </div>
+
+              <button
+                onClick={() => setShowSolucionario(false)}
+                className="bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white font-black px-5 py-2.5 rounded-xl border border-slate-700 transition-all flex items-center gap-2 text-sm shrink-0"
+              >
+                <span>✕</span>
+                <span>Cerrar Solucionario</span>
+              </button>
+            </div>
+
+            {/* Filter Tabs */}
+            <div className="flex items-center justify-center gap-2 bg-slate-900/90 p-2 rounded-2xl border border-slate-800 max-w-md mx-auto shadow-lg">
+              <button
+                onClick={() => setSolucionarioFilter('ALL')}
+                className={`flex-1 py-2 px-3 rounded-xl text-xs font-black transition-all ${
+                  solucionarioFilter === 'ALL'
+                    ? 'bg-purple-600 text-white shadow-md'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                Todas ({questions.length})
+              </button>
+              <button
+                onClick={() => setSolucionarioFilter('CORRECT')}
+                className={`flex-1 py-2 px-3 rounded-xl text-xs font-black transition-all ${
+                  solucionarioFilter === 'CORRECT'
+                    ? 'bg-emerald-600 text-white shadow-md'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                Correctas ({correctCount})
+              </button>
+              <button
+                onClick={() => setSolucionarioFilter('WRONG')}
+                className={`flex-1 py-2 px-3 rounded-xl text-xs font-black transition-all ${
+                  solucionarioFilter === 'WRONG'
+                    ? 'bg-rose-600 text-white shadow-md'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                Incorrectas ({questions.length - correctCount})
+              </button>
+            </div>
+
+            {/* Questions List */}
+            <div className="space-y-6">
+              {(questions || [])
+                .map((q, idx) => ({ q, idx }))
+                .filter(({ q }) => {
+                  if (!q || !q.id) return false;
+                  const userAnswer = answers[q.id];
+                  const isCorrect = userAnswer === q.correctIndex;
+                  if (solucionarioFilter === 'CORRECT') return isCorrect;
+                  if (solucionarioFilter === 'WRONG') return !isCorrect;
+                  return true;
+                })
+                .map(({ q, idx }) => {
+                  if (!q || !q.id) return null;
+                  const userAnswer = answers[q.id];
+                  const isAnswered = userAnswer !== undefined;
+                  const isCorrect = userAnswer === q.correctIndex;
+                  const reading = (readingTexts || []).find(r => Boolean(r && r.id && q.readingTextId && r.id === q.readingTextId));
+
+                  return (
+                    <div
+                      key={q.id}
+                      className={`bg-slate-900 border rounded-3xl p-6 shadow-2xl space-y-4 ${
+                        isCorrect
+                          ? 'border-emerald-500/40'
+                          : isAnswered
+                          ? 'border-rose-500/40'
+                          : 'border-amber-500/40'
+                      }`}
+                    >
+                      {/* Item Badge & Header */}
+                      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-3">
+                        <span className="text-xs font-black uppercase tracking-wider text-purple-300">
+                          Pregunta {idx + 1} de {questions.length}
+                        </span>
+
+                        <span
+                          className={`text-xs font-black px-3 py-1 rounded-full flex items-center gap-1.5 ${
+                            isCorrect
+                              ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                              : isAnswered
+                              ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40'
+                              : 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                          }`}
+                        >
+                          {isCorrect ? (
+                            <>
+                              <span>✓</span>
+                              <span>Respuesta Correcta</span>
+                            </>
+                          ) : isAnswered ? (
+                            <>
+                              <span>✗</span>
+                              <span>Respuesta Incorrecta</span>
+                            </>
+                          ) : (
+                            <>
+                              <span>⏱️</span>
+                              <span>Sin responder / Tiempo agotado</span>
+                            </>
+                          )}
+                        </span>
+                      </div>
+
+                      {/* Reading Text If Present */}
+                      {reading && (
+                        <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-2">
+                          <span className="text-xs font-black text-amber-300 uppercase tracking-widest block">
+                            📖 Lectura: {reading.title}
+                          </span>
+                          <p className="text-xs text-slate-300 italic whitespace-pre-wrap font-serif leading-relaxed">
+                            {reading.content}
+                          </p>
+                        </div>
+                      )}
+
+                      {/* Question Image if present */}
+                      {q.imageUrl && (
+                        <div className="flex justify-center my-2">
+                          <img
+                            src={q.imageUrl}
+                            alt={`Imagen de pregunta ${idx + 1}`}
+                            className="max-h-56 rounded-2xl border border-slate-700 object-contain shadow-lg"
+                            referrerPolicy="no-referrer"
+                          />
+                        </div>
+                      )}
+
+                      {/* Question Text */}
+                      <div className="text-slate-100 text-base font-bold leading-relaxed whitespace-pre-wrap">
+                        {formatQuestionText(q.questionText)}
+                      </div>
+
+                      {/* Options List */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2">
+                        {q.options.map((option, optIdx) => {
+                          const isOptionCorrect = optIdx === q.correctIndex;
+                          const isUserPick = optIdx === userAnswer;
+                          const optImg = q.optionsImageUrls?.[optIdx];
+
+                          let styleClasses = 'bg-slate-800/60 border-slate-700 text-slate-300';
+                          let badgeLabel = null;
+
+                          if (isOptionCorrect) {
+                            styleClasses = 'bg-emerald-950/80 border-emerald-500 text-emerald-200 font-bold ring-2 ring-emerald-500/30';
+                            badgeLabel = (
+                              <span className="text-[10px] uppercase font-black bg-emerald-500 text-slate-950 px-2 py-0.5 rounded-md shrink-0">
+                                ✓ Correcta
+                              </span>
+                            );
+                          } else if (isUserPick && !isOptionCorrect) {
+                            styleClasses = 'bg-rose-950/80 border-rose-500 text-rose-200 font-bold ring-2 ring-rose-500/30';
+                            badgeLabel = (
+                              <span className="text-[10px] uppercase font-black bg-rose-500 text-white px-2 py-0.5 rounded-md shrink-0">
+                                Tu Elección
+                              </span>
+                            );
+                          }
+
+                          return (
+                            <div
+                              key={optIdx}
+                              className={`p-3.5 rounded-2xl border flex items-center justify-between gap-3 text-sm transition-all ${styleClasses}`}
+                            >
+                              <div className="flex items-center gap-2.5 min-w-0">
+                                <span className="w-6 h-6 rounded-lg bg-slate-900/60 border border-slate-700/50 flex items-center justify-center text-xs font-black shrink-0">
+                                  {String.fromCharCode(65 + optIdx)}
+                                </span>
+                                <span className="whitespace-pre-wrap">{option}</span>
+                                {optImg && (
+                                  <img src={optImg} alt="" className="h-8 object-contain rounded" referrerPolicy="no-referrer" />
+                                )}
+                              </div>
+                              {badgeLabel}
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {/* Explanation / Resolution */}
+                      <div className="bg-gradient-to-r from-purple-950/60 to-indigo-950/60 border border-purple-500/30 p-4 rounded-2xl space-y-2 text-sm leading-relaxed mt-4">
+                        <div className="flex items-center gap-2 text-purple-300 font-black text-xs uppercase tracking-wider">
+                          <span>💡</span>
+                          <span>Explicación y Resolución:</span>
+                        </div>
+                        <div className="text-slate-200 font-medium whitespace-pre-wrap">
+                          {parseHTMLTags(q.explanation || 'No hay explicación adicional registrada para esta pregunta.')}
+                        </div>
+                        {q.explanationImageUrl && (
+                          <img
+                            src={q.explanationImageUrl}
+                            alt="Explicación visual"
+                            className="max-h-56 rounded-xl border border-purple-500/40 mt-3 object-contain"
+                            referrerPolicy="no-referrer"
+                          />
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+
+              {(questions || []).filter(q => {
+                if (!q || !q.id) return false;
+                const userAnswer = answers[q.id];
+                const isCorrect = userAnswer === q.correctIndex;
+                if (solucionarioFilter === 'CORRECT') return isCorrect;
+                if (solucionarioFilter === 'WRONG') return !isCorrect;
+                return true;
+              }).length === 0 && (
+                <div className="text-center py-12 bg-slate-900 border border-slate-800 rounded-3xl text-slate-400 font-bold">
+                  No se encontraron preguntas en este filtro.
+                </div>
+              )}
+            </div>
+
+            {/* Footer Close Button */}
+            <div className="text-center pt-4 pb-8">
+              <button
+                onClick={() => setShowSolucionario(false)}
+                className="bg-purple-600 hover:bg-purple-500 text-white font-black text-base px-10 py-4 rounded-2xl shadow-xl transition-all transform hover:scale-105 active:scale-95"
+              >
+                Volver a Resumen de Resultados
+              </button>
+            </div>
           </div>
         </div>
       )}

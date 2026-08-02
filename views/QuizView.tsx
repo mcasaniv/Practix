@@ -60,11 +60,12 @@ const QuizView: React.FC<QuizViewProps> = ({
 
   const groupedQuestions = useMemo(() => {
     const groups: { text?: ReadingText, questions: Question[] }[] = [];
-    const textIds = Array.from(new Set(questions.map(q => q.readingTextId)));
+    const safeQuestions = (questions || []).filter(q => Boolean(q && q.id));
+    const textIds = Array.from(new Set(safeQuestions.map(q => q.readingTextId)));
 
     textIds.forEach(id => {
-      const qs = questions.filter(q => q.readingTextId === id);
-      const text = readingTexts.find(t => t.id === id);
+      const qs = safeQuestions.filter(q => q.readingTextId === id);
+      const text = (readingTexts || []).find(t => Boolean(t && t.id === id));
       groups.push({ text, questions: qs });
     });
 
@@ -72,14 +73,14 @@ const QuizView: React.FC<QuizViewProps> = ({
   }, [questions, readingTexts]);
 
   const handleSelect = (qId: string, optIndex: number) => {
-    if (isFinished) return;
+    if (isFinished || !qId) return;
     setAnswers(prev => ({ ...prev, [qId]: optIndex }));
   };
 
   const calculateScore = () => {
     let score = 0;
-    questions.forEach(q => {
-      if (answers[q.id] === q.correctIndex) score++;
+    (questions || []).forEach(q => {
+      if (q && q.id && answers[q.id] === q.correctIndex) score++;
     });
     return score;
   };

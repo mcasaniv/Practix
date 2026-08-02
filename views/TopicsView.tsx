@@ -244,7 +244,7 @@ const TopicsView: React.FC<TopicsViewProps> = ({
                           <div className={`p-3 rounded-xl border flex items-center justify-between ${scoreBadgeClass}`}>
                             <span className="text-xs font-black uppercase tracking-wider">Puntaje Obtenido</span>
                             <span className="text-sm font-black">
-                              {exam.score?.toFixed(2)} / {exam.maxScore?.toFixed(2)} pts ({percentage}%)
+                              {(exam.score ?? 0).toFixed(2)} / {(exam.maxScore ?? 0).toFixed(2)} pts ({percentage}%)
                             </span>
                           </div>
                         ) : (
