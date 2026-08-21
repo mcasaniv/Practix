@@ -137,3 +137,11 @@ export const AREA_EXAM_CONFIGS: Record<string, Record<string, ExamCategory>> = {
 export const MEGA_EXAM_CONFIG: Record<string, ExamCategory> = BIOMEDICAS_EXAM_CONFIG;
 
 export const DB_STORAGE_KEY = 'educasani_cloud_db';
+
+export const ADMISSION_PROCESSES = [
+  'Ceprunsa I Fase 2027',
+  'Ceprunsa II Fase 2027',
+  'Ceprequintos 2027'
+] as const;
+
+export const DEFAULT_ADMISSION_PROCESS = 'Ceprunsa I Fase 2027';

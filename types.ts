@@ -22,11 +22,25 @@ export interface Question {
   optionsImageUrls?: string[];
   explanationImageUrl?: string;
   week?: number; // Opcional: Semana a la que pertenece el tema (1, 2, 3...)
+  process?: string; // Proceso de admisión (ej: 'Ceprunsa I Fase 2027', 'Ceprunsa II Fase 2027', 'Ceprequintos 2027')
+}
+
+export interface TopicPracticeHistoryItem {
+  score: number;
+  total: number;
+  date: number;
+  mode?: 'CLASSIC' | 'QUIZZIZ';
 }
 
 export interface TopicResult {
   score: number;
   total: number;
+  timesPracticed?: number;
+  classicPracticesCount?: number;
+  gamePracticesCount?: number;
+  lastPracticedAt?: number;
+  bestScore?: number;
+  history?: TopicPracticeHistoryItem[];
 }
 
 export interface Flashcard {
@@ -55,6 +69,8 @@ export interface SavedExam {
   solvedAt?: number;
   createdAt: number;
   selectedExamSubjects?: string[];
+  selectedExamWeeks?: number[];
+  selectedExamProcesses?: string[];
   attemptsCount?: number;
   userAnswers?: Record<string, number>;
 }
@@ -88,6 +104,9 @@ export interface NavigationState {
   mixedQuestions?: Question[];
   examMode?: ExamMode;
   selectedExamSubjects?: string[];
+  selectedExamWeeks?: number[];
+  selectedExamProcesses?: string[];
+  selectedProcess?: string;
   retakeExam?: SavedExam;
   isReviewMode?: boolean;
   quizMode?: 'CLASSIC' | 'QUIZZIZ';

@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Question, AppDatabase, ViewType, NavigationState, TopicResult, ReadingText, Flashcard, SavedExam } from './types';
 import { ACADEMIC_STRUCTURE, DB_STORAGE_KEY } from './constants';
+import { getQuestionProcess } from './utils';
 import Navbar from './components/Navbar';
 import HomeView from './views/HomeView';
 import SubjectsView from './views/SubjectsView';
@@ -59,7 +60,8 @@ const sanitizeDatabase = (data: AppDatabase): AppDatabase => {
       qId = crypto.randomUUID();
     }
     seenQuestionIds.add(qId);
-    return { ...q, id: qId };
+    const process = q.process && typeof q.process === 'string' && q.process.trim() ? q.process.trim() : 'Ceprunsa I Fase 2027';
+    return { ...q, id: qId, process };
   });
 
   const seenTextIds = new Set<string>();
@@ -98,28 +100,33 @@ const sanitizeDatabase = (data: AppDatabase): AppDatabase => {
   const migratedResults: Record<string, TopicResult> = {};
   if (data.results) {
     Object.entries(data.results).forEach(([key, val]) => {
+      let targetKey = key;
       if (key.startsWith('Ecología|')) {
-        const newKey = key.replace('Ecología|', 'Biología|');
-        if (migratedResults[newKey]) {
-          migratedResults[newKey] = {
-            score: migratedResults[newKey].score + val.score,
-            total: migratedResults[newKey].total + val.total
-          };
-        } else {
-          migratedResults[newKey] = val;
-        }
+        targetKey = key.replace('Ecología|', 'Biología|');
       } else if (key.startsWith('Anatomía|')) {
-        const newKey = key.replace('Anatomía|', 'Biología|');
-        if (migratedResults[newKey]) {
-          migratedResults[newKey] = {
-            score: migratedResults[newKey].score + val.score,
-            total: migratedResults[newKey].total + val.total
-          };
-        } else {
-          migratedResults[newKey] = val;
-        }
-      } else if (!key.startsWith('Francés|')) {
-        migratedResults[key] = val;
+        targetKey = key.replace('Anatomía|', 'Biología|');
+      } else if (key.startsWith('Francés|')) {
+        return;
+      }
+
+      const existing = migratedResults[targetKey];
+      if (existing) {
+        migratedResults[targetKey] = {
+          ...val,
+          score: existing.score + val.score,
+          total: existing.total + val.total,
+          timesPracticed: (existing.timesPracticed || 1) + (val.timesPracticed || 1),
+          classicPracticesCount: (existing.classicPracticesCount || 0) + (val.classicPracticesCount || 0),
+          gamePracticesCount: (existing.gamePracticesCount || 0) + (val.gamePracticesCount || 0),
+          bestScore: Math.max(existing.bestScore ?? existing.score, val.bestScore ?? val.score),
+          history: [...(existing.history || []), ...(val.history || [])]
+        };
+      } else {
+        migratedResults[targetKey] = {
+          ...val,
+          timesPracticed: val.timesPracticed ?? (val.total > 0 ? 1 : 0),
+          bestScore: val.bestScore ?? val.score
+        };
       }
     });
   }
@@ -316,15 +323,42 @@ const App: React.FC = () => {
     });
   }, []);
 
-  const handleFinishQuiz = useCallback((subject: string, topic: string, score: number, total: number) => {
-    setDb(prev => ({
-      ...prev,
-      totalPracticed: (prev.totalPracticed || 0) + total,
-      results: {
-        ...prev.results,
-        [`${subject}|${topic}`]: { score, total }
-      }
-    }));
+  const handleFinishQuiz = useCallback((subject: string, topic: string, score: number, total: number, mode: 'CLASSIC' | 'QUIZZIZ' = 'CLASSIC') => {
+    setDb(prev => {
+      const key = `${subject}|${topic}`;
+      const prevResult = prev.results?.[key];
+      const prevTimes = prevResult?.timesPracticed ?? (prevResult && prevResult.total > 0 ? 1 : 0);
+      const prevClassic = prevResult?.classicPracticesCount ?? (prevResult && !prevResult.gamePracticesCount ? prevTimes : 0);
+      const prevGame = prevResult?.gamePracticesCount ?? 0;
+      const prevBest = prevResult?.bestScore ?? prevResult?.score ?? 0;
+
+      const newHistoryItem = {
+        score,
+        total,
+        date: Date.now(),
+        mode
+      };
+
+      const newResult: TopicResult = {
+        score,
+        total,
+        timesPracticed: prevTimes + 1,
+        classicPracticesCount: mode === 'CLASSIC' ? prevClassic + 1 : prevClassic,
+        gamePracticesCount: mode === 'QUIZZIZ' ? prevGame + 1 : prevGame,
+        lastPracticedAt: Date.now(),
+        bestScore: Math.max(prevBest, score),
+        history: [...(prevResult?.history || []), newHistoryItem]
+      };
+
+      return {
+        ...prev,
+        totalPracticed: (prev.totalPracticed || 0) + total,
+        results: {
+          ...prev.results,
+          [key]: newResult
+        }
+      };
+    });
   }, []);
 
   const handleSaveExamResult = useCallback((savedExam: SavedExam) => {
@@ -457,7 +491,7 @@ const App: React.FC = () => {
 
   const handleBack = useCallback(() => {
     setNav(prev => {
-      if (prev.view === 'ADMIN' || prev.view === 'MEGA_QUIZ' || prev.view === 'EXAM_SETUP' || prev.view === 'STATS') return { ...prev, view: 'HOME', examMode: undefined, selectedExamSubjects: undefined, retakeExam: undefined };
+      if (prev.view === 'ADMIN' || prev.view === 'MEGA_QUIZ' || prev.view === 'EXAM_SETUP' || prev.view === 'STATS') return { ...prev, view: 'HOME', examMode: undefined, selectedExamSubjects: undefined, selectedExamWeeks: undefined, retakeExam: undefined };
       if (prev.view === 'QUIZ' || prev.view === 'MIXED_QUIZ') return { ...prev, view: 'TOPICS', mixedQuestions: undefined };
       if (prev.view === 'TOPICS') return { ...prev, view: 'SUBJECTS', selectedTopic: undefined };
       if (prev.view === 'SUBJECTS') return { ...prev, view: 'HOME', selectedSubject: undefined };
@@ -479,7 +513,7 @@ const App: React.FC = () => {
             onSelectCourse={(course) => handleNavigate('SUBJECTS', { selectedCourse: course })} 
             onStartMegaQuiz={(mode) => {
               if (mode === 'GENERAL') {
-                handleNavigate('MEGA_QUIZ', { examMode: 'GENERAL', selectedExamSubjects: undefined, retakeExam: undefined });
+                handleNavigate('MEGA_QUIZ', { examMode: 'GENERAL', selectedExamSubjects: undefined, selectedExamWeeks: undefined, retakeExam: undefined });
               } else {
                 handleNavigate('EXAM_SETUP', { examMode: 'CUSTOM' });
               }
@@ -490,10 +524,16 @@ const App: React.FC = () => {
         return (
           <ExamSetupView 
             mode={nav.examMode!}
+            questions={db.questions}
             selectedArea={selectedArea}
             onSetSelectedArea={handleSetSelectedArea}
             onCancel={() => handleNavigate('HOME')}
-            onStart={(subjects) => handleNavigate('MEGA_QUIZ', { selectedExamSubjects: subjects, retakeExam: undefined })}
+            onStart={(subjects, weeks, processes) => handleNavigate('MEGA_QUIZ', { 
+              selectedExamSubjects: subjects && subjects.length > 0 ? subjects : undefined,
+              selectedExamWeeks: weeks && weeks.length > 0 ? weeks : undefined,
+              selectedExamProcesses: processes && processes.length > 0 ? processes : undefined,
+              retakeExam: undefined 
+            })}
           />
         );
       case 'SUBJECTS':
@@ -501,6 +541,8 @@ const App: React.FC = () => {
           <SubjectsView 
             academicStructure={academicStructure}
             courseName={nav.selectedCourse!} 
+            questions={db.questions}
+            results={db.results || {}}
             onSelectSubject={(subject) => handleNavigate('TOPICS', { selectedSubject: subject })} 
           />
         );
@@ -514,14 +556,14 @@ const App: React.FC = () => {
             readingTexts={db.readingTexts || []}
             results={db.results || {}}
             savedExams={db.savedExams || []}
-            onSelectTopic={(topic, mode) => handleNavigate('QUIZ', { selectedTopic: topic, quizMode: mode })}
+            onSelectTopic={(topic, mode, process) => handleNavigate('QUIZ', { selectedTopic: topic, quizMode: mode, selectedProcess: process })}
             onStartMixedQuiz={(questions, mode) => handleNavigate('MIXED_QUIZ', { mixedQuestions: questions, quizMode: mode })}
             onDeleteTopic={(topic) => deleteTopic(topic, nav.selectedSubject!)}
             onMoveTopic={(topic, dir) => moveTopic(topic, nav.selectedSubject!, dir)}
             onRetakeExam={(exam) => handleNavigate('MEGA_QUIZ', { retakeExam: exam, examMode: exam.mode, isReviewMode: false })}
             onViewExamResolution={(exam) => handleNavigate('MEGA_QUIZ', { retakeExam: exam, examMode: exam.mode, isReviewMode: true })}
             onDeleteSavedExam={handleDeleteSavedExam}
-            onStartNewExam={() => handleNavigate('MEGA_QUIZ', { examMode: 'GENERAL', retakeExam: undefined, isReviewMode: false })}
+            onStartNewExam={() => handleNavigate('EXAM_SETUP', { examMode: 'CUSTOM' })}
           />
         );
       case 'QUIZ':
@@ -529,8 +571,13 @@ const App: React.FC = () => {
           <QuizView 
             topicName={nav.selectedTopic!}
             subjectName={nav.selectedSubject!}
-            questions={db.questions.filter(q => q.topic === nav.selectedTopic && q.subject === nav.selectedSubject)}
+            questions={db.questions.filter(q => 
+              q.topic === nav.selectedTopic && 
+              q.subject === nav.selectedSubject && 
+              (!nav.selectedProcess || getQuestionProcess(q) === nav.selectedProcess)
+            )}
             readingTexts={db.readingTexts || []}
+            results={db.results || {}}
             initialMode={nav.quizMode || 'CLASSIC'}
             userProfile={db.userProfile}
             onFinish={handleFinishQuiz}
@@ -544,6 +591,7 @@ const App: React.FC = () => {
             subjectName={nav.selectedSubject!}
             questions={nav.mixedQuestions || []}
             readingTexts={db.readingTexts || []}
+            results={db.results || {}}
             initialMode={nav.quizMode || 'CLASSIC'}
             userProfile={db.userProfile}
             onFinish={handleFinishQuiz}
@@ -560,6 +608,8 @@ const App: React.FC = () => {
             selectedArea={selectedArea}
             onSetSelectedArea={handleSetSelectedArea}
             selectedExamSubjects={nav.selectedExamSubjects}
+            selectedExamWeeks={nav.selectedExamWeeks}
+            selectedExamProcesses={nav.selectedExamProcesses}
             retakeExam={nav.retakeExam}
             isReviewMode={nav.isReviewMode}
             onSaveExamResult={handleSaveExamResult}

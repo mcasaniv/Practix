@@ -2,7 +2,7 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Question, ReadingText, ExamMode, TopicResult, SavedExam, UserProfile } from '../types';
 import { AREA_EXAM_CONFIGS } from '../constants';
-import { formatQuestionText, parseHTMLTags } from '../utils';
+import { formatQuestionText, parseHTMLTags, getQuestionWeek, getQuestionProcess, getProcessBadgeStyle } from '../utils';
 import { PrintExamModal } from '../components/PrintExamModal';
 import { QuizizzGame } from '../components/QuizizzGame';
 
@@ -13,6 +13,8 @@ interface MegaQuizViewProps {
   onFinishMega: (total: number) => void;
   mode?: ExamMode;
   selectedExamSubjects?: string[];
+  selectedExamWeeks?: number[];
+  selectedExamProcesses?: string[];
   selectedArea: 'Biomédicas' | 'Ingenierías' | 'Sociales';
   onSetSelectedArea: (area: 'Biomédicas' | 'Ingenierías' | 'Sociales') => void;
   onBack: () => void;
@@ -29,6 +31,8 @@ const MegaQuizView: React.FC<MegaQuizViewProps> = ({
   onFinishMega, 
   mode = 'GENERAL',
   selectedExamSubjects,
+  selectedExamWeeks,
+  selectedExamProcesses,
   selectedArea,
   onSetSelectedArea,
   onBack,
@@ -54,16 +58,71 @@ const MegaQuizView: React.FC<MegaQuizViewProps> = ({
     }
   }, [retakeExam]);
 
+  const activeWeeks = useMemo(() => {
+    return selectedExamWeeks || retakeExam?.selectedExamWeeks;
+  }, [selectedExamWeeks, retakeExam]);
+
+  const activeProcesses = useMemo(() => {
+    return selectedExamProcesses || retakeExam?.selectedExamProcesses;
+  }, [selectedExamProcesses, retakeExam]);
+
   const questionPool = useMemo(() => {
+    let pool = questions;
     if (questionSource === 'PRACTICED') {
-      return questions.filter(q => results && results[`${q.subject}|${q.topic}`] !== undefined);
+      pool = pool.filter(q => results && results[`${q.subject}|${q.topic}`] !== undefined);
     }
-    return questions;
-  }, [questions, results, questionSource]);
+    if (activeProcesses && activeProcesses.length > 0) {
+      const filteredByProc = pool.filter(q => activeProcesses.includes(getQuestionProcess(q)));
+      if (filteredByProc.length > 0) {
+        pool = filteredByProc;
+      }
+    }
+    if (activeWeeks && activeWeeks.length > 0) {
+      const filtered = pool.filter(q => {
+        const w = getQuestionWeek(q);
+        return w !== undefined && activeWeeks.includes(w);
+      });
+      if (filtered.length > 0) {
+        pool = filtered;
+      }
+    }
+    return pool;
+  }, [questions, results, questionSource, activeProcesses, activeWeeks]);
 
   const practicedQuestionsCount = useMemo(() => {
     return questions.filter(q => results && results[`${q.subject}|${q.topic}`] !== undefined).length;
   }, [questions, results]);
+
+  const getExamDefaultTitle = () => {
+    if (retakeExam?.title) return retakeExam.title;
+    let weekLabel = '';
+    if (activeWeeks && activeWeeks.length > 0) {
+      if (activeWeeks.length === 1 && activeWeeks[0] === 1) {
+        weekLabel = ' (Semana 1)';
+      } else if (activeWeeks.length === 2 && activeWeeks[0] === 1 && activeWeeks[1] === 2) {
+        weekLabel = ' (Semana 1 y 2)';
+      } else if (activeWeeks.length === 3 && activeWeeks[0] === 1 && activeWeeks[1] === 2 && activeWeeks[2] === 3) {
+        weekLabel = ' (Semana 1, 2 y 3)';
+      } else {
+        weekLabel = ` (Semanas ${activeWeeks.join(', ')})`;
+      }
+    }
+
+    let procLabel = '';
+    if (activeProcesses && activeProcesses.length > 0) {
+      if (activeProcesses.length === 1) {
+        procLabel = ` [${activeProcesses[0].replace(' 2027', '')}]`;
+      } else if (activeProcesses.length < 3) {
+        procLabel = ` [${activeProcesses.map(p => p.replace(' 2027', '')).join(', ')}]`;
+      }
+    }
+
+    const isFull80 = !selectedExamSubjects || selectedExamSubjects.length === 0;
+    if (isFull80) {
+      return `Simulacro 80 Preguntas${procLabel}${weekLabel} - ${selectedArea}`;
+    }
+    return `Examen Personalizado${procLabel}${weekLabel} - ${selectedArea}`;
+  };
 
   const candidateQuestions = useMemo(() => {
     if (retakeExam && retakeExam.questionIds.length > 0) {
@@ -192,7 +251,7 @@ const MegaQuizView: React.FC<MegaQuizViewProps> = ({
     const examId = currentExamIdRef.current;
     const examRecord: SavedExam = {
       id: examId,
-      title: retakeExam?.title || `${mode === 'CUSTOM' ? 'Examen Personalizado' : 'Simulacro General'} - ${selectedArea}`,
+      title: getExamDefaultTitle(),
       course: 'Exámenes',
       subject: 'Exámenes Simulacros',
       area: selectedArea,
@@ -201,6 +260,7 @@ const MegaQuizView: React.FC<MegaQuizViewProps> = ({
       totalQuestions: examQuestions.length,
       createdAt: retakeExam?.createdAt || Date.now(),
       selectedExamSubjects: selectedExamSubjects,
+      selectedExamWeeks: activeWeeks,
       attemptsCount: (retakeExam?.attemptsCount || 0) + 1
     };
     if (onSaveExamResult) {
@@ -262,7 +322,7 @@ const MegaQuizView: React.FC<MegaQuizViewProps> = ({
     const examId = currentExamIdRef.current;
     const finalRecord: SavedExam = {
       id: examId,
-      title: retakeExam?.title || `${mode === 'CUSTOM' ? 'Examen Personalizado' : 'Simulacro General'} - ${selectedArea}`,
+      title: getExamDefaultTitle(),
       course: 'Exámenes',
       subject: 'Exámenes Simulacros',
       area: selectedArea,
@@ -274,6 +334,8 @@ const MegaQuizView: React.FC<MegaQuizViewProps> = ({
       solvedAt: Date.now(),
       createdAt: retakeExam?.createdAt || Date.now(),
       selectedExamSubjects: selectedExamSubjects,
+      selectedExamWeeks: activeWeeks,
+      selectedExamProcesses: activeProcesses,
       attemptsCount: retakeExam?.attemptsCount ? retakeExam.attemptsCount + 1 : 1,
       userAnswers: answers
     };
@@ -346,10 +408,38 @@ const MegaQuizView: React.FC<MegaQuizViewProps> = ({
         </button>
         <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-gray-100 dark:border-slate-800 p-8 md:p-12">
           <div className="text-center mb-8">
-            <h2 className="text-4xl font-black text-gray-800 dark:text-gray-100 mb-4 tracking-tight">
-              {mode === 'CUSTOM' ? 'Examen Personalizado' : 'Simulacro General 80'}
+            <div className="flex flex-wrap items-center justify-center gap-2 mb-3">
+              <span className="bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 text-xs font-black px-3.5 py-1 rounded-full uppercase tracking-wider">
+                {mode === 'CUSTOM' ? 'Examen Personalizado' : 'Simulacro General'}
+              </span>
+              {activeProcesses && activeProcesses.length > 0 ? (
+                activeProcesses.map(proc => {
+                  const style = getProcessBadgeStyle(proc);
+                  return (
+                    <span key={proc} className={`${style.bg} ${style.text} ${style.border} border text-xs font-black px-3.5 py-1 rounded-full uppercase tracking-wider flex items-center gap-1`}>
+                      <span>{style.icon}</span>
+                      <span>{proc}</span>
+                    </span>
+                  );
+                })
+              ) : (
+                <span className="bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800 text-xs font-black px-3.5 py-1 rounded-full uppercase tracking-wider flex items-center gap-1">
+                  <span>🌐</span>
+                  <span>Todos los Procesos (3 en 1)</span>
+                </span>
+              )}
+              {activeWeeks && activeWeeks.length > 0 && (
+                <span className="bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 text-xs font-black px-3.5 py-1 rounded-full uppercase tracking-wider">
+                  {activeWeeks.length === 1 ? `Semana ${activeWeeks[0]}` : `Semanas ${activeWeeks.join(', ')}`}
+                </span>
+              )}
+            </div>
+            <h2 className="text-3xl md:text-4xl font-black text-gray-800 dark:text-gray-100 mb-3 tracking-tight">
+              {getExamDefaultTitle()}
             </h2>
-            <p className="text-gray-500 dark:text-gray-400 text-lg">Este examen consta de <span className="text-indigo-600 font-black">{selectedQuestions.length}</span> preguntas seleccionadas por áreas.</p>
+            <p className="text-gray-500 dark:text-gray-400 text-base max-w-lg mx-auto">
+              Este examen consta de <span className="text-indigo-600 dark:text-indigo-400 font-black">{selectedQuestions.length} preguntas</span> distribuidas según los pesos oficiales del Área {selectedArea}.
+            </p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8 max-w-2xl mx-auto">

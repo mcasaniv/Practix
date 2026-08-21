@@ -48,6 +48,55 @@ export function parseHTMLTags(text: string): React.ReactNode {
   return <>{result}</>;
 }
 
+export function getQuestionWeek(q: { week?: number; topic?: string }): number | undefined {
+  if (typeof q.week === 'number' && !isNaN(q.week) && q.week > 0) {
+    return q.week;
+  }
+  if (q.topic) {
+    const match = q.topic.match(/(?:semana|sem|s)\s*0*(\d+)/i);
+    if (match && match[1]) {
+      const num = parseInt(match[1], 10);
+      if (!isNaN(num) && num > 0) return num;
+    }
+  }
+  return undefined;
+}
+
+export function getQuestionProcess(q: { process?: string }): string {
+  if (q && q.process && typeof q.process === 'string' && q.process.trim()) {
+    return q.process.trim();
+  }
+  return 'Ceprunsa I Fase 2027';
+}
+
+export function getProcessBadgeStyle(processName?: string): { bg: string; text: string; border: string; icon: string } {
+  const p = processName ? processName.toLowerCase() : '';
+  if (p.includes('ii fase') || p.includes('2 fase') || p.includes('segunda')) {
+    return {
+      bg: 'bg-emerald-50 dark:bg-emerald-950/60',
+      text: 'text-emerald-700 dark:text-emerald-300',
+      border: 'border-emerald-200 dark:border-emerald-800',
+      icon: '📗'
+    };
+  }
+  if (p.includes('ceprequintos') || p.includes('quintos') || p.includes('5tos')) {
+    return {
+      bg: 'bg-amber-50 dark:bg-amber-950/60',
+      text: 'text-amber-700 dark:text-amber-300',
+      border: 'border-amber-200 dark:border-amber-800',
+      icon: '📙'
+    };
+  }
+  // Default or Ceprunsa I Fase
+  return {
+    bg: 'bg-blue-50 dark:bg-blue-950/60',
+    text: 'text-blue-700 dark:text-blue-300',
+    border: 'border-blue-200 dark:border-blue-800',
+    icon: '📘'
+  };
+}
+
+
 export function formatQuestionText(text: string): React.ReactNode {
   if (!text) return "";
   

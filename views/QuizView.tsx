@@ -9,7 +9,8 @@ interface QuizViewProps {
   subjectName: string;
   questions: Question[];
   readingTexts: ReadingText[];
-  onFinish: (subject: string, topic: string, score: number, total: number) => void;
+  results?: Record<string, TopicResult>;
+  onFinish: (subject: string, topic: string, score: number, total: number, mode?: 'CLASSIC' | 'QUIZZIZ') => void;
   onBack: () => void;
   initialMode?: 'CLASSIC' | 'QUIZZIZ';
   userProfile?: UserProfile;
@@ -20,6 +21,7 @@ const QuizView: React.FC<QuizViewProps> = ({
   subjectName, 
   questions, 
   readingTexts, 
+  results = {},
   onFinish, 
   onBack,
   initialMode = 'CLASSIC',
@@ -29,6 +31,23 @@ const QuizView: React.FC<QuizViewProps> = ({
   const [answers, setAnswers] = useState<Record<string, number>>({});
   const [isFinished, setIsFinished] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  const currentTopicResult = results[`${subjectName}|${topicName}`];
+  const previousTimes = currentTopicResult?.timesPracticed ?? (currentTopicResult ? 1 : 0);
+
+  const groupedQuestions = useMemo(() => {
+    const groups: { text?: ReadingText, questions: Question[] }[] = [];
+    const safeQuestions = (questions || []).filter(q => Boolean(q && q.id));
+    const textIds = Array.from(new Set(safeQuestions.map(q => q.readingTextId)));
+
+    textIds.forEach(id => {
+      const qs = safeQuestions.filter(q => q.readingTextId === id);
+      const text = (readingTexts || []).find(t => Boolean(t && t.id === id));
+      groups.push({ text, questions: qs });
+    });
+
+    return groups;
+  }, [questions, readingTexts]);
 
   useEffect(() => {
     if (containerRef.current && (window as any).renderMathInElement) {
@@ -51,26 +70,12 @@ const QuizView: React.FC<QuizViewProps> = ({
         readingTexts={readingTexts}
         userProfile={userProfile}
         onFinish={(score, total) => {
-          onFinish(subjectName, topicName, score, total);
+          onFinish(subjectName, topicName, score, total, 'QUIZZIZ');
         }}
         onBack={onBack}
       />
     );
   }
-
-  const groupedQuestions = useMemo(() => {
-    const groups: { text?: ReadingText, questions: Question[] }[] = [];
-    const safeQuestions = (questions || []).filter(q => Boolean(q && q.id));
-    const textIds = Array.from(new Set(safeQuestions.map(q => q.readingTextId)));
-
-    textIds.forEach(id => {
-      const qs = safeQuestions.filter(q => q.readingTextId === id);
-      const text = (readingTexts || []).find(t => Boolean(t && t.id === id));
-      groups.push({ text, questions: qs });
-    });
-
-    return groups;
-  }, [questions, readingTexts]);
 
   const handleSelect = (qId: string, optIndex: number) => {
     if (isFinished || !qId) return;
@@ -88,7 +93,7 @@ const QuizView: React.FC<QuizViewProps> = ({
   const handleGrade = () => {
     const score = calculateScore();
     setIsFinished(true);
-    onFinish(subjectName, topicName, score, questions.length);
+    onFinish(subjectName, topicName, score, questions.length, 'CLASSIC');
   };
 
   const scoreValue = calculateScore();
@@ -136,19 +141,28 @@ const QuizView: React.FC<QuizViewProps> = ({
       </div>
       <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-800 p-6 mb-8 flex flex-col md:flex-row items-center justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-black text-gray-800 dark:text-gray-100">{topicName}</h2>
+          <div className="flex items-center gap-2 mb-1">
+            <h2 className="text-2xl font-black text-gray-800 dark:text-gray-100">{topicName}</h2>
+            {previousTimes > 0 && (
+              <span className="bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 text-xs font-black px-2.5 py-0.5 rounded-full">
+                🔄 Practicado {previousTimes} {previousTimes === 1 ? 'vez' : 'veces'}
+              </span>
+            )}
+          </div>
           <p className="text-gray-400 dark:text-gray-500 text-sm">Contesta todas las preguntas para ver tus resultados.</p>
         </div>
         {!isFinished ? (
           <button 
             onClick={handleGrade}
-            className="w-full md:w-auto bg-indigo-600 text-white px-8 py-3 rounded-xl font-bold hover:bg-indigo-700 shadow-md transition-all"
+            className="w-full md:w-auto bg-indigo-600 text-white px-8 py-3 rounded-xl font-bold hover:bg-indigo-700 shadow-md transition-all active:scale-95"
           >
             Calificar Simulacro
           </button>
         ) : (
-          <div className="text-center px-6 py-2 bg-indigo-50 dark:bg-indigo-900/30 border border-indigo-200 dark:border-indigo-800 rounded-xl">
-            <span className="text-xs uppercase font-black text-indigo-400 dark:text-indigo-300 block tracking-widest">Puntaje Final</span>
+          <div className="text-center px-6 py-2.5 bg-indigo-50 dark:bg-indigo-900/30 border border-indigo-200 dark:border-indigo-800 rounded-xl">
+            <span className="text-xs uppercase font-black text-indigo-400 dark:text-indigo-300 block tracking-widest">
+              Puntaje Final • Intento #{previousTimes + 1}
+            </span>
             <span className="text-3xl font-black text-indigo-700 dark:text-indigo-200">{scoreValue} / {questions.length}</span>
           </div>
         )}

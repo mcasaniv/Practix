@@ -1,6 +1,7 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import { AREA_EXAM_CONFIGS } from '../constants';
+import { AREA_EXAM_CONFIGS, ADMISSION_PROCESSES } from '../constants';
 import { Question, TopicResult, CourseStructure, UserProfile } from '../types';
+import { getQuestionProcess, getProcessBadgeStyle } from '../utils';
 
 interface StatsViewProps {
   questions: Question[];
@@ -22,6 +23,7 @@ export const StatsView: React.FC<StatsViewProps> = ({
   onUpdateProfile
 }) => {
   const [expandedCourse, setExpandedCourse] = useState<string | null>(null);
+  const [selectedProcess, setSelectedProcess] = useState<string>(''); // '' = Todos los procesos
   const [profileName, setProfileName] = useState(userProfile?.name || 'Estudiante Practix');
   const [profileAvatarUrl, setProfileAvatarUrl] = useState(userProfile?.avatarUrl || '');
   const [savedAlert, setSavedAlert] = useState(false);
@@ -68,10 +70,42 @@ export const StatsView: React.FC<StatsViewProps> = ({
     return null;
   };
 
-  // Group all unique topics available in the database from questions
+  // Filtered questions based on selected process
+  const filteredQuestions = useMemo(() => {
+    if (!selectedProcess) return questions;
+    return questions.filter(q => getQuestionProcess(q) === selectedProcess);
+  }, [questions, selectedProcess]);
+
+  // Per-process summary calculations
+  const processSummary = useMemo(() => {
+    return ADMISSION_PROCESSES.map(proc => {
+      const qInProc = questions.filter(q => getQuestionProcess(q) === proc);
+      const topicsInProc = new Set(qInProc.map(q => `${q.subject}|${q.topic}`));
+      let practicedTopics = 0;
+      let correctQ = 0;
+      let totalPracticedQ = 0;
+      topicsInProc.forEach(tKey => {
+        const res = results[tKey];
+        if (res && res.total > 0) {
+          practicedTopics++;
+          correctQ += res.score;
+          totalPracticedQ += res.total;
+        }
+      });
+      return {
+        name: proc,
+        questionCount: qInProc.length,
+        totalTopics: topicsInProc.size,
+        practicedTopics,
+        accuracy: totalPracticedQ > 0 ? (correctQ / totalPracticedQ) * 100 : 0
+      };
+    });
+  }, [questions, results]);
+
+  // Group all unique topics available in the filtered questions
   const dbTopics = useMemo(() => {
     const map = new Map<string, { course: string; subject: string; name: string; questionCount: number }>();
-    questions.forEach(q => {
+    filteredQuestions.forEach(q => {
       const key = `${q.subject}|${q.topic}`;
       if (!map.has(key)) {
         map.set(key, {
@@ -84,7 +118,7 @@ export const StatsView: React.FC<StatsViewProps> = ({
       map.get(key)!.questionCount++;
     });
     return Array.from(map.values());
-  }, [questions]);
+  }, [filteredQuestions]);
 
   // Compute category-level statistics for the selected area
   const areaStats = useMemo(() => {
@@ -400,11 +434,18 @@ export const StatsView: React.FC<StatsViewProps> = ({
       {/* Header section with academic area switcher */}
       <div className="flex flex-col md:flex-row items-center justify-between gap-6 bg-white dark:bg-slate-900 p-8 rounded-3xl border border-gray-100 dark:border-slate-850 shadow-xl">
         <div className="space-y-1.5 text-center md:text-left">
-          <h2 className="text-3xl font-black tracking-tight text-gray-800 dark:text-gray-100">
-            Estadísticas del Progreso
-          </h2>
+          <div className="flex items-center gap-2 justify-center md:justify-start">
+            <h2 className="text-3xl font-black tracking-tight text-gray-800 dark:text-gray-100">
+              Estadísticas del Progreso
+            </h2>
+            {selectedProcess && (
+              <span className={`text-[10px] font-black px-2.5 py-1 rounded-full uppercase tracking-wider ${getProcessBadgeStyle(selectedProcess).bg} ${getProcessBadgeStyle(selectedProcess).text} border ${getProcessBadgeStyle(selectedProcess).border}`}>
+                {selectedProcess.replace(' 2027', '')}
+              </span>
+            )}
+          </div>
           <p className="text-gray-500 dark:text-gray-400 text-sm max-w-md">
-            Mide tu preparación y estima tu puntaje ponderado de admisión en tiempo real según el peso de cada curso.
+            Mide tu preparación y estima tu puntaje ponderado de admisión en tiempo real según el peso de cada curso y proceso.
           </p>
         </div>
 
@@ -431,6 +472,117 @@ export const StatsView: React.FC<StatsViewProps> = ({
               );
             })}
           </div>
+        </div>
+      </div>
+
+      {/* Selector y Resumen por Proceso de Preparación 2027 */}
+      <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 md:p-8 border border-gray-100 dark:border-slate-850 shadow-xl space-y-4">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <div>
+            <h3 className="text-base font-black text-gray-800 dark:text-gray-100 flex items-center gap-2">
+              <span>🏛️</span>
+              <span>Procesos de Admisión 2027</span>
+            </h3>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+              Filtra tus métricas o compara tu desempeño entre Ceprunsa I Fase, Ceprequintos y Ceprunsa II Fase.
+            </p>
+          </div>
+          {selectedProcess && (
+            <button
+              onClick={() => setSelectedProcess('')}
+              className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1 shrink-0"
+            >
+              <span>✕</span>
+              <span>Mostrar todos los procesos (3 en 1)</span>
+            </button>
+          )}
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          {/* Botón / Tarjeta Todos */}
+          <button
+            onClick={() => setSelectedProcess('')}
+            className={`p-4 rounded-2xl border text-left transition-all relative overflow-hidden flex flex-col justify-between ${
+              selectedProcess === ''
+                ? 'bg-indigo-600 text-white border-indigo-600 shadow-lg shadow-indigo-200 dark:shadow-none'
+                : 'bg-gray-50 dark:bg-slate-800/60 border-gray-200/80 dark:border-slate-700/80 hover:border-indigo-300 text-gray-700 dark:text-gray-200'
+            }`}
+          >
+            <div>
+              <div className="flex items-center justify-between gap-2 mb-1">
+                <span className="text-xs font-black uppercase tracking-wider flex items-center gap-1.5">
+                  <span>🌐</span>
+                  <span>Todos los Procesos</span>
+                </span>
+                {selectedProcess === '' && (
+                  <span className="text-[10px] bg-white/20 text-white font-bold px-2 py-0.5 rounded-md">
+                    Activo
+                  </span>
+                )}
+              </div>
+              <p className={`text-xs mt-1 ${selectedProcess === '' ? 'text-indigo-100' : 'text-gray-500 dark:text-gray-400'}`}>
+                3 en 1 combinados
+              </p>
+            </div>
+            <div className="mt-4 pt-3 border-t border-current/10 flex items-center justify-between text-xs">
+              <span className="font-bold opacity-80">Total preguntas</span>
+              <span className="font-black text-sm">{questions.length}</span>
+            </div>
+          </button>
+
+          {/* Tarjetas por Proceso Individual */}
+          {processSummary.map(proc => {
+            const isSelected = selectedProcess === proc.name;
+            const style = getProcessBadgeStyle(proc.name);
+            const progress = proc.totalTopics > 0 ? (proc.practicedTopics / proc.totalTopics) * 100 : 0;
+
+            return (
+              <button
+                key={proc.name}
+                onClick={() => setSelectedProcess(isSelected ? '' : proc.name)}
+                className={`p-4 rounded-2xl border text-left transition-all relative overflow-hidden flex flex-col justify-between ${
+                  isSelected
+                    ? `${style.bg} ${style.border} border-2 shadow-lg`
+                    : 'bg-gray-50 dark:bg-slate-800/60 border-gray-200/80 dark:border-slate-700/80 hover:border-indigo-300 text-gray-700 dark:text-gray-200'
+                }`}
+              >
+                <div>
+                  <div className="flex items-center justify-between gap-2 mb-1">
+                    <span className="text-xs font-black uppercase tracking-wider flex items-center gap-1.5 truncate">
+                      <span>{style.icon}</span>
+                      <span className="truncate">{proc.name.replace(' 2027', '')}</span>
+                    </span>
+                    {isSelected && (
+                      <span className={`text-[10px] ${style.text} font-black px-2 py-0.5 rounded-md bg-white dark:bg-slate-900 border ${style.border}`}>
+                        Activo
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-baseline gap-2 mt-2">
+                    <span className={`text-xl font-black ${isSelected ? style.text : 'text-gray-800 dark:text-gray-100'}`}>
+                      {proc.questionCount}
+                    </span>
+                    <span className="text-[11px] text-gray-400 font-bold">preguntas</span>
+                  </div>
+                </div>
+
+                <div className="mt-4 pt-3 border-t border-current/10 space-y-1.5">
+                  <div className="flex items-center justify-between text-[11px] font-bold text-gray-500 dark:text-gray-400">
+                    <span>Temas: {proc.practicedTopics}/{proc.totalTopics}</span>
+                    <span className={proc.accuracy >= 70 ? 'text-emerald-500' : 'text-indigo-500'}>
+                      {proc.accuracy > 0 ? `${proc.accuracy.toFixed(0)}% acierto` : 'Sin datos'}
+                    </span>
+                  </div>
+                  <div className="w-full bg-gray-200 dark:bg-slate-700 rounded-full h-1.5 overflow-hidden">
+                    <div
+                      className={`h-full transition-all duration-700 ${isSelected ? 'bg-indigo-600' : 'bg-emerald-500'}`}
+                      style={{ width: `${progress}%` }}
+                    />
+                  </div>
+                </div>
+              </button>
+            );
+          })}
         </div>
       </div>
 

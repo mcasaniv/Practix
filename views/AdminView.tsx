@@ -1,8 +1,8 @@
 
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Question, ReadingText, Flashcard } from '../types';
-import { ACADEMIC_STRUCTURE } from '../constants';
-import { formatQuestionText, parseHTMLTags } from '../utils';
+import { ACADEMIC_STRUCTURE, ADMISSION_PROCESSES, DEFAULT_ADMISSION_PROCESS } from '../constants';
+import { formatQuestionText, parseHTMLTags, getQuestionProcess, getProcessBadgeStyle } from '../utils';
 
 interface AdminViewProps {
   questions: Question[];
@@ -146,6 +146,7 @@ const AdminView: React.FC<AdminViewProps> = ({
   const [course, setCourse] = useState('');
   const [subject, setSubject] = useState('');
   const [topic, setTopic] = useState('');
+  const [process, setProcess] = useState<string>(DEFAULT_ADMISSION_PROCESS);
   const [week, setWeek] = useState<number | ''>('');
   const [questionText, setQuestionText] = useState('');
   const [options, setOptions] = useState<string[]>(['', '', '', '', '']);
@@ -237,6 +238,7 @@ const AdminView: React.FC<AdminViewProps> = ({
       setCourse('');
       setSubject('');
       setTopic('');
+      setProcess(DEFAULT_ADMISSION_PROCESS);
     }
   };
 
@@ -262,6 +264,7 @@ const AdminView: React.FC<AdminViewProps> = ({
       course,
       subject,
       topic,
+      process: process && process.trim() ? process.trim() : DEFAULT_ADMISSION_PROCESS,
       questionText,
       options: [...options],
       correctIndex,
@@ -317,6 +320,7 @@ const AdminView: React.FC<AdminViewProps> = ({
     setCourse(q.course);
     setSubject(q.subject);
     setTopic(q.topic);
+    setProcess(q.process || DEFAULT_ADMISSION_PROCESS);
     setQuestionText(q.questionText);
     setOptions([...q.options]);
     setOptionsImageUrls(q.optionsImageUrls ? [...q.optionsImageUrls] : ['', '', '', '', '']);
@@ -528,14 +532,16 @@ const AdminView: React.FC<AdminViewProps> = ({
 
   const [manageFilterCourse, setManageFilterCourse] = useState('');
   const [manageFilterSubject, setManageFilterSubject] = useState('');
+  const [manageFilterProcess, setManageFilterProcess] = useState('');
 
   const filteredQuestions = useMemo(() => {
     return questions.filter(q => {
       const matchCourse = !manageFilterCourse || q.course === manageFilterCourse;
       const matchSubject = !manageFilterSubject || q.subject === manageFilterSubject;
-      return matchCourse && matchSubject;
+      const matchProcess = !manageFilterProcess || getQuestionProcess(q) === manageFilterProcess;
+      return matchCourse && matchSubject && matchProcess;
     });
-  }, [questions, manageFilterCourse, manageFilterSubject]);
+  }, [questions, manageFilterCourse, manageFilterSubject, manageFilterProcess]);
 
   return (
     <div className="max-w-7xl mx-auto">
@@ -603,14 +609,26 @@ const AdminView: React.FC<AdminViewProps> = ({
                     {availableSubjects.map(s => <option key={s} value={s}>{s}</option>)}
                   </select>
                 </div>
-                <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div className="md:col-span-2">
+                <div>
+                  <label className="block text-xs font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-2">Proceso de Admisión</label>
+                  <select 
+                    value={process} 
+                    onChange={(e) => setProcess(e.target.value)} 
+                    className="w-full bg-gray-50 dark:bg-slate-800 border dark:border-slate-700 rounded-xl p-3 outline-none dark:text-gray-200 font-medium"
+                  >
+                    {ADMISSION_PROCESSES.map(p => (
+                      <option key={p} value={p}>{p}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="sm:col-span-2">
                     <label className="block text-xs font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-2">Tema / Práctica</label>
                     <input type="text" value={topic} onChange={(e) => setTopic(e.target.value)} placeholder="Ej. Ecuaciones" className="w-full bg-gray-50 dark:bg-slate-800 border dark:border-slate-700 rounded-xl p-3 outline-none dark:text-gray-200" />
                   </div>
                   <div>
-                    <label className="block text-xs font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-2">Semana (Opcional)</label>
-                    <input type="number" min="1" max="52" value={week} onChange={(e) => setWeek(e.target.value !== '' ? parseInt(e.target.value) : '')} placeholder="Ej. 1, 2..." className="w-full bg-gray-50 dark:bg-slate-800 border dark:border-slate-700 rounded-xl p-3 outline-none dark:text-gray-200" />
+                    <label className="block text-xs font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-2">Semana (Opc.)</label>
+                    <input type="number" min="1" max="52" value={week} onChange={(e) => setWeek(e.target.value !== '' ? parseInt(e.target.value) : '')} placeholder="Ej. 1..." className="w-full bg-gray-50 dark:bg-slate-800 border dark:border-slate-700 rounded-xl p-3 outline-none dark:text-gray-200" />
                   </div>
                 </div>
                 {(subject === 'Comprensión Lectora' || subject === 'Inglés Lectura') && (
@@ -715,6 +733,16 @@ const AdminView: React.FC<AdminViewProps> = ({
                     <p className="text-gray-700 dark:text-gray-300 text-sm font-medium line-clamp-2 mt-1">{parseHTMLTags(q.questionText)}</p>
                     <div className="mt-2 text-[10px] text-gray-400 uppercase font-black tracking-tighter flex items-center gap-1.5 flex-wrap">
                       <span>{q.subject}</span>
+                      {(() => {
+                        const proc = getQuestionProcess(q);
+                        const style = getProcessBadgeStyle(proc);
+                        return (
+                          <span className={`${style.bg} ${style.text} ${style.border} border font-black px-1.5 py-0.5 rounded text-[8px] flex items-center gap-0.5`}>
+                            <span>{style.icon}</span>
+                            <span>{proc}</span>
+                          </span>
+                        );
+                      })()}
                       {q.week !== undefined && q.week !== null && (
                         <span className="bg-indigo-50 dark:bg-indigo-950 font-black text-indigo-600 dark:text-indigo-400 px-1.5 py-0.5 rounded text-[8px]">
                           Semana {q.week}
@@ -784,34 +812,63 @@ const AdminView: React.FC<AdminViewProps> = ({
 
       {activeTab === 'MANAGE' && (
         <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-800 p-6 md:p-8">
-          <div className="flex justify-between items-center mb-6">
-            <h2 className="text-2xl font-black text-gray-800 dark:text-gray-100">Banco de Preguntas</h2>
-            <select value={manageFilterCourse} onChange={(e) => setManageFilterCourse(e.target.value)} className="bg-gray-50 dark:bg-slate-800 border dark:border-slate-700 rounded-xl px-4 py-2 text-sm outline-none dark:text-gray-200">
-              <option value="">Cursos...</option>
-              {ACADEMIC_STRUCTURE.map(c => <option key={c.name} value={c.name}>{c.name}</option>)}
-            </select>
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+            <div>
+              <h2 className="text-2xl font-black text-gray-800 dark:text-gray-100">Banco de Preguntas</h2>
+              <p className="text-xs text-gray-400 mt-1">Mostrando {filteredQuestions.length} de {questions.length} preguntas</p>
+            </div>
+            <div className="flex flex-wrap gap-2.5 w-full sm:w-auto">
+              <select 
+                value={manageFilterProcess} 
+                onChange={(e) => setManageFilterProcess(e.target.value)} 
+                className="bg-gray-50 dark:bg-slate-800 border dark:border-slate-700 rounded-xl px-3.5 py-2 text-xs font-semibold outline-none dark:text-gray-200"
+              >
+                <option value="">Todos los Procesos</option>
+                {ADMISSION_PROCESSES.map(p => <option key={p} value={p}>{p}</option>)}
+              </select>
+              <select 
+                value={manageFilterCourse} 
+                onChange={(e) => setManageFilterCourse(e.target.value)} 
+                className="bg-gray-50 dark:bg-slate-800 border dark:border-slate-700 rounded-xl px-3.5 py-2 text-xs font-semibold outline-none dark:text-gray-200"
+              >
+                <option value="">Todos los Cursos</option>
+                {ACADEMIC_STRUCTURE.map(c => <option key={c.name} value={c.name}>{c.name}</option>)}
+              </select>
+            </div>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filteredQuestions.map((q) => (
-              <div key={q.id} className="bg-white dark:bg-slate-800 border dark:border-slate-700 rounded-xl p-5 flex flex-col group">
-                <div className="flex justify-between items-start mb-3">
-                  <span className="bg-indigo-50 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400 text-[10px] font-black px-2 py-0.5 rounded uppercase">{q.subject}</span>
-                  <div className="flex gap-2">
-                    <button onClick={() => handleEditExisting(q)} className="p-1 text-indigo-400">✏️</button>
-                    <button onClick={() => handleDeleteExisting(q.id)} className="p-1 text-rose-400">🗑️</button>
+            {filteredQuestions.map((q) => {
+              const proc = getQuestionProcess(q);
+              const procStyle = getProcessBadgeStyle(proc);
+              return (
+                <div key={q.id} className="bg-white dark:bg-slate-800 border dark:border-slate-700 rounded-xl p-5 flex flex-col group hover:shadow-md transition-shadow">
+                  <div className="flex justify-between items-start mb-3 gap-2">
+                    <div className="flex flex-wrap gap-1.5 items-center">
+                      <span className="bg-indigo-50 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400 text-[10px] font-black px-2 py-0.5 rounded uppercase">
+                        {q.subject}
+                      </span>
+                      <span className={`${procStyle.bg} ${procStyle.text} ${procStyle.border} border text-[9px] font-black px-2 py-0.5 rounded flex items-center gap-1`}>
+                        <span>{procStyle.icon}</span>
+                        <span>{proc}</span>
+                      </span>
+                    </div>
+                    <div className="flex gap-1.5 shrink-0">
+                      <button onClick={() => handleEditExisting(q)} className="p-1 text-indigo-400 hover:text-indigo-600 dark:hover:text-indigo-300 transition-colors" title="Editar">✏️</button>
+                      <button onClick={() => handleDeleteExisting(q.id)} className="p-1 text-rose-400 hover:text-rose-600 dark:hover:text-rose-300 transition-colors" title="Eliminar">🗑️</button>
+                    </div>
+                  </div>
+                  <p className="text-sm font-medium mb-4 line-clamp-3 whitespace-pre-wrap dark:text-gray-200">{parseHTMLTags(q.questionText)}</p>
+                  <div className="mt-auto flex flex-wrap gap-2 items-center justify-between text-[10px] uppercase font-black text-gray-400 dark:text-gray-500 pt-3 border-t dark:border-slate-700/50">
+                    <span className="truncate max-w-[150px]">Tema: {q.topic}</span>
+                    {q.week !== undefined && q.week !== null && (
+                      <span className="bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-400 px-2 py-0.5 rounded font-black text-[9px] shrink-0">
+                        Semana {q.week}
+                      </span>
+                    )}
                   </div>
                 </div>
-                <p className="text-sm font-medium mb-4 line-clamp-3 whitespace-pre-wrap dark:text-gray-200">{parseHTMLTags(q.questionText)}</p>
-                <div className="mt-auto flex flex-wrap gap-2 items-center justify-between text-[10px] uppercase font-black text-gray-400 dark:text-gray-500 pt-3 border-t dark:border-slate-700/50">
-                  <span className="truncate max-w-[150px]">Tema: {q.topic}</span>
-                  {q.week !== undefined && q.week !== null && (
-                    <span className="bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-400 px-2 py-0.5 rounded font-black text-[9px] shrink-0">
-                      Semana {q.week}
-                    </span>
-                  )}
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
