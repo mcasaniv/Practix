@@ -66,28 +66,12 @@ const MegaQuizView: React.FC<MegaQuizViewProps> = ({
     return selectedExamProcesses || retakeExam?.selectedExamProcesses;
   }, [selectedExamProcesses, retakeExam]);
 
-  const questionPool = useMemo(() => {
-    let pool = questions;
+  const basePool = useMemo(() => {
     if (questionSource === 'PRACTICED') {
-      pool = pool.filter(q => results && results[`${q.subject}|${q.topic}`] !== undefined);
+      return questions.filter(q => results && results[`${q.subject}|${q.topic}`] !== undefined);
     }
-    if (activeProcesses && activeProcesses.length > 0) {
-      const filteredByProc = pool.filter(q => activeProcesses.includes(getQuestionProcess(q)));
-      if (filteredByProc.length > 0) {
-        pool = filteredByProc;
-      }
-    }
-    if (activeWeeks && activeWeeks.length > 0) {
-      const filtered = pool.filter(q => {
-        const w = getQuestionWeek(q);
-        return w !== undefined && activeWeeks.includes(w);
-      });
-      if (filtered.length > 0) {
-        pool = filtered;
-      }
-    }
-    return pool;
-  }, [questions, results, questionSource, activeProcesses, activeWeeks]);
+    return questions;
+  }, [questions, results, questionSource]);
 
   const practicedQuestionsCount = useMemo(() => {
     return questions.filter(q => results && results[`${q.subject}|${q.topic}`] !== undefined).length;
@@ -125,9 +109,11 @@ const MegaQuizView: React.FC<MegaQuizViewProps> = ({
   };
 
   const candidateQuestions = useMemo(() => {
+    const activeAreaConfig = AREA_EXAM_CONFIGS[selectedArea] || AREA_EXAM_CONFIGS['Biomédicas'];
+
+    // 1. Si es reintento o revisión de examen ya guardado
     if (retakeExam && retakeExam.questionIds.length > 0) {
-      const activeAreaConfig = AREA_EXAM_CONFIGS[selectedArea] || AREA_EXAM_CONFIGS['Biomédicas'];
-      const qMap = new Map(questionPool.map(q => [q.id, q]));
+      const qMap = new Map(questions.map(q => [q.id, q]));
       const finalSelection: { question: Question; weight: number; category: string; readingText?: ReadingText }[] = [];
 
       retakeExam.questionIds.forEach(id => {
@@ -149,19 +135,51 @@ const MegaQuizView: React.FC<MegaQuizViewProps> = ({
       return finalSelection;
     }
 
-    const finalSelection: { question: Question; weight: number; category: string; readingText?: ReadingText }[] = [];
-    
-    const activeAreaConfig = AREA_EXAM_CONFIGS[selectedArea] || AREA_EXAM_CONFIGS['Biomédicas'];
-
+    // 2. Generar nuevo examen
     const configToUse = selectedExamSubjects 
       ? Object.fromEntries(Object.entries(activeAreaConfig).filter(([k]) => selectedExamSubjects.includes(k)))
       : activeAreaConfig;
 
+    // Distancia en semanas: 0 = coincide con activeWeeks, 1, 2, ... = cercanía de semana, 50 = sin semana
+    const getWeekDist = (q: Question): number => {
+      if (!activeWeeks || activeWeeks.length === 0) return 0;
+      const w = getQuestionWeek(q);
+      if (w === undefined || w === null || w <= 0) return 50;
+      if (activeWeeks.includes(w)) return 0;
+      return Math.min(...activeWeeks.map(targetW => Math.abs(w - targetW)));
+    };
+
+    // Prioridad por proceso: 0 = coincide con los procesos seleccionados, 1 = otro proceso
+    const getProcRank = (q: Question): number => {
+      if (!activeProcesses || activeProcesses.length === 0) return 0;
+      const p = getQuestionProcess(q);
+      return activeProcesses.includes(p) ? 0 : 1;
+    };
+
+    // Ordenamiento inteligente: Proceso coincidente > Semana más cercana > Aleatoriedad
+    const scoreAndSortQuestions = (list: Question[]): Question[] => {
+      return [...list].sort((a, b) => {
+        const procA = getProcRank(a);
+        const procB = getProcRank(b);
+        if (procA !== procB) return procA - procB;
+
+        const distA = getWeekDist(a);
+        const distB = getWeekDist(b);
+        if (distA !== distB) return distA - distB;
+
+        return Math.random() - 0.5;
+      });
+    };
+
+    const finalSelection: { question: Question; weight: number; category: string; readingText?: ReadingText }[] = [];
+    const usedQuestionIds = new Set<string>();
+
+    // Paso 1: Seleccionar preguntas de cada categoría respetando cuotas y completando con la semana más próxima si faltan
     Object.entries(configToUse).forEach(([categoryName, config]) => {
       if (categoryName === 'Comprensión Lectora') {
-        const pool = questionPool.filter(q => q.subject === 'Comprensión Lectora' && q.readingTextId);
+        const pool = basePool.filter(q => q.subject === 'Comprensión Lectora' && q.readingTextId && !usedQuestionIds.has(q.id));
         const groupedByText: Record<string, Question[]> = {};
-         
+        
         pool.forEach(q => {
           if (q.readingTextId) {
             if (!groupedByText[q.readingTextId]) groupedByText[q.readingTextId] = [];
@@ -169,21 +187,74 @@ const MegaQuizView: React.FC<MegaQuizViewProps> = ({
           }
         });
 
-        const textIds = Object.keys(groupedByText).sort(() => 0.5 - Math.random());
-        
-        if (textIds[0]) {
-          const text1 = (readingTexts || []).find(t => Boolean(t && t.id === textIds[0]));
-          const qs1 = [...groupedByText[textIds[0]]].sort(() => 0.5 - Math.random()).slice(0, 3);
-          qs1.forEach(q => finalSelection.push({ question: q, weight: config.weight, category: categoryName, readingText: text1 }));
+        // Clasificar textos por proceso y cercanía de semana
+        const rankedTexts = Object.keys(groupedByText).sort((tA, tB) => {
+          const qsA = groupedByText[tA];
+          const qsB = groupedByText[tB];
+          const bestProcA = Math.min(...qsA.map(getProcRank));
+          const bestProcB = Math.min(...qsB.map(getProcRank));
+          if (bestProcA !== bestProcB) return bestProcA - bestProcB;
+
+          const bestDistA = Math.min(...qsA.map(getWeekDist));
+          const bestDistB = Math.min(...qsB.map(getWeekDist));
+          if (bestDistA !== bestDistB) return bestDistA - bestDistB;
+
+          return Math.random() - 0.5;
+        });
+
+        let questionsNeeded = config.count || 5;
+
+        // Texto 1
+        if (rankedTexts[0] && questionsNeeded > 0) {
+          const text1 = (readingTexts || []).find(t => Boolean(t && t.id === rankedTexts[0]));
+          const availableQs1 = scoreAndSortQuestions(groupedByText[rankedTexts[0]]);
+          const takeCount1 = rankedTexts.length > 1 ? Math.min(3, availableQs1.length, questionsNeeded) : Math.min(questionsNeeded, availableQs1.length);
+          const qs1 = availableQs1.slice(0, takeCount1);
+          qs1.forEach(q => {
+            finalSelection.push({ question: q, weight: config.weight, category: categoryName, readingText: text1 });
+            usedQuestionIds.add(q.id);
+          });
+          questionsNeeded -= qs1.length;
         }
 
-        if (textIds[1]) {
-          const text2 = (readingTexts || []).find(t => Boolean(t && t.id === textIds[1]));
-          const qs2 = [...groupedByText[textIds[1]]].sort(() => 0.5 - Math.random()).slice(0, 2);
-          qs2.forEach(q => finalSelection.push({ question: q, weight: config.weight, category: categoryName, readingText: text2 }));
+        // Texto 2
+        if (rankedTexts[1] && questionsNeeded > 0) {
+          const text2 = (readingTexts || []).find(t => Boolean(t && t.id === rankedTexts[1]));
+          const availableQs2 = scoreAndSortQuestions(groupedByText[rankedTexts[1]]);
+          const qs2 = availableQs2.slice(0, Math.min(questionsNeeded, availableQs2.length));
+          qs2.forEach(q => {
+            finalSelection.push({ question: q, weight: config.weight, category: categoryName, readingText: text2 });
+            usedQuestionIds.add(q.id);
+          });
+          questionsNeeded -= qs2.length;
+        }
+
+        // Si aún faltan preguntas de lectura, buscar en otros textos disponibles por cercanía
+        if (questionsNeeded > 0) {
+          for (let i = 2; i < rankedTexts.length && questionsNeeded > 0; i++) {
+            const textI = (readingTexts || []).find(t => Boolean(t && t.id === rankedTexts[i]));
+            const availableQsI = scoreAndSortQuestions(groupedByText[rankedTexts[i]]);
+            const qsI = availableQsI.slice(0, Math.min(questionsNeeded, availableQsI.length));
+            qsI.forEach(q => {
+              finalSelection.push({ question: q, weight: config.weight, category: categoryName, readingText: textI });
+              usedQuestionIds.add(q.id);
+            });
+            questionsNeeded -= qsI.length;
+          }
+        }
+
+        // Si aún faltan, cualquier otra pregunta de Comprensión Lectora
+        if (questionsNeeded > 0) {
+          const remainingCL = scoreAndSortQuestions(basePool.filter(q => q.subject === 'Comprensión Lectora' && !usedQuestionIds.has(q.id)));
+          const takeRem = remainingCL.slice(0, questionsNeeded);
+          takeRem.forEach(q => {
+            const text = q.readingTextId ? (readingTexts || []).find(t => Boolean(t && t.id === q.readingTextId)) : undefined;
+            finalSelection.push({ question: q, weight: config.weight, category: categoryName, readingText: text });
+            usedQuestionIds.add(q.id);
+          });
         }
       } else if (categoryName === 'Inglés Lectura') {
-        const pool = questionPool.filter(q => q.subject === 'Inglés Lectura' && q.readingTextId);
+        const pool = basePool.filter(q => q.subject === 'Inglés Lectura' && q.readingTextId && !usedQuestionIds.has(q.id));
         const groupedByText: Record<string, Question[]> = {};
         
         pool.forEach(q => {
@@ -193,26 +264,89 @@ const MegaQuizView: React.FC<MegaQuizViewProps> = ({
           }
         });
 
-        const textIds = Object.keys(groupedByText).sort(() => 0.5 - Math.random());
-        
-        if (textIds[0]) {
-          const text1 = (readingTexts || []).find(t => Boolean(t && t.id === textIds[0]));
-          const qs1 = [...groupedByText[textIds[0]]].sort(() => 0.5 - Math.random()).slice(0, 2);
-          qs1.forEach(q => finalSelection.push({ question: q, weight: config.weight, category: categoryName, readingText: text1 }));
+        const rankedTexts = Object.keys(groupedByText).sort((tA, tB) => {
+          const qsA = groupedByText[tA];
+          const qsB = groupedByText[tB];
+          const bestProcA = Math.min(...qsA.map(getProcRank));
+          const bestProcB = Math.min(...qsB.map(getProcRank));
+          if (bestProcA !== bestProcB) return bestProcA - bestProcB;
+
+          const bestDistA = Math.min(...qsA.map(getWeekDist));
+          const bestDistB = Math.min(...qsB.map(getWeekDist));
+          if (bestDistA !== bestDistB) return bestDistA - bestDistB;
+
+          return Math.random() - 0.5;
+        });
+
+        let questionsNeeded = config.count || 2;
+        if (rankedTexts[0]) {
+          const text1 = (readingTexts || []).find(t => Boolean(t && t.id === rankedTexts[0]));
+          const availableQs1 = scoreAndSortQuestions(groupedByText[rankedTexts[0]]);
+          const qs1 = availableQs1.slice(0, Math.min(questionsNeeded, availableQs1.length));
+          qs1.forEach(q => {
+            finalSelection.push({ question: q, weight: config.weight, category: categoryName, readingText: text1 });
+            usedQuestionIds.add(q.id);
+          });
+          questionsNeeded -= qs1.length;
+        }
+
+        // Si faltan, buscar en otros textos o preguntas de inglés
+        if (questionsNeeded > 0) {
+          const remainingIL = scoreAndSortQuestions(basePool.filter(q => (q.subject === 'Inglés Lectura' || q.subject === 'Inglés') && !usedQuestionIds.has(q.id)));
+          const takeRem = remainingIL.slice(0, questionsNeeded);
+          takeRem.forEach(q => {
+            const text = q.readingTextId ? (readingTexts || []).find(t => Boolean(t && t.id === q.readingTextId)) : undefined;
+            finalSelection.push({ question: q, weight: config.weight, category: categoryName, readingText: text });
+            usedQuestionIds.add(q.id);
+          });
         }
       } else {
-        const pool = questionPool.filter(q => config.subjects.includes(q.subject));
-        const shuffled = [...pool].sort(() => 0.5 - Math.random());
-        const selected = shuffled.slice(0, config.count);
-        selected.forEach(q => finalSelection.push({ question: q, weight: config.weight, category: categoryName }));
+        const pool = basePool.filter(q => config.subjects.includes(q.subject) && !usedQuestionIds.has(q.id));
+        const sorted = scoreAndSortQuestions(pool);
+        const selected = sorted.slice(0, config.count);
+        selected.forEach(q => {
+          finalSelection.push({ question: q, weight: config.weight, category: categoryName });
+          usedQuestionIds.add(q.id);
+        });
       }
     });
 
-    // Grouping by category first, then by subject (materia) within each category, and by reading text if applicable to make sure questions of the same materia and text stay together
+    // Paso 2: Si es un simulacro completo de 80 preguntas y faltaron preguntas en alguna materia,
+    // rellenar con preguntas disponibles de otras materias del área (priorizando semana más próxima)
+    const isFull80Target = !selectedExamSubjects || selectedExamSubjects.length === 0;
+    const targetTotal = isFull80Target ? 80 : Object.values(configToUse).reduce((sum, c) => sum + c.count, 0);
+
+    if (finalSelection.length < targetTotal) {
+      const allAreaSubjects = new Set(Object.values(activeAreaConfig).flatMap(c => c.subjects));
+      const remainingUnused = basePool.filter(q => allAreaSubjects.has(q.subject) && !usedQuestionIds.has(q.id));
+      const sortedRemaining = scoreAndSortQuestions(remainingUnused);
+      const neededCount = targetTotal - finalSelection.length;
+      const fillers = sortedRemaining.slice(0, neededCount);
+
+      fillers.forEach(q => {
+        let catName = q.subject;
+        let weight = 1.25;
+        for (const [cat, cfg] of Object.entries(activeAreaConfig)) {
+          if (cfg.subjects.includes(q.subject) || cat === q.subject) {
+            catName = cat;
+            weight = cfg.weight;
+            break;
+          }
+        }
+        const readingText = q.readingTextId ? (readingTexts || []).find(r => Boolean(r && r.id === q.readingTextId)) : undefined;
+        finalSelection.push({ question: q, weight, category: catName, readingText });
+        usedQuestionIds.add(q.id);
+      });
+    }
+
+    // Ordenar preguntas según la estructura oficial de materias y agrupar textos de lectura
+    const categoryOrderMap = new Map(Object.keys(activeAreaConfig).map((cat, idx) => [cat, idx]));
+
     return finalSelection.sort((a, b) => {
-      if (a.category !== b.category) {
-        return a.category.localeCompare(b.category);
-      }
+      const orderA = categoryOrderMap.get(a.category) ?? 99;
+      const orderB = categoryOrderMap.get(b.category) ?? 99;
+      if (orderA !== orderB) return orderA - orderB;
+
       if (a.question.subject !== b.question.subject) {
         return a.question.subject.localeCompare(b.question.subject);
       }
@@ -220,7 +354,7 @@ const MegaQuizView: React.FC<MegaQuizViewProps> = ({
       const textIdB = b.readingText?.id || '';
       return textIdA.localeCompare(textIdB);
     });
-  }, [questionPool, readingTexts, selectedExamSubjects, selectedArea, retakeExam]);
+  }, [basePool, questions, readingTexts, selectedExamSubjects, selectedArea, retakeExam, activeWeeks, activeProcesses]);
 
   const [activeQuestions, setActiveQuestions] = useState<{ question: Question; weight: number; category: string; readingText?: ReadingText }[]>([]);
 

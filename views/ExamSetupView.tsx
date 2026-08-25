@@ -403,8 +403,12 @@ const ExamSetupView: React.FC<ExamSetupViewProps> = ({
               </div>
               <div className="text-xs text-gray-500 dark:text-gray-400 mt-2 flex flex-wrap items-center gap-x-4 gap-y-1">
                 <span>• {allSubjects.length} cursos evaluados según pesos oficiales</span>
-                <span>• {matchingQuestionsCount} preguntas disponibles para este filtro (proceso + semanas)</span>
+                <span>• {matchingQuestionsCount} preguntas disponibles en las semanas seleccionadas</span>
                 <span>• Se guardará en <strong className="text-gray-700 dark:text-gray-200">Exámenes Simulacros</strong></span>
+              </div>
+              <div className="mt-2.5 pt-2.5 border-t border-indigo-200/50 dark:border-indigo-800/40 text-[11px] text-indigo-700 dark:text-indigo-300 font-medium flex items-center gap-1.5">
+                <span>💡</span>
+                <span>Si una materia aún no tiene preguntas en la semana elegida, el sistema la completará automáticamente con la semana más próxima para garantizar las 80 preguntas.</span>
               </div>
             </div>
           </div>
