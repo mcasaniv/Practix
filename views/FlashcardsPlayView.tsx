@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Flashcard } from '../types';
+import { formatQuestionText } from '../utils';
 
 interface FlashcardsPlayViewProps {
   courseName: string;
@@ -104,7 +105,11 @@ const FlashcardsPlayView: React.FC<FlashcardsPlayViewProps> = ({
   if (flashcards.length === 0) {
     return (
       <div className="max-w-md mx-auto text-center py-12 bg-white dark:bg-slate-900 border border-gray-150 dark:border-slate-800 rounded-3xl p-8 shadow-md">
-        <span className="text-4xl">🎴</span>
+        <div className="w-12 h-12 mx-auto text-indigo-500 flex items-center justify-center">
+          <svg xmlns="http://www.w3.org/2000/svg" className="w-10 h-10" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+          </svg>
+        </div>
         <h3 className="text-xl font-bold text-gray-800 dark:text-gray-100 mt-4 mb-2">Sin Tarjetas</h3>
         <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
           Aún no se han agregado flashcards para <strong className="text-indigo-600 dark:text-indigo-400">{subjectName}</strong>
@@ -208,7 +213,11 @@ const FlashcardsPlayView: React.FC<FlashcardsPlayViewProps> = ({
 
     return (
       <div className="max-w-xl mx-auto bg-white dark:bg-slate-900 rounded-3xl p-8 border border-gray-100 dark:border-slate-800 shadow-xl animate-fade-in text-center">
-        <span className="text-5xl block mb-2">🏆</span>
+        <div className="w-16 h-16 mx-auto mb-2 text-amber-500 bg-amber-50 dark:bg-amber-950/40 rounded-2xl flex items-center justify-center">
+          <svg xmlns="http://www.w3.org/2000/svg" className="w-9 h-9" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
+          </svg>
+        </div>
         <h2 className="text-2xl font-black text-gray-800 dark:text-gray-100 mb-1">¡Sesión Completada!</h2>
         <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
           Has completado {totalCount} tarjetas de <strong className="text-indigo-600 dark:text-indigo-400">{subjectName}</strong>
@@ -295,7 +304,7 @@ const FlashcardsPlayView: React.FC<FlashcardsPlayViewProps> = ({
             </button>
           ) : (
             <div className="text-xs text-emerald-600 dark:text-emerald-400 font-semibold py-2">
-              🎉 ¡Felicidades! Memorizaste todo el mazo a la perfección.
+              ¡Felicidades! Memorizaste todo el mazo a la perfección.
             </div>
           )}
 
@@ -394,12 +403,15 @@ const FlashcardsPlayView: React.FC<FlashcardsPlayViewProps> = ({
 
             <div className="flex-grow flex items-center justify-center py-4 text-center">
               <div className="text-xl md:text-2xl font-bold text-gray-800 dark:text-gray-100 leading-relaxed whitespace-pre-wrap selection:bg-indigo-100">
-                {activeCard?.front}
+                {formatQuestionText(activeCard?.front || '')}
               </div>
             </div>
 
-            <div className="text-center text-xs text-indigo-400/80 dark:text-indigo-500/80 font-medium animate-pulse">
-              Click o tecla Espacio para voltear 🔄
+            <div className="text-center text-xs text-indigo-400/80 dark:text-indigo-500/80 font-medium animate-pulse flex items-center justify-center gap-1.5">
+              <span>Click o tecla Espacio para voltear</span>
+              <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5 inline" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
             </div>
           </div>
 
@@ -411,14 +423,20 @@ const FlashcardsPlayView: React.FC<FlashcardsPlayViewProps> = ({
               </span>
               <span className="text-[10px] rounded uppercase font-bold text-gray-400 flex items-center gap-1">
                 Anterior: {activeCard?.difficulty ? (
-                  activeCard.difficulty === 'EASY' ? '🟢 Fácil' : activeCard.difficulty === 'MEDIUM' ? '🟡 Casi' : '🔴 Difícil'
+                  activeCard.difficulty === 'EASY' ? (
+                    <span className="text-emerald-500 font-bold">Fácil</span>
+                  ) : activeCard.difficulty === 'MEDIUM' ? (
+                    <span className="text-amber-500 font-bold">Casi</span>
+                  ) : (
+                    <span className="text-rose-500 font-bold">Difícil</span>
+                  )
                 ) : 'Ninguno'}
               </span>
             </div>
 
             <div className="flex-grow flex items-center justify-center py-4 text-center">
               <div className="text-lg md:text-xl font-semibold text-indigo-950 dark:text-slate-100 leading-relaxed whitespace-pre-wrap">
-                {activeCard?.back}
+                {formatQuestionText(activeCard?.back || '')}
               </div>
             </div>
 

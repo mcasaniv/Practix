@@ -76,11 +76,20 @@ export const StatsView: React.FC<StatsViewProps> = ({
     return questions.filter(q => getQuestionProcess(q) === selectedProcess);
   }, [questions, selectedProcess]);
 
-  // Per-process summary calculations
+  // Per-process summary calculations: only processes with questions in the database
   const processSummary = useMemo(() => {
-    return ADMISSION_PROCESSES.map(proc => {
+    // Gather all processes present in questions
+    const setOfProcesses = new Set<string>();
+    questions.forEach(q => {
+      const p = getQuestionProcess(q);
+      if (p) setOfProcesses.add(p);
+    });
+
+    const activeList = Array.from(setOfProcesses).sort();
+
+    return activeList.map(proc => {
       const qInProc = questions.filter(q => getQuestionProcess(q) === proc);
-      const topicsInProc = new Set(qInProc.map(q => `${q.subject}|${q.topic}`));
+      const topicsInProc = new Set<string>(qInProc.map(q => `${q.subject}|${q.topic}`));
       let practicedTopics = 0;
       let correctQ = 0;
       let totalPracticedQ = 0;
@@ -99,7 +108,7 @@ export const StatsView: React.FC<StatsViewProps> = ({
         practicedTopics,
         accuracy: totalPracticedQ > 0 ? (correctQ / totalPracticedQ) * 100 : 0
       };
-    });
+    }).filter(p => p.questionCount > 0);
   }, [questions, results]);
 
   // Group all unique topics available in the filtered questions
@@ -349,8 +358,10 @@ export const StatsView: React.FC<StatsViewProps> = ({
       {/* User Profile Card for Practix */}
       <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 md:p-8 border border-gray-100 dark:border-slate-800 shadow-xl space-y-6">
         <div className="flex items-center gap-3">
-          <div className="bg-purple-100 dark:bg-purple-900/40 text-purple-600 dark:text-purple-300 w-12 h-12 rounded-2xl flex items-center justify-center text-2xl font-black shrink-0">
-            👤
+          <div className="bg-purple-100 dark:bg-purple-900/40 text-purple-600 dark:text-purple-300 w-12 h-12 rounded-2xl flex items-center justify-center font-black shrink-0">
+            <svg xmlns="http://www.w3.org/2000/svg" className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+            </svg>
           </div>
           <div>
             <h3 className="text-xl font-black text-gray-800 dark:text-gray-100">
@@ -371,7 +382,7 @@ export const StatsView: React.FC<StatsViewProps> = ({
               type="text"
               value={profileName}
               onChange={(e) => setProfileName(e.target.value)}
-              placeholder="Ej: Juan Pérez 🚀"
+              placeholder="Ej: Juan Pérez"
               className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800 text-gray-800 dark:text-gray-100 font-bold text-sm focus:ring-2 focus:ring-purple-500 outline-none transition-all"
             />
           </div>
@@ -402,8 +413,10 @@ export const StatsView: React.FC<StatsViewProps> = ({
                   }}
                 />
               ) : (
-                <div className="w-9 h-9 rounded-full bg-purple-500/20 text-purple-600 dark:text-purple-300 border border-purple-400 flex items-center justify-center font-black text-sm shrink-0">
-                  👤
+                <div className="w-9 h-9 rounded-full bg-purple-500/20 text-purple-600 dark:text-purple-300 border border-purple-400 flex items-center justify-center shrink-0">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                  </svg>
                 </div>
               )}
               <div className="min-w-0">
@@ -425,172 +438,126 @@ export const StatsView: React.FC<StatsViewProps> = ({
 
         {savedAlert && (
           <div className="bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 p-3 rounded-xl text-emerald-800 dark:text-emerald-300 font-bold text-xs flex items-center gap-2 animate-fade-in">
-            <span>✓</span>
-            <span>¡Perfil actualizado correctamente! Se usará en tu próximo Jugar Practix.</span>
+            <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+            </svg>
+            <span>Perfil actualizado correctamente. Se usará en tu próximo Jugar Practix.</span>
           </div>
         )}
       </div>
 
-      {/* Header section with academic area switcher */}
-      <div className="flex flex-col md:flex-row items-center justify-between gap-6 bg-white dark:bg-slate-900 p-8 rounded-3xl border border-gray-100 dark:border-slate-850 shadow-xl">
-        <div className="space-y-1.5 text-center md:text-left">
-          <div className="flex items-center gap-2 justify-center md:justify-start">
-            <h2 className="text-3xl font-black tracking-tight text-gray-800 dark:text-gray-100">
+      {/* Header section with academic area switcher AND process dropdown */}
+      <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6 bg-white dark:bg-slate-900 p-5 sm:p-8 rounded-2xl sm:rounded-3xl border border-gray-100 dark:border-slate-800 shadow-xl">
+        <div className="space-y-1.5 text-center lg:text-left w-full lg:w-auto">
+          <div className="flex items-center gap-2 justify-center lg:justify-start flex-wrap">
+            <h2 className="text-2xl sm:text-3xl font-black tracking-tight text-gray-800 dark:text-gray-100">
               Estadísticas del Progreso
             </h2>
             {selectedProcess && (
               <span className={`text-[10px] font-black px-2.5 py-1 rounded-full uppercase tracking-wider ${getProcessBadgeStyle(selectedProcess).bg} ${getProcessBadgeStyle(selectedProcess).text} border ${getProcessBadgeStyle(selectedProcess).border}`}>
-                {selectedProcess.replace(' 2027', '')}
+                {selectedProcess}
               </span>
             )}
           </div>
-          <p className="text-gray-500 dark:text-gray-400 text-sm max-w-md">
+          <p className="text-gray-500 dark:text-gray-400 text-xs sm:text-sm max-w-md">
             Mide tu preparación y estima tu puntaje ponderado de admisión en tiempo real según el peso de cada curso y proceso.
           </p>
         </div>
 
-        <div className="flex flex-col items-center shrink-0">
-          <label className="text-[10px] font-black uppercase text-indigo-400 dark:text-indigo-300 tracking-widest mb-2.5">
-            Área de Postulación seleccionada:
-          </label>
-          <div className="grid grid-cols-3 gap-1.5 bg-gray-50 dark:bg-slate-800/80 p-1 rounded-2xl border border-gray-100 dark:border-slate-850">
-            {(['Biomédicas', 'Ingenierías', 'Sociales'] as const).map(area => {
-              const isActive = selectedArea === area;
-              return (
+        {/* Right side controls: Proceso dropdown a un lado + Área tabs */}
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 w-full lg:w-auto shrink-0">
+          {/* Proceso selector (lista desplegable a un lado, solo con preguntas) */}
+          <div className="flex flex-col">
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-[10px] font-black uppercase text-indigo-500 dark:text-indigo-400 tracking-widest">
+                Proceso:
+              </label>
+              {selectedProcess && (
                 <button
-                  key={area}
-                  id={`area-tab-${area}`}
-                  onClick={() => onSetSelectedArea(area)}
-                  className={`py-2 px-4 rounded-xl font-black text-xs transition-all uppercase tracking-wider ${
-                    isActive
-                      ? 'bg-indigo-600 text-white shadow-md'
-                      : 'text-gray-500 hover:text-indigo-600 dark:text-gray-400 dark:hover:text-indigo-300'
-                  }`}
+                  type="button"
+                  onClick={() => setSelectedProcess('')}
+                  className="text-[10px] text-gray-400 hover:text-indigo-500 dark:text-indigo-400 font-semibold underline ml-2"
                 >
-                  {area}
+                  Ver todos
                 </button>
-              );
-            })}
+              )}
+            </div>
+            <select
+              id="stats-process-dropdown"
+              value={selectedProcess}
+              onChange={(e) => setSelectedProcess(e.target.value)}
+              className="w-full sm:w-56 bg-white dark:bg-[#020b38] border border-gray-200 dark:border-indigo-800/80 text-gray-800 dark:text-indigo-100 text-xs font-bold rounded-xl py-2 px-3 outline-none focus:ring-2 focus:ring-indigo-500 transition-all cursor-pointer shadow-sm"
+            >
+              <option value="" className="bg-white dark:bg-[#020b38] text-gray-800 dark:text-gray-100">Todos los procesos ({questions.length} preg.)</option>
+              {processSummary.map(proc => (
+                <option key={proc.name} value={proc.name} className="bg-white dark:bg-[#020b38] text-gray-800 dark:text-gray-100">
+                  {proc.name} ({proc.questionCount} preg.)
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Área de Postulación */}
+          <div className="flex flex-col">
+            <label className="text-[10px] font-black uppercase text-indigo-500 dark:text-indigo-400 tracking-widest mb-1.5">
+              Área de Postulación:
+            </label>
+            <div className="grid grid-cols-3 gap-1 bg-gray-50 dark:bg-[#020b38] p-1 rounded-xl border border-gray-200/80 dark:border-indigo-900/60">
+              {(['Biomédicas', 'Ingenierías', 'Sociales'] as const).map(area => {
+                const isActive = selectedArea === area;
+                return (
+                  <button
+                    key={area}
+                    id={`area-tab-${area}`}
+                    onClick={() => onSetSelectedArea(area)}
+                    className={`py-2 px-3 rounded-lg font-black text-xs transition-all uppercase tracking-wider min-h-[38px] flex items-center justify-center ${
+                      isActive
+                        ? 'bg-indigo-600 text-white shadow-sm'
+                        : 'text-gray-500 hover:text-indigo-600 dark:text-indigo-300 dark:hover:text-white'
+                    }`}
+                  >
+                    {area}
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Selector y Resumen por Proceso de Preparación 2027 */}
-      <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 md:p-8 border border-gray-100 dark:border-slate-850 shadow-xl space-y-4">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-          <div>
-            <h3 className="text-base font-black text-gray-800 dark:text-gray-100 flex items-center gap-2">
-              <span>🏛️</span>
-              <span>Procesos de Admisión 2027</span>
-            </h3>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-              Filtra tus métricas o compara tu desempeño entre Ceprunsa I Fase, Ceprequintos y Ceprunsa II Fase.
-            </p>
+      {/* Resumen conciso del proceso activo (si está seleccionado) */}
+      {selectedProcess && (
+        <div className="bg-indigo-50/70 dark:bg-[#020b38] border border-indigo-200 dark:border-indigo-800/80 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-sm">
+          <div className="flex items-center gap-3">
+            <div className={`p-2 rounded-xl ${getProcessBadgeStyle(selectedProcess).bg} ${getProcessBadgeStyle(selectedProcess).text} border ${getProcessBadgeStyle(selectedProcess).border}`}>
+              <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+              </svg>
+            </div>
+            <div>
+              <div className="text-xs font-bold text-gray-600 dark:text-indigo-200">
+                Filtrando métricas por: <span className="text-indigo-600 dark:text-indigo-400 font-black">{selectedProcess}</span>
+              </div>
+              <div className="text-[11px] text-gray-500 dark:text-indigo-300/80">
+                Puntajes y coberturas calculados con las {filteredQuestions.length} preguntas registradas de este proceso.
+              </div>
+            </div>
           </div>
-          {selectedProcess && (
-            <button
-              onClick={() => setSelectedProcess('')}
-              className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1 shrink-0"
-            >
-              <span>✕</span>
-              <span>Mostrar todos los procesos (3 en 1)</span>
-            </button>
-          )}
-        </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-          {/* Botón / Tarjeta Todos */}
           <button
             onClick={() => setSelectedProcess('')}
-            className={`p-4 rounded-2xl border text-left transition-all relative overflow-hidden flex flex-col justify-between ${
-              selectedProcess === ''
-                ? 'bg-indigo-600 text-white border-indigo-600 shadow-lg shadow-indigo-200 dark:shadow-none'
-                : 'bg-gray-50 dark:bg-slate-800/60 border-gray-200/80 dark:border-slate-700/80 hover:border-indigo-300 text-gray-700 dark:text-gray-200'
-            }`}
+            className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline shrink-0"
           >
-            <div>
-              <div className="flex items-center justify-between gap-2 mb-1">
-                <span className="text-xs font-black uppercase tracking-wider flex items-center gap-1.5">
-                  <span>🌐</span>
-                  <span>Todos los Procesos</span>
-                </span>
-                {selectedProcess === '' && (
-                  <span className="text-[10px] bg-white/20 text-white font-bold px-2 py-0.5 rounded-md">
-                    Activo
-                  </span>
-                )}
-              </div>
-              <p className={`text-xs mt-1 ${selectedProcess === '' ? 'text-indigo-100' : 'text-gray-500 dark:text-gray-400'}`}>
-                3 en 1 combinados
-              </p>
-            </div>
-            <div className="mt-4 pt-3 border-t border-current/10 flex items-center justify-between text-xs">
-              <span className="font-bold opacity-80">Total preguntas</span>
-              <span className="font-black text-sm">{questions.length}</span>
-            </div>
+            Quitar filtro y ver todos
           </button>
-
-          {/* Tarjetas por Proceso Individual */}
-          {processSummary.map(proc => {
-            const isSelected = selectedProcess === proc.name;
-            const style = getProcessBadgeStyle(proc.name);
-            const progress = proc.totalTopics > 0 ? (proc.practicedTopics / proc.totalTopics) * 100 : 0;
-
-            return (
-              <button
-                key={proc.name}
-                onClick={() => setSelectedProcess(isSelected ? '' : proc.name)}
-                className={`p-4 rounded-2xl border text-left transition-all relative overflow-hidden flex flex-col justify-between ${
-                  isSelected
-                    ? `${style.bg} ${style.border} border-2 shadow-lg`
-                    : 'bg-gray-50 dark:bg-slate-800/60 border-gray-200/80 dark:border-slate-700/80 hover:border-indigo-300 text-gray-700 dark:text-gray-200'
-                }`}
-              >
-                <div>
-                  <div className="flex items-center justify-between gap-2 mb-1">
-                    <span className="text-xs font-black uppercase tracking-wider flex items-center gap-1.5 truncate">
-                      <span>{style.icon}</span>
-                      <span className="truncate">{proc.name.replace(' 2027', '')}</span>
-                    </span>
-                    {isSelected && (
-                      <span className={`text-[10px] ${style.text} font-black px-2 py-0.5 rounded-md bg-white dark:bg-slate-900 border ${style.border}`}>
-                        Activo
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex items-baseline gap-2 mt-2">
-                    <span className={`text-xl font-black ${isSelected ? style.text : 'text-gray-800 dark:text-gray-100'}`}>
-                      {proc.questionCount}
-                    </span>
-                    <span className="text-[11px] text-gray-400 font-bold">preguntas</span>
-                  </div>
-                </div>
-
-                <div className="mt-4 pt-3 border-t border-current/10 space-y-1.5">
-                  <div className="flex items-center justify-between text-[11px] font-bold text-gray-500 dark:text-gray-400">
-                    <span>Temas: {proc.practicedTopics}/{proc.totalTopics}</span>
-                    <span className={proc.accuracy >= 70 ? 'text-emerald-500' : 'text-indigo-500'}>
-                      {proc.accuracy > 0 ? `${proc.accuracy.toFixed(0)}% acierto` : 'Sin datos'}
-                    </span>
-                  </div>
-                  <div className="w-full bg-gray-200 dark:bg-slate-700 rounded-full h-1.5 overflow-hidden">
-                    <div
-                      className={`h-full transition-all duration-700 ${isSelected ? 'bg-indigo-600' : 'bg-emerald-500'}`}
-                      style={{ width: `${progress}%` }}
-                    />
-                  </div>
-                </div>
-              </button>
-            );
-          })}
         </div>
-      </div>
+      )}
 
       {/* Main KPI scorecards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         
         {/* Estimated weighted score card */}
-        <div className="relative overflow-hidden bg-gradient-to-br from-indigo-600 to-violet-850 rounded-3xl p-8 shadow-2xl border border-indigo-500/30 text-white flex flex-col justify-between min-h-[220px]">
+        <div className="relative overflow-hidden bg-gradient-to-br from-indigo-600 to-indigo-900 rounded-3xl p-8 shadow-2xl border border-indigo-500/30 text-white flex flex-col justify-between min-h-[220px]">
           <div className="relative z-10">
             <span className="bg-white/20 text-white text-[9px] font-black px-2.5 py-1 rounded-full uppercase tracking-widest inline-block backdrop-blur-sm mb-4">
               Puntaje Estimado ({selectedArea})
@@ -615,13 +582,15 @@ export const StatsView: React.FC<StatsViewProps> = ({
               />
             </div>
           </div>
-          <div className="absolute -bottom-6 -right-6 text-[110px] opacity-10 rotate-12 pointer-events-none select-none">
-            🎯
+          <div className="absolute -bottom-6 -right-6 text-white opacity-10 pointer-events-none select-none">
+            <svg xmlns="http://www.w3.org/2000/svg" className="w-36 h-36" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
           </div>
         </div>
 
         {/* Practice cover rate scorecard */}
-        <div className="bg-white dark:bg-slate-900 rounded-3xl p-8 border border-gray-100 dark:border-slate-850 shadow-xl flex flex-col justify-between min-h-[220px]">
+        <div className="bg-white dark:bg-slate-900 rounded-3xl p-8 border border-gray-100 dark:border-slate-800 shadow-xl flex flex-col justify-between min-h-[220px]">
           <div>
             <span className="bg-indigo-50 dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 text-[9px] font-black px-2.5 py-1 rounded-full uppercase tracking-widest inline-block mb-4">
               Cobertura de Temas
@@ -653,7 +622,7 @@ export const StatsView: React.FC<StatsViewProps> = ({
         </div>
 
         {/* Overall Accuracy scorecard */}
-        <div className="bg-white dark:bg-slate-900 rounded-3xl p-8 border border-gray-100 dark:border-slate-850 shadow-xl flex flex-col justify-between min-h-[220px]">
+        <div className="bg-white dark:bg-slate-900 rounded-3xl p-8 border border-gray-100 dark:border-slate-800 shadow-xl flex flex-col justify-between min-h-[220px]">
           <div>
             <span className="bg-indigo-50 dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 text-[9px] font-black px-2.5 py-1 rounded-full uppercase tracking-widest inline-block mb-4">
               Precisión de Aciertos
@@ -701,7 +670,7 @@ export const StatsView: React.FC<StatsViewProps> = ({
               <div 
                 key={course.courseName}
                 id={`course-stat-${course.courseName}`}
-                className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-100 dark:border-slate-850 shadow-md overflow-hidden transition-all duration-300"
+                className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-100 dark:border-slate-800 shadow-md overflow-hidden transition-all duration-300"
               >
                 {/* Main header row */}
                 <div 
@@ -765,7 +734,7 @@ export const StatsView: React.FC<StatsViewProps> = ({
 
                 {/* Expanded subjects detail */}
                 {isExpanded && (
-                  <div className="px-6 pb-6 pt-2 bg-gray-50/50 dark:bg-slate-900/40 border-t border-gray-100 dark:border-slate-850">
+                  <div className="px-6 pb-6 pt-2 bg-gray-50/50 dark:bg-slate-900/40 border-t border-gray-100 dark:border-slate-800">
                     <div className="space-y-4 max-w-4xl mx-auto">
                       <h5 className="text-xs font-black uppercase text-gray-400 tracking-widest mb-3">Materias de {course.courseName}</h5>
                       
@@ -773,7 +742,7 @@ export const StatsView: React.FC<StatsViewProps> = ({
                         {course.subjects.map(subj => (
                           <div 
                             key={subj.name}
-                            className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-gray-100 dark:border-slate-850 shadow-sm space-y-3"
+                            className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-gray-100 dark:border-slate-800 shadow-sm space-y-3"
                           >
                             <div className="flex justify-between items-start">
                               <div>
@@ -823,7 +792,7 @@ export const StatsView: React.FC<StatsViewProps> = ({
       </div>
 
       {/* Weighted Importance list for selected area */}
-      <div className="bg-white dark:bg-slate-900 p-8 rounded-3xl border border-gray-100 dark:border-slate-850 shadow-xl">
+      <div className="bg-white dark:bg-slate-900 p-8 rounded-3xl border border-gray-100 dark:border-slate-800 shadow-xl">
         <h3 className="text-xl font-black text-gray-800 dark:text-gray-100 mb-2">
           Prioridad Académica ({selectedArea})
         </h3>
@@ -834,7 +803,7 @@ export const StatsView: React.FC<StatsViewProps> = ({
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
-              <tr className="border-b border-gray-100 dark:border-slate-850 text-[10px] font-black uppercase text-gray-400 tracking-wider">
+              <tr className="border-b border-gray-100 dark:border-slate-800 text-[10px] font-black uppercase text-gray-400 tracking-wider">
                 <th className="pb-4 pt-2 font-black">Categoría / Temas</th>
                 <th className="pb-4 pt-2 font-black text-center">Preguntas</th>
                 <th className="pb-4 pt-2 font-black text-center">Peso Unitario</th>
@@ -842,13 +811,13 @@ export const StatsView: React.FC<StatsViewProps> = ({
                 <th className="pb-4 pt-2 font-black text-right">Tu Rendimiento</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-50 dark:divide-slate-850 text-sm">
+            <tbody className="divide-y divide-gray-50 dark:divide-slate-800 text-sm">
               {rankedSubjects.map((item, idx) => {
                 const percentage = item.accuracy;
                 const statusColor = percentage >= 75 ? 'text-emerald-500' : percentage >= 50 ? 'text-amber-500' : 'text-rose-500';
                 
                 return (
-                  <tr key={idx} className="hover:bg-gray-50/50 dark:hover:bg-slate-850/20 transition-all">
+                  <tr key={idx} className="hover:bg-gray-50/50 dark:hover:bg-slate-800/30 transition-all">
                     <td className="py-4">
                       <div className="font-bold text-gray-800 dark:text-gray-200">{item.category}</div>
                       <div className="text-[10px] text-gray-400 dark:text-gray-500 font-medium">

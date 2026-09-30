@@ -23,6 +23,9 @@ export interface Question {
   explanationImageUrl?: string;
   week?: number; // Opcional: Semana a la que pertenece el tema (1, 2, 3...)
   process?: string; // Proceso de admisión (ej: 'Ceprunsa I Fase 2027', 'Ceprunsa II Fase 2027', 'Ceprequintos 2027')
+  targetSubject?: string; // Materia académica específica (ej: 'Física', 'Literatura', 'Biología')
+  area?: 'Biomédicas' | 'Ingenierías' | 'Sociales'; // Área de admisión oficial
+  weight?: number; // Valor/puntaje oficial asignado a la pregunta
 }
 
 export interface TopicPracticeHistoryItem {
@@ -80,6 +83,20 @@ export interface UserProfile {
   avatarUrl?: string;
 }
 
+export interface CustomDeck {
+  id: string;
+  title: string;
+  description?: string;
+  icon?: string; // Icon id e.g. 'star', 'brain', 'flame'
+  color?: string; // e.g. 'indigo', 'purple', 'emerald', 'amber', 'rose', 'cyan'
+  questionIds: string[];
+  createdAt: number;
+  updatedAt?: number;
+  timesPracticed?: number;
+  bestScore?: number;
+  lastPracticedAt?: number;
+}
+
 export interface AppDatabase {
   questions: Question[];
   readingTexts?: ReadingText[];
@@ -90,9 +107,10 @@ export interface AppDatabase {
   courseCovers?: Record<string, string>;
   savedExams?: SavedExam[];
   userProfile?: UserProfile;
+  customDecks?: CustomDeck[];
 }
 
-export type ViewType = 'HOME' | 'SUBJECTS' | 'TOPICS' | 'QUIZ' | 'ADMIN' | 'MEGA_QUIZ' | 'MIXED_QUIZ' | 'EXAM_SETUP' | 'FLASHCARDS_HOME' | 'FLASHCARDS_SUBJECTS' | 'FLASHCARDS_PLAY' | 'STATS';
+export type ViewType = 'HOME' | 'SUBJECTS' | 'TOPICS' | 'QUIZ' | 'ADMIN' | 'MEGA_QUIZ' | 'MIXED_QUIZ' | 'EXAM_SETUP' | 'FLASHCARDS_HOME' | 'FLASHCARDS_SUBJECTS' | 'FLASHCARDS_PLAY' | 'STATS' | 'CUSTOM_DECKS';
 
 export type ExamMode = 'GENERAL' | 'CUSTOM';
 
@@ -101,6 +119,7 @@ export interface NavigationState {
   selectedCourse?: string;
   selectedSubject?: string;
   selectedTopic?: string;
+  selectedDeckId?: string;
   mixedQuestions?: Question[];
   examMode?: ExamMode;
   selectedExamSubjects?: string[];

@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { ExamMode, Question } from '../types';
-import { AREA_EXAM_CONFIGS, ADMISSION_PROCESSES } from '../constants';
-import { getQuestionWeek, getQuestionProcess, getProcessBadgeStyle } from '../utils';
+import { AREA_EXAM_CONFIGS } from '../constants';
+import { getQuestionWeek, getQuestionProcess, getProcessBadgeStyle, getProcessShortName, getAvailableProcesses } from '../utils';
 
 interface ExamSetupViewProps {
   mode: ExamMode;
@@ -11,11 +11,6 @@ interface ExamSetupViewProps {
   onStart: (selectedSubjects?: string[], selectedWeeks?: number[], selectedProcesses?: string[]) => void;
   onCancel: () => void;
 }
-
-const getWeekEmoji = (weekNum: number) => {
-  const emojis = ['🌱', '🌿', '🌳', '🌲', '🌻', '🌴', '🌺', '🌾', '🍀', '🎋', '🪴', '🍁'];
-  return emojis[(weekNum - 1) % emojis.length] || '🌱';
-};
 
 const ExamSetupView: React.FC<ExamSetupViewProps> = ({ 
   mode, 
@@ -34,19 +29,23 @@ const ExamSetupView: React.FC<ExamSetupViewProps> = ({
   const activeAreaConfig = AREA_EXAM_CONFIGS[selectedArea] || AREA_EXAM_CONFIGS['Biomédicas'];
   const allSubjects = Object.keys(activeAreaConfig);
 
+  // Available processes dynamically from questions
+  const availableProcesses = useMemo(() => {
+    return getAvailableProcesses(questions);
+  }, [questions]);
+
   // Available processes with question counts
   const processStats = useMemo(() => {
-    const counts: Record<string, number> = {
-      'Ceprunsa I Fase 2027': 0,
-      'Ceprunsa II Fase 2027': 0,
-      'Ceprequintos 2027': 0
-    };
+    const counts: Record<string, number> = {};
+    availableProcesses.forEach(p => {
+      counts[p] = 0;
+    });
     questions.forEach(q => {
       const p = getQuestionProcess(q);
       counts[p] = (counts[p] || 0) + 1;
     });
     return counts;
-  }, [questions]);
+  }, [questions, availableProcesses]);
 
   // Determine available weeks in database
   const availableWeeks = useMemo(() => {
@@ -61,6 +60,12 @@ const ExamSetupView: React.FC<ExamSetupViewProps> = ({
     }
     return sorted;
   }, [questions]);
+
+  // Plant emojis exclusively for weeks
+  const getWeekPlantEmoji = (weekNum: number) => {
+    const plantEmojis = ['🌱', '🌿', '🌳', '🌲', '🌻', '🌴', '🌺', '🌾', '🍀', '🎋', '🪴', '🍁'];
+    return plantEmojis[(weekNum - 1) % plantEmojis.length] || '🌱';
+  };
 
   // Calculate question count in selected weeks & processes
   const matchingQuestionsCount = useMemo(() => {
@@ -156,17 +161,17 @@ const ExamSetupView: React.FC<ExamSetupViewProps> = ({
   };
 
   const getProcessLabel = () => {
-    if (selectedProcesses.length === 0) return 'Todos los procesos (3 en 1)';
-    if (selectedProcesses.length === 1) return selectedProcesses[0];
-    return selectedProcesses.join(', ');
+    if (selectedProcesses.length === 0) return 'Todos los procesos';
+    if (selectedProcesses.length === 1) return getProcessShortName(selectedProcesses[0]);
+    return `${selectedProcesses.length} procesos seleccionados`;
   };
 
   return (
-    <div className="max-w-4xl mx-auto py-8 px-4">
-      <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-gray-100 dark:border-slate-800 p-6 md:p-10">
+    <div className="max-w-4xl mx-auto py-2 sm:py-6 px-1 sm:px-4">
+      <div className="bg-white dark:bg-[#020b38] rounded-2xl sm:rounded-3xl shadow-xl border border-gray-100 dark:border-indigo-900/60 p-4 sm:p-6 md:p-10">
         <button 
           onClick={onCancel} 
-          className="mb-6 text-gray-400 hover:text-indigo-600 font-bold flex items-center gap-2 transition-colors text-sm"
+          className="mb-4 sm:mb-6 text-indigo-600 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 border border-indigo-100 dark:border-indigo-900/50 font-bold flex items-center gap-2 transition-all text-sm min-h-[44px] px-3.5 py-1.5 rounded-xl shadow-sm"
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
@@ -174,61 +179,64 @@ const ExamSetupView: React.FC<ExamSetupViewProps> = ({
           Volver
         </button>
 
-        <div className="text-center mb-8">
+        <div className="text-center mb-6 sm:mb-8">
           <span className="bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 text-xs font-black px-4 py-1.5 rounded-full uppercase tracking-wider mb-2.5 inline-block">
             Simulacro Personalizado
           </span>
-          <h2 className="text-3xl md:text-4xl font-black text-gray-800 dark:text-gray-100 mb-2 tracking-tight">
+          <h2 className="text-2xl sm:text-3xl md:text-4xl font-black text-gray-800 dark:text-gray-100 mb-2 tracking-tight">
             Configurar Examen
           </h2>
-          <p className="text-gray-500 dark:text-gray-400 text-sm max-w-lg mx-auto leading-relaxed">
+          <p className="text-gray-500 dark:text-gray-400 text-xs sm:text-sm max-w-lg mx-auto leading-relaxed">
             Rinde un simulacro de 80 preguntas por semanas o personaliza los cursos que deseas evaluar. Los exámenes se guardarán en tu registro de <span className="font-bold text-gray-700 dark:text-gray-200">Exámenes Simulacros</span>.
           </p>
         </div>
 
         {/* Selector de Proceso de Admisión */}
-        <div className="mb-8 max-w-2xl mx-auto">
+        <div className="mb-6 sm:mb-8 max-w-2xl mx-auto">
           <div className="flex items-center justify-between mb-2.5">
             <label className="text-xs font-black uppercase text-gray-400 tracking-wider flex items-center gap-1.5">
-              <span>🏛️</span>
+              <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+              </svg>
               <span>Proceso de Admisión:</span>
             </label>
-            <span className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400">
+            <span className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 truncate max-w-[180px] sm:max-w-none text-right">
               {getProcessLabel()}
             </span>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 bg-gray-50 dark:bg-slate-800/80 p-2 rounded-2xl border border-gray-100 dark:border-slate-800">
+          <div className="flex flex-wrap gap-2 bg-gray-50 dark:bg-indigo-950/50 p-2.5 rounded-2xl border border-gray-100 dark:border-indigo-900/40">
             <button
               type="button"
               onClick={handleSelectAllProcesses}
-              className={`py-2.5 px-3 rounded-xl font-black text-xs transition-all flex flex-col items-center justify-center gap-0.5 ${
+              className={`py-2 px-3 rounded-xl font-black text-xs transition-all flex items-center gap-1.5 min-h-[44px] ${
                 selectedProcesses.length === 0
                   ? 'bg-indigo-600 text-white shadow-md'
-                  : 'bg-white dark:bg-slate-700/60 text-gray-600 dark:text-gray-300 hover:text-indigo-600 dark:hover:text-indigo-300 border border-gray-200/60 dark:border-slate-700'
+                  : 'bg-white dark:bg-[#030d42] text-gray-700 dark:text-indigo-200 hover:text-indigo-600 dark:hover:text-indigo-100 border border-gray-200/60 dark:border-indigo-800/60'
               }`}
             >
-              <span className="text-sm">🌐</span>
-              <span className="leading-tight">Todos (3 en 1)</span>
-              <span className={`text-[9px] font-bold ${selectedProcesses.length === 0 ? 'text-indigo-200' : 'text-gray-400'}`}>
-                {questions.length} preg.
+              <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+              </svg>
+              <span>Todos los Procesos</span>
+              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${selectedProcesses.length === 0 ? 'bg-white/20 text-white' : 'bg-gray-100 dark:bg-indigo-900/60 text-gray-600 dark:text-indigo-300'}`}>
+                {questions.length}
               </span>
             </button>
 
-            {ADMISSION_PROCESSES.map(proc => {
+            {availableProcesses.map(proc => {
               const isSelected = selectedProcesses.length === 1 && selectedProcesses[0] === proc;
               const isMultiSelected = selectedProcesses.includes(proc) && selectedProcesses.length > 1;
-              const isIncludedInAll = selectedProcesses.length === 0;
               const active = isSelected || isMultiSelected;
               const style = getProcessBadgeStyle(proc);
               const count = processStats[proc] || 0;
+              const shortName = getProcessShortName(proc);
 
               return (
                 <button
                   key={proc}
                   type="button"
                   onClick={() => {
-                    // Quick single select or toggle
                     if (selectedProcesses.length === 0) {
                       handleSelectSingleProcess(proc);
                     } else if (selectedProcesses.length === 1 && selectedProcesses[0] === proc) {
@@ -237,32 +245,38 @@ const ExamSetupView: React.FC<ExamSetupViewProps> = ({
                       handleToggleProcess(proc);
                     }
                   }}
-                  className={`py-2.5 px-3 rounded-xl font-black text-xs transition-all flex flex-col items-center justify-center gap-0.5 ${
+                  className={`py-2 px-3 rounded-xl font-black text-xs transition-all flex items-center gap-1.5 min-h-[44px] ${
                     active
                       ? `${style.bg} ${style.text} ${style.border} border-2 shadow-md`
-                      : 'bg-white dark:bg-slate-700/60 text-gray-600 dark:text-gray-300 hover:border-indigo-300 border border-gray-200/60 dark:border-slate-700'
+                      : 'bg-white dark:bg-[#030d42] text-gray-700 dark:text-indigo-200 hover:border-indigo-400 border border-gray-200/60 dark:border-indigo-800/60'
                   }`}
                 >
                   <span className="text-sm">{style.icon}</span>
-                  <span className="leading-tight text-center truncate w-full">{proc.replace(' 2027', '')}</span>
-                  <span className={`text-[9px] font-bold ${active ? style.text : 'text-gray-400'}`}>
-                    {count} preg.
+                  <span>{shortName}</span>
+                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${
+                    active 
+                      ? 'bg-white/30 text-current' 
+                      : count > 0 
+                      ? 'bg-gray-100 dark:bg-indigo-900/60 text-gray-700 dark:text-indigo-200' 
+                      : 'bg-gray-50 dark:bg-indigo-950 text-gray-400 dark:text-indigo-400'
+                  }`}>
+                    {count}
                   </span>
                 </button>
               );
             })}
           </div>
-          <p className="text-[11px] text-gray-400 dark:text-gray-500 text-center mt-2">
-            Tip: Haz clic en un proceso para evaluarte solo con ese banco, o selecciona "Todos (3 en 1)" para combinarlos.
+          <p className="text-[10px] sm:text-[11px] text-gray-400 dark:text-indigo-300/80 text-center mt-2">
+            Tip: Toca un proceso para evaluarte solo con ese banco (ej. 2026, 2025, 2017), o selecciona "Todos los Procesos" para combinarlos.
           </p>
         </div>
 
         {/* Selector de Área */}
         <div className="flex flex-col items-center mb-8 max-w-md mx-auto">
-          <label className="text-xs font-black uppercase text-gray-400 tracking-wider mb-2">
+          <label className="text-xs font-black uppercase text-gray-400 dark:text-indigo-300 tracking-wider mb-2">
             Área Académica:
           </label>
-          <div className="grid grid-cols-3 gap-2 w-full bg-gray-50 dark:bg-slate-800 p-1.5 rounded-2xl border border-gray-100 dark:border-slate-800">
+          <div className="grid grid-cols-3 gap-2 w-full bg-gray-50 dark:bg-indigo-950/60 p-1.5 rounded-2xl border border-gray-100 dark:border-indigo-900/50">
             {(['Biomédicas', 'Ingenierías', 'Sociales'] as const).map(area => {
               const isActive = selectedArea === area;
               return (
@@ -272,7 +286,7 @@ const ExamSetupView: React.FC<ExamSetupViewProps> = ({
                   className={`py-2 px-3 rounded-xl font-black text-xs transition-all uppercase tracking-wider ${
                     isActive
                       ? 'bg-indigo-600 text-white shadow-md'
-                      : 'text-gray-500 hover:text-indigo-600 dark:text-gray-400 dark:hover:text-indigo-400'
+                      : 'text-indigo-950 dark:text-indigo-200 hover:text-indigo-600 dark:hover:text-white bg-transparent hover:bg-white/60 dark:hover:bg-indigo-900/40'
                   }`}
                 >
                   {area}
@@ -283,19 +297,21 @@ const ExamSetupView: React.FC<ExamSetupViewProps> = ({
         </div>
 
         {/* Modalidad de Examen Tabs */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-8 bg-gray-100 dark:bg-slate-800 p-1.5 rounded-2xl border border-gray-200/80 dark:border-slate-700/80">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-8 bg-gray-100 dark:bg-indigo-950/70 p-1.5 rounded-2xl border border-gray-200/80 dark:border-indigo-900/50">
           <button
             onClick={() => setSetupType('WEEKS_80')}
             className={`py-3.5 px-4 rounded-xl font-black text-sm flex items-center justify-center gap-2.5 transition-all ${
               setupType === 'WEEKS_80'
-                ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-md border border-gray-100 dark:border-slate-800'
-                : 'text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'
+                ? 'bg-white dark:bg-[#030d42] text-indigo-600 dark:text-indigo-300 shadow-md border border-gray-100 dark:border-indigo-800'
+                : 'text-gray-500 dark:text-indigo-300/80 hover:text-gray-800 dark:hover:text-white'
             }`}
           >
-            <span className="text-lg">🎯</span>
+            <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5 text-indigo-600 dark:text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
             <div className="text-left leading-tight">
               <span className="block font-black">Simulacro 80 Preguntas</span>
-              <span className="text-[11px] font-medium text-gray-400">Filtrado por Semanas</span>
+              <span className="text-[11px] font-medium text-gray-400 dark:text-indigo-300/70">Filtrado por Semanas</span>
             </div>
           </button>
 
@@ -303,14 +319,16 @@ const ExamSetupView: React.FC<ExamSetupViewProps> = ({
             onClick={() => setSetupType('CUSTOM_SUBJECTS')}
             className={`py-3.5 px-4 rounded-xl font-black text-sm flex items-center justify-center gap-2.5 transition-all ${
               setupType === 'CUSTOM_SUBJECTS'
-                ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-md border border-gray-100 dark:border-slate-800'
-                : 'text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'
+                ? 'bg-white dark:bg-[#030d42] text-indigo-600 dark:text-indigo-300 shadow-md border border-gray-100 dark:border-indigo-800'
+                : 'text-gray-500 dark:text-indigo-300/80 hover:text-gray-800 dark:hover:text-white'
             }`}
           >
-            <span className="text-lg">📚</span>
+            <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5 text-indigo-600 dark:text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+            </svg>
             <div className="text-left leading-tight">
               <span className="block font-black">Personalizado por Cursos</span>
-              <span className="text-[11px] font-medium text-gray-400">Seleccionar Materias</span>
+              <span className="text-[11px] font-medium text-gray-400 dark:text-indigo-300/70">Seleccionar Materias</span>
             </div>
           </button>
         </div>
@@ -318,15 +336,17 @@ const ExamSetupView: React.FC<ExamSetupViewProps> = ({
         {/* CONTENIDO MODO 1: SIMULACRO 80 POR SEMANAS */}
         {setupType === 'WEEKS_80' && (
           <div className="space-y-6 mb-8 animate-in fade-in duration-200">
-            {/* Selector de semanas con plantitas y botón de Todas */}
-            <div className="bg-gray-50 dark:bg-slate-800/60 p-6 md:p-8 rounded-3xl border border-gray-100 dark:border-slate-800 shadow-sm">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6 pb-4 border-b border-gray-200/70 dark:border-slate-700/70">
+            {/* Selector de semanas con botón de Todas */}
+            <div className="bg-gray-50 dark:bg-indigo-950/40 p-6 md:p-8 rounded-3xl border border-gray-100 dark:border-indigo-900/60 shadow-sm">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6 pb-4 border-b border-gray-200/70 dark:border-indigo-800/60">
                 <div>
                   <h3 className="text-base font-black text-gray-800 dark:text-gray-100 flex items-center gap-2">
-                    <span>🌱</span>
+                    <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
                     <span>Seleccionar Semanas del Simulacro</span>
                   </h3>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                  <p className="text-xs text-gray-500 dark:text-indigo-300/80 mt-0.5">
                     Elige qué semanas deseas incluir en la evaluación de 80 preguntas
                   </p>
                 </div>
@@ -336,10 +356,12 @@ const ExamSetupView: React.FC<ExamSetupViewProps> = ({
                     className={`px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 border-2 ${
                       selectedWeeks.length === 0
                         ? 'bg-indigo-600 text-white border-indigo-600 shadow-md'
-                        : 'bg-white dark:bg-slate-700 text-gray-700 dark:text-gray-200 border-gray-200 dark:border-slate-600 hover:border-indigo-300'
+                        : 'bg-white dark:bg-[#030d42] text-gray-700 dark:text-indigo-200 border-gray-200 dark:border-indigo-800/80 hover:border-indigo-400'
                     }`}
                   >
-                    <span>🌐</span>
+                    <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+                    </svg>
                     <span>Todas las Semanas</span>
                   </button>
                   <span className="text-xs font-bold px-3 py-2 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-100 dark:border-indigo-900">
@@ -348,12 +370,10 @@ const ExamSetupView: React.FC<ExamSetupViewProps> = ({
                 </div>
               </div>
 
-              {/* Grid espacioso y claro con botones más grandes */}
+              {/* Grid espacioso y claro con botones de semanas */}
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3.5 sm:gap-4">
                 {availableWeeks.map(weekNum => {
-                  const isSelected = selectedWeeks.length === 0 || selectedWeeks.includes(weekNum);
                   const isIndividuallySelected = selectedWeeks.includes(weekNum);
-                  const emoji = getWeekEmoji(weekNum);
                   return (
                     <button
                       key={weekNum}
@@ -362,11 +382,13 @@ const ExamSetupView: React.FC<ExamSetupViewProps> = ({
                         isIndividuallySelected && selectedWeeks.length > 0
                           ? 'bg-indigo-600 text-white border-indigo-600 shadow-lg shadow-indigo-100 dark:shadow-none scale-[1.02]'
                           : selectedWeeks.length === 0
-                          ? 'bg-indigo-50/70 dark:bg-indigo-950/30 text-indigo-900 dark:text-indigo-200 border-indigo-200 dark:border-indigo-800/60'
-                          : 'bg-white dark:bg-slate-800/90 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-slate-700 hover:border-indigo-300 hover:shadow-md'
+                          ? 'bg-indigo-50/70 dark:bg-indigo-950/40 text-indigo-900 dark:text-indigo-200 border-indigo-200 dark:border-indigo-800/60'
+                          : 'bg-white dark:bg-[#030d42] text-gray-700 dark:text-indigo-200 border-gray-200 dark:border-indigo-800/70 hover:border-indigo-400 hover:shadow-md'
                       }`}
                     >
-                      <span className="text-3xl sm:text-4xl transition-transform group-hover:scale-110 duration-200">{emoji}</span>
+                      <span className="w-12 h-12 rounded-2xl flex items-center justify-center font-black text-2xl bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-300 transition-transform group-hover:scale-110">
+                        {getWeekPlantEmoji(weekNum)}
+                      </span>
                       <div>
                         <span className="font-black text-sm sm:text-base block">Semana {weekNum}</span>
                         <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full mt-1 inline-block ${
@@ -376,7 +398,7 @@ const ExamSetupView: React.FC<ExamSetupViewProps> = ({
                             ? 'bg-indigo-200/60 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300'
                             : 'bg-gray-100 dark:bg-slate-700 text-gray-400'
                         }`}>
-                          {selectedWeeks.length === 0 ? 'Incluida (Todas)' : isIndividuallySelected ? '✓ Seleccionada' : 'Inactiva'}
+                          {selectedWeeks.length === 0 ? 'Incluida (Todas)' : isIndividuallySelected ? 'Seleccionada' : 'Inactiva'}
                         </span>
                       </div>
                     </button>
@@ -388,7 +410,11 @@ const ExamSetupView: React.FC<ExamSetupViewProps> = ({
             {/* Resumen del Examen de 80 */}
             <div className="bg-indigo-50/70 dark:bg-indigo-950/20 border border-indigo-200/80 dark:border-indigo-800/60 rounded-2xl p-5">
               <div className="flex items-center gap-3 mb-2">
-                <span className="text-2xl">📋</span>
+                <div className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center shrink-0">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                  </svg>
+                </div>
                 <div>
                   <h4 className="font-black text-indigo-950 dark:text-indigo-200 text-base flex items-center gap-2 flex-wrap">
                     <span>Simulacro 80 Preguntas ({getPresetLabel()})</span>
@@ -407,7 +433,9 @@ const ExamSetupView: React.FC<ExamSetupViewProps> = ({
                 <span>• Se guardará en <strong className="text-gray-700 dark:text-gray-200">Exámenes Simulacros</strong></span>
               </div>
               <div className="mt-2.5 pt-2.5 border-t border-indigo-200/50 dark:border-indigo-800/40 text-[11px] text-indigo-700 dark:text-indigo-300 font-medium flex items-center gap-1.5">
-                <span>💡</span>
+                <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 shrink-0 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
                 <span>Si una materia aún no tiene preguntas en la semana elegida, el sistema la completará automáticamente con la semana más próxima para garantizar las 80 preguntas.</span>
               </div>
             </div>
@@ -499,7 +527,10 @@ const ExamSetupView: React.FC<ExamSetupViewProps> = ({
                 : 'bg-gray-200 dark:bg-slate-800 text-gray-400 cursor-not-allowed'
             }`}
           >
-            <span>🚀</span>
+            <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
             <span>
               {setupType === 'WEEKS_80' 
                 ? `Iniciar Simulacro 80 (${getPresetLabel()})` 

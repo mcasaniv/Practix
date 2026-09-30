@@ -47,9 +47,9 @@ export const ACADEMIC_STRUCTURE: CourseStructure[] = [
   },
   {
     name: 'Exámenes',
-    subjects: ['Simulacros Oficiales', 'Exámenes Simulacros', 'Exámenes Extraordinarios'],
-    icon: 'https://i.pinimg.com/webp/736x/9a/2c/c7/9a2cc7f75ac4443d5d51303bdfbb1b1c.webp',
-    color: 'bg-slate-100 text-slate-700 border-slate-200'
+    subjects: ['Simulacros Oficiales', 'Exámenes Rendidos'],
+    icon: 'https://i.pinimg.com/736x/21/2e/0f/212e0f40d796790938497645166294b0.jpg',
+    color: 'bg-indigo-100 text-indigo-700 border-indigo-200'
   }
 ];
 
@@ -138,10 +138,42 @@ export const MEGA_EXAM_CONFIG: Record<string, ExamCategory> = BIOMEDICAS_EXAM_CO
 
 export const DB_STORAGE_KEY = 'educasani_cloud_db';
 
+// Procesos de admisión activos y sugeridos
 export const ADMISSION_PROCESSES = [
   'Ceprunsa I Fase 2027',
   'Ceprunsa II Fase 2027',
-  'Ceprequintos 2027'
+  'Ceprequintos 2027',
+  'Ceprunsa I Fase 2026',
+  'Ceprunsa II Fase 2026',
+  'Ceprequintos 2026',
+  'Ceprunsa I Fase 2025',
+  'Ceprunsa II Fase 2025',
+  'Ceprunsa I Fase 2024',
+  'Ceprunsa 2017',
+  'Ceprunsa Procesos Anteriores',
+  'Mazo Propio (Sin Cepre)'
+] as const;
+
+// Tipos base de Cepre para facilitar selección dinámica con cualquier año
+export const CEPRE_BASE_TYPES = [
+  'Ceprunsa I Fase',
+  'Ceprunsa II Fase',
+  'Ceprequintos',
+  'Ceprunsa Ciclo Regular',
+  'Ceprunsa',
+  'Mazo Propio (Sin Cepre)',
+  'Personalizado / Otro'
 ] as const;
 
 export const DEFAULT_ADMISSION_PROCESS = 'Ceprunsa I Fase 2027';
+
+export const CUSTOM_DECK_COLORS = [
+  { id: 'indigo', name: 'Índigo', bg: 'bg-indigo-50 dark:bg-indigo-950/40', border: 'border-indigo-300 dark:border-indigo-800', text: 'text-indigo-600 dark:text-indigo-400', banner: 'from-indigo-600 to-blue-600' },
+  { id: 'purple', name: 'Púrpura', bg: 'bg-purple-50 dark:bg-purple-950/40', border: 'border-purple-300 dark:border-purple-800', text: 'text-purple-600 dark:text-purple-400', banner: 'from-purple-600 to-indigo-600' },
+  { id: 'emerald', name: 'Esmeralda', bg: 'bg-emerald-50 dark:bg-emerald-950/40', border: 'border-emerald-300 dark:border-emerald-800', text: 'text-emerald-600 dark:text-emerald-400', banner: 'from-emerald-600 to-teal-600' },
+  { id: 'amber', name: 'Ámbar', bg: 'bg-amber-50 dark:bg-amber-950/40', border: 'border-amber-300 dark:border-amber-800', text: 'text-amber-600 dark:text-amber-400', banner: 'from-amber-600 to-orange-600' },
+  { id: 'rose', name: 'Rosa', bg: 'bg-rose-50 dark:bg-rose-950/40', border: 'border-rose-300 dark:border-rose-800', text: 'text-rose-600 dark:text-rose-400', banner: 'from-rose-600 to-pink-600' },
+  { id: 'cyan', name: 'Cian', bg: 'bg-cyan-50 dark:bg-cyan-950/40', border: 'border-cyan-300 dark:border-cyan-800', text: 'text-cyan-600 dark:text-cyan-400', banner: 'from-cyan-600 to-sky-600' }
+];
+
+export const CUSTOM_DECK_ICONS = ['star', 'brain', 'target', 'flame', 'zap', 'gem', 'lightbulb', 'rocket', 'book', 'trophy', 'flask', 'dna'] as const;

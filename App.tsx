@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Question, AppDatabase, ViewType, NavigationState, TopicResult, ReadingText, Flashcard, SavedExam } from './types';
+import { Question, AppDatabase, ViewType, NavigationState, TopicResult, ReadingText, Flashcard, SavedExam, UserProfile, CustomDeck } from './types';
 import { ACADEMIC_STRUCTURE, DB_STORAGE_KEY } from './constants';
 import { getQuestionProcess } from './utils';
 import Navbar from './components/Navbar';
@@ -13,6 +13,7 @@ import MegaQuizView from './views/MegaQuizView';
 import ExamSetupView from './views/ExamSetupView';
 import FlashcardsHomeView from './views/FlashcardsHomeView';
 import FlashcardsPlayView from './views/FlashcardsPlayView';
+import { CustomDecksView } from './views/CustomDecksView';
 import { StatsView } from './views/StatsView';
 
 const sanitizeDatabase = (data: AppDatabase): AppDatabase => {
@@ -97,6 +98,20 @@ const sanitizeDatabase = (data: AppDatabase): AppDatabase => {
     return { ...f, id: fId };
   });
 
+  const seenCustomDeckIds = new Set<string>();
+  const sanitizedCustomDecks = (data.customDecks ? [...data.customDecks] : []).map(d => {
+    let dId = d.id;
+    if (!dId || seenCustomDeckIds.has(dId)) {
+      dId = crypto.randomUUID();
+    }
+    seenCustomDeckIds.add(dId);
+    return {
+      ...d,
+      id: dId,
+      questionIds: Array.isArray(d.questionIds) ? d.questionIds : []
+    };
+  });
+
   const migratedResults: Record<string, TopicResult> = {};
   if (data.results) {
     Object.entries(data.results).forEach(([key, val]) => {
@@ -136,19 +151,21 @@ const sanitizeDatabase = (data: AppDatabase): AppDatabase => {
     questions: sanitizedQuestions,
     readingTexts: sanitizedReadingTexts,
     flashcards: sanitizedFlashcards,
-    results: migratedResults
+    results: migratedResults,
+    customDecks: sanitizedCustomDecks
   };
 };
 
 const App: React.FC = () => {
   const [dbState, setDbState] = useState<AppDatabase>(() => {
     const saved = localStorage.getItem(DB_STORAGE_KEY);
-    const initial = saved ? JSON.parse(saved) : { questions: [], readingTexts: [], flashcards: [], savedExams: [] };
+    const initial = saved ? JSON.parse(saved) : { questions: [], readingTexts: [], flashcards: [], savedExams: [], customDecks: [] };
     if (!initial.results) initial.results = {};
     if (!initial.readingTexts) initial.readingTexts = [];
     if (!initial.flashcards) initial.flashcards = [];
     if (!initial.courseCovers) initial.courseCovers = {};
     if (!initial.savedExams) initial.savedExams = [];
+    if (!initial.customDecks) initial.customDecks = [];
     if (initial.totalPracticed === undefined) initial.totalPracticed = 0;
     if (initial.totalFlashcardsPracticed === undefined) initial.totalFlashcardsPracticed = 0;
     return sanitizeDatabase(initial);
@@ -323,8 +340,111 @@ const App: React.FC = () => {
     });
   }, []);
 
+  const handleCreateDeck = useCallback((deckData: Omit<CustomDeck, 'id' | 'createdAt'>) => {
+    const newDeck: CustomDeck = {
+      ...deckData,
+      id: crypto.randomUUID(),
+      createdAt: Date.now()
+    };
+    setDb(prev => ({
+      ...prev,
+      customDecks: [...(prev.customDecks || []), newDeck]
+    }));
+    showToast(`Mazo "${newDeck.title}" creado con éxito.`);
+  }, [showToast]);
+
+  const handleUpdateDeck = useCallback((updatedDeck: CustomDeck) => {
+    setDb(prev => ({
+      ...prev,
+      customDecks: (prev.customDecks || []).map(d => d.id === updatedDeck.id ? updatedDeck : d)
+    }));
+    showToast("Mazo actualizado.");
+  }, [showToast]);
+
+  const handleDeleteDeck = useCallback((deckId: string) => {
+    setDb(prev => ({
+      ...prev,
+      customDecks: (prev.customDecks || []).filter(d => d.id !== deckId)
+    }));
+    showToast("Mazo eliminado.");
+  }, [showToast]);
+
+  const handleAddQuestionToDeck = useCallback((deckId: string, qData: Omit<Question, 'id' | 'createdAt'>) => {
+    const newQId = crypto.randomUUID();
+    const newQ: Question = {
+      ...qData,
+      id: newQId,
+      createdAt: Date.now()
+    };
+    setDb(prev => ({
+      ...prev,
+      questions: [...prev.questions, newQ],
+      customDecks: (prev.customDecks || []).map(d => {
+        if (d.id === deckId) {
+          return {
+            ...d,
+            questionIds: [...d.questionIds, newQId],
+            updatedAt: Date.now()
+          };
+        }
+        return d;
+      })
+    }));
+    showToast("Pregunta creada y añadida al mazo.");
+  }, [showToast]);
+
+  const handleToggleQuestionInDeck = useCallback((deckId: string, questionId: string) => {
+    setDb(prev => ({
+      ...prev,
+      customDecks: (prev.customDecks || []).map(d => {
+        if (d.id === deckId) {
+          const exists = d.questionIds.includes(questionId);
+          return {
+            ...d,
+            questionIds: exists ? d.questionIds.filter(id => id !== questionId) : [...d.questionIds, questionId],
+            updatedAt: Date.now()
+          };
+        }
+        return d;
+      })
+    }));
+  }, []);
+
+  const handlePlayDeck = useCallback((deck: CustomDeck, mode: 'CLASSIC' | 'QUIZZIZ') => {
+    const qMap = new Map(db.questions.map(q => [q.id, q]));
+    const deckQuestions = deck.questionIds.map(id => qMap.get(id)).filter((q): q is Question => q !== undefined);
+    
+    if (deckQuestions.length === 0) {
+      showToast("El mazo no tiene preguntas aún.");
+      return;
+    }
+
+    handleNavigate('MIXED_QUIZ', {
+      selectedTopic: deck.title,
+      selectedSubject: 'Mazo Propio',
+      selectedDeckId: deck.id,
+      mixedQuestions: deckQuestions,
+      quizMode: mode
+    });
+  }, [db.questions, handleNavigate, showToast]);
+
   const handleFinishQuiz = useCallback((subject: string, topic: string, score: number, total: number, mode: 'CLASSIC' | 'QUIZZIZ' = 'CLASSIC') => {
     setDb(prev => {
+      let updatedCustomDecks = prev.customDecks;
+      if (nav.selectedDeckId && prev.customDecks) {
+        updatedCustomDecks = prev.customDecks.map(d => {
+          if (d.id === nav.selectedDeckId) {
+            return {
+              ...d,
+              timesPracticed: (d.timesPracticed || 0) + 1,
+              bestScore: Math.max(d.bestScore ?? score, score),
+              lastPracticedAt: Date.now()
+            };
+          }
+          return d;
+        });
+      }
+
       const key = `${subject}|${topic}`;
       const prevResult = prev.results?.[key];
       const prevTimes = prevResult?.timesPracticed ?? (prevResult && prevResult.total > 0 ? 1 : 0);
@@ -353,13 +473,14 @@ const App: React.FC = () => {
       return {
         ...prev,
         totalPracticed: (prev.totalPracticed || 0) + total,
+        customDecks: updatedCustomDecks,
         results: {
           ...prev.results,
           [key]: newResult
         }
       };
     });
-  }, []);
+  }, [nav.selectedDeckId]);
 
   const handleSaveExamResult = useCallback((savedExam: SavedExam) => {
     setDb(prev => {
@@ -518,6 +639,10 @@ const App: React.FC = () => {
                 handleNavigate('EXAM_SETUP', { examMode: 'CUSTOM' });
               }
             }}
+            onViewSavedExams={() => handleNavigate('TOPICS', { selectedCourse: 'Exámenes', selectedSubject: 'Exámenes Rendidos' })}
+            savedExamsCount={db.savedExams?.length || 0}
+            onNavigateToCustomDecks={() => handleNavigate('CUSTOM_DECKS')}
+            customDecks={db.customDecks || []}
           />
         );
       case 'EXAM_SETUP':
@@ -543,7 +668,8 @@ const App: React.FC = () => {
             courseName={nav.selectedCourse!} 
             questions={db.questions}
             results={db.results || {}}
-            onSelectSubject={(subject) => handleNavigate('TOPICS', { selectedSubject: subject })} 
+            savedExams={db.savedExams || []}
+            onSelectSubject={(subject) => handleNavigate('TOPICS', { selectedCourse: nav.selectedCourse, selectedSubject: subject })} 
           />
         );
       case 'TOPICS':
@@ -553,6 +679,7 @@ const App: React.FC = () => {
             subjectName={nav.selectedSubject!} 
             courseName={nav.selectedCourse}
             questions={db.questions.filter(q => q.subject === nav.selectedSubject)}
+            allDatabaseQuestions={db.questions}
             readingTexts={db.readingTexts || []}
             results={db.results || {}}
             savedExams={db.savedExams || []}
@@ -564,6 +691,9 @@ const App: React.FC = () => {
             onViewExamResolution={(exam) => handleNavigate('MEGA_QUIZ', { retakeExam: exam, examMode: exam.mode, isReviewMode: true })}
             onDeleteSavedExam={handleDeleteSavedExam}
             onStartNewExam={() => handleNavigate('EXAM_SETUP', { examMode: 'CUSTOM' })}
+            onSaveQuestions={saveQuestions}
+            selectedArea={selectedArea}
+            onToast={showToast}
           />
         );
       case 'QUIZ':
@@ -680,8 +810,32 @@ const App: React.FC = () => {
             onUpdateProfile={handleUpdateUserProfile}
           />
         );
+      case 'CUSTOM_DECKS':
+        return (
+          <CustomDecksView 
+            decks={db.customDecks || []}
+            questions={db.questions}
+            readingTexts={db.readingTexts || []}
+            results={db.results || {}}
+            onCreateDeck={handleCreateDeck}
+            onUpdateDeck={handleUpdateDeck}
+            onDeleteDeck={handleDeleteDeck}
+            onPlayDeck={handlePlayDeck}
+            onAddQuestionToDeck={handleAddQuestionToDeck}
+            onToggleQuestionInDeck={handleToggleQuestionInDeck}
+            onDeleteQuestion={deleteQuestion}
+            onBackToHome={() => handleNavigate('HOME')}
+          />
+        );
       default:
-        return <HomeView onSelectCourse={(course) => handleNavigate('SUBJECTS', { selectedCourse: course })} onStartMegaQuiz={() => handleNavigate('MEGA_QUIZ')} />;
+        return (
+          <HomeView 
+            onSelectCourse={(course) => handleNavigate('SUBJECTS', { selectedCourse: course })} 
+            onStartMegaQuiz={(mode) => handleNavigate('MEGA_QUIZ', { examMode: mode })}
+            onNavigateToCustomDecks={() => handleNavigate('CUSTOM_DECKS')}
+            customDecks={db.customDecks || []}
+          />
+        );
     }
   };
 
@@ -706,18 +860,18 @@ const App: React.FC = () => {
           onToast={showToast}
         />
       )}
-      <main className="flex-grow container mx-auto px-4 py-8 relative">
+      <main className={`flex-grow w-full max-w-7xl mx-auto px-3 sm:px-4 md:px-6 py-4 sm:py-6 md:py-8 ${showNavbar ? 'pb-24 lg:pb-8' : 'pb-8'} relative`}>
         {toastMessage && (
-          <div className="fixed bottom-4 right-4 bg-gray-800 text-white px-6 py-3 rounded-xl shadow-2xl z-50 animate-fade-in-up flex items-center gap-3">
-            <svg className="w-5 h-5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+          <div className="fixed bottom-20 lg:bottom-4 right-3 sm:right-4 left-3 sm:left-auto max-w-md bg-gray-900/95 text-white px-4 sm:px-6 py-3 rounded-2xl shadow-2xl z-50 animate-fade-in-up flex items-center gap-3 backdrop-blur-md border border-gray-700">
+            <svg className="w-5 h-5 text-emerald-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
             </svg>
-            {toastMessage}
+            <span className="text-xs sm:text-sm font-medium">{toastMessage}</span>
           </div>
         )}
         {renderView()}
       </main>
-      <footer className="bg-white dark:bg-slate-900 dark:border-slate-800 border-t py-6 text-center text-sm text-gray-500 dark:text-gray-400 font-sans tracking-wide">
+      <footer className={`bg-white dark:bg-slate-900 dark:border-slate-800 border-t py-6 ${showNavbar ? 'pb-24 lg:pb-6' : 'pb-6'} text-center text-xs sm:text-sm text-gray-500 dark:text-gray-400 font-sans tracking-wide`}>
         &copy; {new Date().getFullYear()} Practix • Sistema de Gestión Académica
       </footer>
     </div>

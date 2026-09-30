@@ -24,7 +24,7 @@ export const PrintExamModal: React.FC<PrintExamModalProps> = ({
 
   // Map question IDs to actual question objects
   const examQuestions = React.useMemo(() => {
-    const qMap = new Map(allQuestions.map(q => [q.id, q]));
+    const qMap = new Map<string, Question>(allQuestions.map(q => [q.id, q]));
     const list: { question: Question; readingText?: ReadingText; category: string }[] = [];
     const activeAreaConfig = AREA_EXAM_CONFIGS[exam.area as 'Biomédicas' | 'Ingenierías' | 'Sociales'] || AREA_EXAM_CONFIGS['Biomédicas'];
 
@@ -61,10 +61,64 @@ export const PrintExamModal: React.FC<PrintExamModalProps> = ({
     renderMath();
     const timer = setTimeout(renderMath, 200);
     return () => clearTimeout(timer);
-  }, [printMode, showExplanations, showAnswerKey]);
+  }, [printMode, showExplanations, showAnswerKey, examQuestions]);
 
   const handlePrint = () => {
-    window.print();
+    if (containerRef.current && (window as any).renderMathInElement) {
+      try {
+        (window as any).renderMathInElement(containerRef.current, {
+          delimiters: [
+            { left: '$$', right: '$$', display: true },
+            { left: '$', right: '$', display: false }
+          ],
+          throwOnError: false
+        });
+      } catch (e) {
+        console.error('KaTeX print error:', e);
+      }
+    }
+    setTimeout(() => {
+      window.print();
+    }, 100);
+  };
+
+  const handleDownloadHtml = () => {
+    if (!containerRef.current) return;
+    const content = containerRef.current.innerHTML;
+    const fullHtml = `<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${exam.title} - Practix</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #ffffff; color: #0f172a; padding: 24px; }
+    .printable-exam-container { max-width: 900px; margin: 0 auto; background: #ffffff; }
+    .break-inside-avoid { break-inside: avoid; page-break-inside: avoid; }
+    @media print {
+      body { padding: 0 !important; background: #fff !important; }
+      .printable-exam-container { max-width: 100% !important; width: 100% !important; margin: 0 !important; padding: 0 !important; }
+      @page { margin: 12mm 15mm; size: A4 portrait; }
+    }
+  </style>
+</head>
+<body>
+  <div class="printable-exam-container">
+    ${content}
+  </div>
+</body>
+</html>`;
+    const blob = new Blob([fullHtml], { type: 'text/html;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${exam.title.replace(/[^a-zA-Z0-9_-]/g, '_')}_Examen.html`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
   const percentage = isSolved && exam.maxScore ? Math.round((exam.score! / exam.maxScore) * 100) : 0;
@@ -80,7 +134,11 @@ export const PrintExamModal: React.FC<PrintExamModalProps> = ({
       <div className="sticky top-0 z-50 bg-slate-900 border-b border-slate-800 text-white p-4 shadow-xl no-print">
         <div className="max-w-6xl mx-auto flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <span className="p-2 bg-indigo-600 rounded-xl text-xl">🖨️</span>
+            <span className="p-2 bg-indigo-600 rounded-xl text-white">
+              <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+              </svg>
+            </span>
             <div>
               <h2 className="text-lg font-black text-white leading-tight">Imprimir / Exportar a PDF</h2>
               <p className="text-xs text-slate-400">
@@ -94,23 +152,29 @@ export const PrintExamModal: React.FC<PrintExamModalProps> = ({
             <div className="bg-slate-800 p-1 rounded-xl flex items-center border border-slate-700">
               <button
                 onClick={() => setPrintMode('BLANK')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
                   printMode === 'BLANK' 
                     ? 'bg-indigo-600 text-white shadow-sm' 
                     : 'text-slate-400 hover:text-white'
                 }`}
               >
-                📄 En Blanco (Para Resolver)
+                <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                <span>En Blanco (Para Resolver)</span>
               </button>
               <button
                 onClick={() => setPrintMode('SOLVED')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
                   printMode === 'SOLVED' 
                     ? 'bg-indigo-600 text-white shadow-sm' 
                     : 'text-slate-400 hover:text-white'
                 }`}
               >
-                ✅ Resuelto (Con Claves)
+                <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span>Resuelto (Con Claves)</span>
               </button>
             </div>
 
@@ -140,16 +204,33 @@ export const PrintExamModal: React.FC<PrintExamModalProps> = ({
             <button
               onClick={handlePrint}
               className="bg-emerald-600 hover:bg-emerald-500 text-white font-black text-sm px-5 py-2 rounded-xl transition-all shadow-lg active:scale-95 flex items-center gap-2"
+              title="Abrir cuadro de impresión del navegador para imprimir o guardar como PDF"
             >
-              <span>🖨️</span>
+              <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+              </svg>
               <span>Imprimir / Guardar PDF</span>
             </button>
 
             <button
-              onClick={onClose}
-              className="bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-bold px-3 py-2 rounded-xl border border-slate-700 transition-colors"
+              onClick={handleDownloadHtml}
+              className="bg-slate-800 hover:bg-slate-700 text-indigo-300 hover:text-white text-xs font-bold px-3.5 py-2 rounded-xl border border-slate-700 transition-colors flex items-center gap-1.5"
+              title="Descargar archivo HTML autónomo para abrir e imprimir en cualquier navegador"
             >
-              ✕ Cerrar
+              <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+              </svg>
+              <span>Descargar HTML</span>
+            </button>
+
+            <button
+              onClick={onClose}
+              className="bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-bold px-3 py-2 rounded-xl border border-slate-700 transition-colors flex items-center gap-1"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+              <span>Cerrar</span>
             </button>
           </div>
         </div>
@@ -239,98 +320,117 @@ export const PrintExamModal: React.FC<PrintExamModalProps> = ({
           )}
 
           {/* Questions List */}
-          <div className="space-y-8">
-            {examQuestions.map((item, idx) => {
-              const q = item.question;
-              const isFirstInReading = item.readingText && (idx === 0 || examQuestions[idx - 1].readingText?.id !== item.readingText.id);
+          {examQuestions.length === 0 ? (
+            <div className="py-12 text-center bg-slate-50 border-2 border-dashed border-slate-300 rounded-2xl p-8 my-6">
+              <div className="w-12 h-12 mx-auto mb-3 text-slate-400 flex items-center justify-center">
+                <svg xmlns="http://www.w3.org/2000/svg" className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+              </div>
+              <h4 className="text-base font-bold text-slate-800">No se pudieron cargar las preguntas de este examen</h4>
+              <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto">
+                Las preguntas de este examen no se encuentran en el banco actual de preguntas ({exam.questionIds?.length || 0} IDs registrados).
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-8">
+              {examQuestions.map((item, idx) => {
+                const q = item.question;
+                const isFirstInReading = item.readingText && (idx === 0 || examQuestions[idx - 1].readingText?.id !== item.readingText.id);
 
-              return (
-                <div key={q.id} className="break-inside-avoid border-b border-slate-200 pb-6 last:border-b-0">
-                  {/* Reading Text section */}
-                  {isFirstInReading && item.readingText && (
-                    <div className="mb-6 p-6 bg-slate-50 border border-slate-300 rounded-xl break-inside-avoid">
-                      <span className="text-[10px] font-black uppercase tracking-widest text-indigo-800 block mb-1">
-                        📖 TEXTO DE COMPRENSIÓN LECTORA ({item.readingText.subject.toUpperCase()})
-                      </span>
-                      <h3 className="text-lg font-black text-slate-900 mb-3 font-serif">{item.readingText.title}</h3>
-                      <div className="text-slate-800 text-sm font-serif leading-relaxed whitespace-pre-wrap italic bg-white p-4 rounded border border-slate-200">
-                        {item.readingText.content}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Question Header */}
-                  <div className="flex items-start gap-3 mb-3">
-                    <span className="bg-slate-900 text-white font-black text-xs w-7 h-7 rounded flex items-center justify-center shrink-0 mt-0.5">
-                      {idx + 1}
-                    </span>
-                    <div className="flex-1">
-                      <div className="flex flex-wrap items-center gap-2 mb-1.5">
-                        <span className="text-[9px] font-black uppercase bg-indigo-100 text-indigo-900 px-2 py-0.5 rounded">
-                          {item.category}
+                return (
+                  <div key={q.id} className="break-inside-avoid border-b border-slate-200 pb-6 last:border-b-0">
+                    {/* Reading Text section */}
+                    {isFirstInReading && item.readingText && (
+                      <div className="mb-6 p-6 bg-slate-50 border border-slate-300 rounded-xl break-inside-avoid">
+                        <span className="text-[10px] font-black uppercase tracking-widest text-indigo-800 block mb-1">
+                          TEXTO DE COMPRENSIÓN LECTORA ({item.readingText.subject.toUpperCase()})
                         </span>
-                        <span className="text-[9px] font-bold text-slate-500 uppercase">
-                          {q.subject} • {q.topic}
-                        </span>
-                      </div>
-
-                      <p className="text-base font-bold text-slate-900 leading-snug whitespace-pre-wrap">
-                        {formatQuestionText(q.questionText)}
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Image if present */}
-                  {q.imageUrl && (
-                    <div className="my-4 max-w-md mx-auto text-center">
-                      <img src={q.imageUrl} alt="Pregunta" className="max-h-60 mx-auto rounded border border-slate-300" />
-                    </div>
-                  )}
-
-                  {/* Options List */}
-                  <div className="ml-10 grid grid-cols-1 md:grid-cols-2 gap-2 mt-3">
-                    {q.options.map((opt, optIdx) => {
-                      const letter = String.fromCharCode(65 + optIdx);
-                      const isCorrect = optIdx === q.correctIndex;
-
-                      let optionStyle = "border-slate-200 bg-white text-slate-800";
-                      let letterStyle = "border-slate-300 text-slate-700 bg-slate-100";
-
-                      if (printMode === 'SOLVED') {
-                        if (isCorrect) {
-                          optionStyle = "border-emerald-500 bg-emerald-50 text-emerald-950 font-bold";
-                          letterStyle = "bg-emerald-600 text-white border-emerald-600";
-                        }
-                      }
-
-                      return (
-                        <div 
-                          key={optIdx} 
-                          className={`flex items-center gap-3 p-2.5 rounded-lg border text-sm transition-all ${optionStyle}`}
-                        >
-                          <span className={`w-6 h-6 rounded flex items-center justify-center font-black text-xs border shrink-0 ${letterStyle}`}>
-                            {letter}
-                          </span>
-                          <span className="leading-snug">{parseHTMLTags(opt)}</span>
-                          {printMode === 'SOLVED' && isCorrect && (
-                            <span className="ml-auto text-xs font-black text-emerald-700">✓ Correcta</span>
-                          )}
+                        <h3 className="text-lg font-black text-slate-900 mb-3 font-serif">{item.readingText.title}</h3>
+                        <div className="text-slate-800 text-sm font-serif leading-relaxed whitespace-pre-wrap italic bg-white p-4 rounded border border-slate-200">
+                          {item.readingText.content}
                         </div>
-                      );
-                    })}
-                  </div>
+                      </div>
+                    )}
 
-                  {/* Explanation for SOLVED mode */}
-                  {printMode === 'SOLVED' && showExplanations && (
-                    <div className="ml-10 mt-3 p-3 bg-indigo-50/70 border border-indigo-200 rounded-lg text-xs text-indigo-950">
-                      <span className="font-black uppercase text-[10px] text-indigo-800 block mb-0.5">Explicación:</span>
-                      <p className="italic leading-relaxed">{parseHTMLTags(q.explanation)}</p>
+                    {/* Question Header */}
+                    <div className="flex items-start gap-3 mb-3">
+                      <span className="bg-slate-900 text-white font-black text-xs w-7 h-7 rounded flex items-center justify-center shrink-0 mt-0.5">
+                        {idx + 1}
+                      </span>
+                      <div className="flex-1">
+                        <div className="flex flex-wrap items-center gap-2 mb-1.5">
+                          <span className="text-[9px] font-black uppercase bg-indigo-100 text-indigo-900 px-2 py-0.5 rounded">
+                            {item.category}
+                          </span>
+                          <span className="text-[9px] font-bold text-slate-500 uppercase">
+                            {q.subject} • {q.topic}
+                          </span>
+                        </div>
+
+                        <p className="text-base font-bold text-slate-900 leading-snug whitespace-pre-wrap">
+                          {formatQuestionText(q.questionText)}
+                        </p>
+                      </div>
                     </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
+
+                    {/* Image if present */}
+                    {q.imageUrl && (
+                      <div className="my-4 max-w-md mx-auto text-center">
+                        <img src={q.imageUrl} alt="Pregunta" className="max-h-60 mx-auto rounded border border-slate-300" />
+                      </div>
+                    )}
+
+                    {/* Options List */}
+                    <div className="ml-10 grid grid-cols-1 md:grid-cols-2 gap-2 mt-3">
+                      {q.options.map((opt, optIdx) => {
+                        const letter = String.fromCharCode(65 + optIdx);
+                        const isCorrect = optIdx === q.correctIndex;
+
+                        let optionStyle = "border-slate-200 bg-white text-slate-800";
+                        let letterStyle = "border-slate-300 text-slate-700 bg-slate-100";
+
+                        if (printMode === 'SOLVED') {
+                          if (isCorrect) {
+                            optionStyle = "border-emerald-500 bg-emerald-50 text-emerald-950 font-bold";
+                            letterStyle = "bg-emerald-600 text-white border-emerald-600";
+                          }
+                        }
+
+                        return (
+                          <div 
+                            key={optIdx} 
+                            className={`flex items-center gap-3 p-2.5 rounded-lg border text-sm transition-all ${optionStyle}`}
+                          >
+                            <span className={`w-6 h-6 rounded flex items-center justify-center font-black text-xs border shrink-0 ${letterStyle}`}>
+                              {letter}
+                            </span>
+                            <span className="leading-snug">{parseHTMLTags(opt)}</span>
+                            {printMode === 'SOLVED' && isCorrect && (
+                              <span className="ml-auto text-xs font-black text-emerald-700 flex items-center gap-1">
+                                <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" viewBox="0 0 20 20" fill="currentColor">
+                                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                </svg>
+                                <span>Correcta</span>
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* Explanation for SOLVED mode */}
+                    {printMode === 'SOLVED' && showExplanations && (
+                      <div className="ml-10 mt-3 p-3 bg-indigo-50/70 border border-indigo-200 rounded-lg text-xs text-indigo-950">
+                        <span className="font-black uppercase text-[10px] text-indigo-800 block mb-0.5">Explicación:</span>
+                        <p className="italic leading-relaxed">{parseHTMLTags(q.explanation)}</p>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
 
           {/* Answer Key section for BLANK print mode */}
           {printMode === 'BLANK' && showAnswerKey && (

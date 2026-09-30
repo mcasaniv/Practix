@@ -1,8 +1,8 @@
 
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Question, ReadingText, Flashcard } from '../types';
-import { ACADEMIC_STRUCTURE, ADMISSION_PROCESSES, DEFAULT_ADMISSION_PROCESS } from '../constants';
-import { formatQuestionText, parseHTMLTags, getQuestionProcess, getProcessBadgeStyle } from '../utils';
+import { ACADEMIC_STRUCTURE, ADMISSION_PROCESSES, DEFAULT_ADMISSION_PROCESS, CEPRE_BASE_TYPES } from '../constants';
+import { formatQuestionText, parseHTMLTags, getQuestionProcess, getProcessBadgeStyle, getProcessShortName, getAvailableProcesses, getOfficialSubjectWeight, ALL_ACADEMIC_SUBJECTS } from '../utils';
 
 interface AdminViewProps {
   questions: Question[];
@@ -146,7 +146,9 @@ const AdminView: React.FC<AdminViewProps> = ({
   const [course, setCourse] = useState('');
   const [subject, setSubject] = useState('');
   const [topic, setTopic] = useState('');
-  const [process, setProcess] = useState<string>(DEFAULT_ADMISSION_PROCESS);
+  const [cepreType, setCepreType] = useState<string>('Ceprunsa I Fase');
+  const [cepreYear, setCepreYear] = useState<string>('2027');
+  const [customProcessText, setCustomProcessText] = useState<string>('');
   const [week, setWeek] = useState<number | ''>('');
   const [questionText, setQuestionText] = useState('');
   const [options, setOptions] = useState<string[]>(['', '', '', '', '']);
@@ -156,6 +158,50 @@ const AdminView: React.FC<AdminViewProps> = ({
   const [explanationImageUrl, setExplanationImageUrl] = useState('');
   const [readingTextId, setReadingTextId] = useState('');
   const [imageUrl, setImageUrl] = useState('');
+
+  // Official Exam state (para Exámenes / Simulacros Oficiales)
+  const [examArea, setExamArea] = useState<'Biomédicas' | 'Ingenierías' | 'Sociales'>('Biomédicas');
+  const [examTargetSubject, setExamTargetSubject] = useState<string>('Física');
+  const [examCustomWeight, setExamCustomWeight] = useState<string>('');
+
+  const isOfficialExamCourse = course === 'Exámenes' || subject === 'Simulacros Oficiales' || subject === 'Exámenes Simulacros';
+
+  const officialAutoWeight = useMemo(() => {
+    return getOfficialSubjectWeight(examTargetSubject, examArea);
+  }, [examTargetSubject, examArea]);
+
+  const effectiveWeight = useMemo(() => {
+    if (examCustomWeight && !isNaN(Number(examCustomWeight)) && Number(examCustomWeight) > 0) {
+      return Number(examCustomWeight);
+    }
+    return officialAutoWeight;
+  }, [examCustomWeight, officialAutoWeight]);
+
+  const resolvedProcess = useMemo(() => {
+    if (cepreType === 'Mazo Propio (Sin Cepre)') {
+      return 'Mazo Propio (Sin Cepre)';
+    }
+    if (cepreType === 'Personalizado / Otro') {
+      return customProcessText.trim() || 'Proceso Personalizado';
+    }
+    const yr = cepreYear.trim();
+    return yr ? `${cepreType} ${yr}` : cepreType;
+  }, [cepreType, cepreYear, customProcessText]);
+
+  // Lista amplia de años históricos y futuros + años detectados en el banco
+  const existingYearsInDb = useMemo(() => {
+    const years = new Set<string>();
+    // Generar años desde 2030 hacia atrás hasta 2012
+    for (let y = 2030; y >= 2012; y--) {
+      years.add(String(y));
+    }
+    // Añadir cualquier año presente en las preguntas cargadas
+    questions.forEach(q => {
+      const match = q.process?.match(/\b(19\d\d|20\d\d)\b/);
+      if (match) years.add(match[0]);
+    });
+    return Array.from(years).sort((a, b) => Number(b) - Number(a));
+  }, [questions]);
 
   const previewRef = useRef<HTMLDivElement>(null);
   const fcPreviewRef = useRef<HTMLDivElement>(null);
@@ -238,7 +284,12 @@ const AdminView: React.FC<AdminViewProps> = ({
       setCourse('');
       setSubject('');
       setTopic('');
-      setProcess(DEFAULT_ADMISSION_PROCESS);
+      setCepreType('Ceprunsa I Fase');
+      setCepreYear('2027');
+      setCustomProcessText('');
+      setExamArea('Biomédicas');
+      setExamTargetSubject('Física');
+      setExamCustomWeight('');
     }
   };
 
@@ -260,11 +311,11 @@ const AdminView: React.FC<AdminViewProps> = ({
       return;
     }
 
-    const qData = {
+    const qData: Partial<Question> = {
       course,
       subject,
       topic,
-      process: process && process.trim() ? process.trim() : DEFAULT_ADMISSION_PROCESS,
+      process: resolvedProcess,
       questionText,
       options: [...options],
       correctIndex,
@@ -273,7 +324,10 @@ const AdminView: React.FC<AdminViewProps> = ({
       imageUrl: imageUrl || undefined,
       optionsImageUrls: optionsImageUrls.some(url => url) ? [...optionsImageUrls] : undefined,
       explanationImageUrl: explanationImageUrl || undefined,
-      week: week !== '' ? Number(week) : undefined
+      week: week !== '' ? Number(week) : undefined,
+      targetSubject: isOfficialExamCourse ? examTargetSubject : undefined,
+      area: isOfficialExamCourse ? examArea : undefined,
+      weight: isOfficialExamCourse ? effectiveWeight : undefined
     };
 
     if (isEditing) {
@@ -320,7 +374,40 @@ const AdminView: React.FC<AdminViewProps> = ({
     setCourse(q.course);
     setSubject(q.subject);
     setTopic(q.topic);
-    setProcess(q.process || DEFAULT_ADMISSION_PROCESS);
+    
+    const qProc = q.process || DEFAULT_ADMISSION_PROCESS;
+    if (qProc === 'Mazo Propio (Sin Cepre)') {
+      setCepreType('Mazo Propio (Sin Cepre)');
+      setCepreYear('');
+      setCustomProcessText('');
+    } else {
+      const matchedBase = CEPRE_BASE_TYPES.find(b => b !== 'Mazo Propio (Sin Cepre)' && b !== 'Personalizado / Otro' && qProc.startsWith(b));
+      if (matchedBase) {
+        setCepreType(matchedBase);
+        const yr = qProc.replace(matchedBase, '').trim();
+        setCepreYear(yr || '2027');
+        setCustomProcessText('');
+      } else {
+        const yearMatch = qProc.match(/\b\d{4}\b/);
+        if (yearMatch) {
+          const yr = yearMatch[0];
+          const withoutYear = qProc.replace(yr, '').trim();
+          const baseCandidate = CEPRE_BASE_TYPES.find(b => withoutYear.toLowerCase().includes(b.toLowerCase()));
+          if (baseCandidate) {
+            setCepreType(baseCandidate);
+            setCepreYear(yr);
+            setCustomProcessText('');
+          } else {
+            setCepreType('Personalizado / Otro');
+            setCustomProcessText(qProc);
+          }
+        } else {
+          setCepreType('Personalizado / Otro');
+          setCustomProcessText(qProc);
+        }
+      }
+    }
+
     setQuestionText(q.questionText);
     setOptions([...q.options]);
     setOptionsImageUrls(q.optionsImageUrls ? [...q.optionsImageUrls] : ['', '', '', '', '']);
@@ -330,6 +417,17 @@ const AdminView: React.FC<AdminViewProps> = ({
     setReadingTextId(q.readingTextId || '');
     setImageUrl(q.imageUrl || '');
     setWeek(q.week !== undefined && q.week !== null ? q.week : '');
+    if (q.targetSubject) {
+      setExamTargetSubject(q.targetSubject);
+    }
+    if (q.area) {
+      setExamArea(q.area);
+    }
+    if (q.weight) {
+      setExamCustomWeight(String(q.weight));
+    } else {
+      setExamCustomWeight('');
+    }
     setActiveTab('EDITOR');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -534,6 +632,10 @@ const AdminView: React.FC<AdminViewProps> = ({
   const [manageFilterSubject, setManageFilterSubject] = useState('');
   const [manageFilterProcess, setManageFilterProcess] = useState('');
 
+  const availableProcessesList = useMemo(() => {
+    return getAvailableProcesses(questions);
+  }, [questions]);
+
   const filteredQuestions = useMemo(() => {
     return questions.filter(q => {
       const matchCourse = !manageFilterCourse || q.course === manageFilterCourse;
@@ -590,7 +692,11 @@ const AdminView: React.FC<AdminViewProps> = ({
           <div className="lg:col-span-7 space-y-6">
             <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-800 p-6 md:p-8">
               <h2 className="text-2xl font-black text-gray-800 dark:text-gray-100 mb-6 flex items-center gap-3">
-                <span className="bg-indigo-600 dark:bg-indigo-700 text-white p-2 rounded-lg">📝</span>
+                <span className="bg-indigo-600 dark:bg-indigo-700 text-white p-2 rounded-lg">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                  </svg>
+                </span>
                 {isEditing ? 'Editar Pregunta' : 'Nueva Pregunta'}
               </h2>
 
@@ -609,18 +715,186 @@ const AdminView: React.FC<AdminViewProps> = ({
                     {availableSubjects.map(s => <option key={s} value={s}>{s}</option>)}
                   </select>
                 </div>
-                <div>
-                  <label className="block text-xs font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-2">Proceso de Admisión</label>
-                  <select 
-                    value={process} 
-                    onChange={(e) => setProcess(e.target.value)} 
-                    className="w-full bg-gray-50 dark:bg-slate-800 border dark:border-slate-700 rounded-xl p-3 outline-none dark:text-gray-200 font-medium"
-                  >
-                    {ADMISSION_PROCESSES.map(p => (
-                      <option key={p} value={p}>{p}</option>
-                    ))}
-                  </select>
+
+                {/* Selector intuitivo y flexible de Cepre y cualquier Año */}
+                <div className="md:col-span-2 bg-indigo-50/40 dark:bg-slate-800/80 p-4 rounded-2xl border border-indigo-100 dark:border-slate-700/80 space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                    <div>
+                      <label className="block text-xs font-black text-indigo-900 dark:text-indigo-300 uppercase tracking-widest">
+                        Proceso de Admisión (Cepre y Año)
+                      </label>
+                      <p className="text-[11px] text-gray-500 dark:text-gray-400">
+                        Selecciona el Cepre y escribe o elige cualquier año sin restricciones.
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-1.5 self-start sm:self-auto">
+                      <span className="text-[11px] font-bold text-gray-400 uppercase">Resultado:</span>
+                      <span className="font-mono font-black text-xs bg-indigo-600 text-white px-2.5 py-1 rounded-lg shadow-sm">
+                        {resolvedProcess}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 pt-1">
+                    {/* Selector de Cepre base */}
+                    <div className={cepreType === 'Mazo Propio (Sin Cepre)' ? 'sm:col-span-12' : cepreType === 'Personalizado / Otro' ? 'sm:col-span-5' : 'sm:col-span-6'}>
+                      <label className="block text-[11px] font-bold text-gray-500 dark:text-gray-400 uppercase mb-1">
+                        Tipo de Cepre / Programa
+                      </label>
+                      <select 
+                        value={cepreType} 
+                        onChange={(e) => setCepreType(e.target.value)} 
+                        className="w-full bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-xl p-2.5 text-sm outline-none dark:text-gray-100 font-bold focus:ring-2 focus:ring-indigo-500 shadow-sm"
+                      >
+                        {CEPRE_BASE_TYPES.map(b => (
+                          <option key={b} value={b}>{b}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Input y Selector de Año para CUALQUIER año */}
+                    {cepreType !== 'Mazo Propio (Sin Cepre)' && cepreType !== 'Personalizado / Otro' && (
+                      <div className="sm:col-span-6">
+                        <label className="block text-[11px] font-bold text-gray-500 dark:text-gray-400 uppercase mb-1">
+                          Año (Escribe cualquiera o selecciona)
+                        </label>
+                        <div className="flex gap-2 items-center">
+                          {/* Campo numérico libre para escribir CUALQUIER año */}
+                          <div className="relative w-28 shrink-0">
+                            <input
+                              type="number"
+                              min="1990"
+                              max="2040"
+                              placeholder="Ej: 2027"
+                              value={cepreYear}
+                              onChange={(e) => setCepreYear(e.target.value)}
+                              className="w-full bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-xl p-2.5 text-sm font-black font-mono outline-none dark:text-gray-100 text-center focus:ring-2 focus:ring-indigo-500 shadow-sm"
+                              title="Escribe cualquier año libremente"
+                            />
+                          </div>
+
+                          {/* Selector desplegable con todos los años disponibles */}
+                          <select
+                            value={existingYearsInDb.includes(cepreYear) ? cepreYear : ''}
+                            onChange={(e) => {
+                              if (e.target.value) setCepreYear(e.target.value);
+                            }}
+                            className="flex-1 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-xl p-2.5 text-xs font-bold outline-none dark:text-gray-100 focus:ring-2 focus:ring-indigo-500 shadow-sm cursor-pointer"
+                          >
+                            <option value="">Años rápidos...</option>
+                            {existingYearsInDb.map(yr => (
+                              <option key={yr} value={yr}>Año {yr}</option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Campo personalizado para cualquier texto libre */}
+                    {cepreType === 'Personalizado / Otro' && (
+                      <div className="sm:col-span-7">
+                        <label className="block text-[11px] font-bold text-gray-500 dark:text-gray-400 uppercase mb-1">
+                          Nombre Completo del Proceso
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="Ej: Ceprunsa I Fase 2023, Mazo General..."
+                          value={customProcessText}
+                          onChange={(e) => setCustomProcessText(e.target.value)}
+                          className="w-full bg-white dark:bg-slate-900 border border-indigo-400 rounded-xl p-2.5 text-sm font-bold outline-none dark:text-gray-100 focus:ring-2 focus:ring-indigo-500"
+                        />
+                      </div>
+                    )}
+                  </div>
                 </div>
+
+                {/* Panel exclusivo para Exámenes Oficiales: Selección de Área y Materia Académica */}
+                {isOfficialExamCourse && (
+                  <div className="md:col-span-2 bg-gradient-to-br from-indigo-50/70 to-purple-50/70 dark:from-indigo-950/40 dark:to-purple-950/40 p-4 sm:p-5 rounded-2xl border-2 border-indigo-200 dark:border-indigo-800 space-y-4 shadow-sm animate-fade-in">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-indigo-100 dark:border-indigo-900/60 pb-3">
+                      <div>
+                        <h4 className="text-sm font-black text-indigo-900 dark:text-indigo-200 flex items-center gap-2">
+                          <span className="p-1.5 bg-indigo-600 text-white rounded-lg">
+                            <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                          </span>
+                          <span>Especificación de Materia y Área del Examen</span>
+                        </h4>
+                        <p className="text-[11px] text-gray-600 dark:text-gray-300 mt-0.5">
+                          En un simulacro oficial cada pregunta pertenece a una materia (Física, Literatura, etc.) y tiene un valor distinto según el Área.
+                        </p>
+                      </div>
+                      <div className="bg-indigo-600 text-white px-3 py-1.5 rounded-xl font-mono text-xs font-black self-start sm:self-auto shrink-0 shadow-sm flex items-center gap-1.5">
+                        <span className="text-[10px] uppercase font-bold text-indigo-200">Valor:</span>
+                        <span>{effectiveWeight.toFixed(5)} pts</span>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      {/* 1. Selector de Área */}
+                      <div>
+                        <label className="block text-[11px] font-black uppercase tracking-wider text-indigo-900 dark:text-indigo-300 mb-2">
+                          Área del Examen Evaluado:
+                        </label>
+                        <div className="grid grid-cols-3 gap-2">
+                          {(['Biomédicas', 'Ingenierías', 'Sociales'] as const).map(areaOption => (
+                            <button
+                              key={areaOption}
+                              type="button"
+                              onClick={() => setExamArea(areaOption)}
+                              className={`py-2 px-2 text-xs font-black rounded-xl transition-all text-center min-h-[40px] flex items-center justify-center ${
+                                examArea === areaOption
+                                  ? 'bg-indigo-600 text-white shadow-md'
+                                  : 'bg-white dark:bg-slate-900 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-slate-700 hover:border-indigo-400'
+                              }`}
+                            >
+                              {areaOption}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* 2. Selector de Materia Académica de esta Pregunta */}
+                      <div>
+                        <label className="block text-[11px] font-black uppercase tracking-wider text-indigo-900 dark:text-indigo-300 mb-2">
+                          ¿De qué materia es esta pregunta?:
+                        </label>
+                        <select
+                          value={examTargetSubject}
+                          onChange={(e) => setExamTargetSubject(e.target.value)}
+                          className="w-full bg-white dark:bg-slate-900 border-2 border-indigo-300 dark:border-indigo-700 rounded-xl p-2.5 text-sm font-black outline-none text-indigo-950 dark:text-indigo-100 focus:ring-2 focus:ring-indigo-500 shadow-sm"
+                        >
+                          {ALL_ACADEMIC_SUBJECTS.map(subjName => (
+                            <option key={subjName} value={subjName}>
+                              {subjName} ({getOfficialSubjectWeight(subjName, examArea).toFixed(3)} pts en {examArea})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* Nota explicativa de equivalencia */}
+                    <div className="p-3 bg-white/70 dark:bg-slate-900/70 rounded-xl border border-indigo-100 dark:border-slate-800 text-xs text-gray-600 dark:text-gray-300 flex items-center justify-between flex-wrap gap-2">
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-indigo-600 dark:text-indigo-400">{examTargetSubject}:</span>
+                        <span>Vale <strong>{officialAutoWeight.toFixed(5)} puntos</strong> en {examArea}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[11px] text-gray-400">Puntaje personalizado (opc):</span>
+                        <input
+                          type="number"
+                          step="0.0001"
+                          placeholder={officialAutoWeight.toFixed(5)}
+                          value={examCustomWeight}
+                          onChange={(e) => setExamCustomWeight(e.target.value)}
+                          className="w-24 bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-700 rounded-lg px-2 py-1 text-xs font-mono font-bold outline-none"
+                          title="Si deseas asignar un puntaje diferente al oficial"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div className="sm:col-span-2">
                     <label className="block text-xs font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-2">Tema / Práctica</label>
@@ -650,7 +924,7 @@ const AdminView: React.FC<AdminViewProps> = ({
 
               {/* LaTeX Guide */}
               <div className="mb-6 p-4 bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800 rounded-xl">
-                <h4 className="text-amber-800 dark:text-amber-300 font-bold text-xs uppercase mb-2">📐 Guía Latex</h4>
+                <h4 className="text-amber-800 dark:text-amber-300 font-bold text-xs uppercase mb-2">Guía LaTeX</h4>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-[10px] font-mono text-amber-700 dark:text-amber-400">
                   <div className="p-1 bg-white/50 dark:bg-slate-800 rounded">{'Potencia: $x^2$'}</div>
                   <div className="p-1 bg-white/50 dark:bg-slate-800 rounded">{'Raíz: $\\sqrt{x}$'}</div>
@@ -733,12 +1007,21 @@ const AdminView: React.FC<AdminViewProps> = ({
                     <p className="text-gray-700 dark:text-gray-300 text-sm font-medium line-clamp-2 mt-1">{parseHTMLTags(q.questionText)}</p>
                     <div className="mt-2 text-[10px] text-gray-400 uppercase font-black tracking-tighter flex items-center gap-1.5 flex-wrap">
                       <span>{q.subject}</span>
+                      {q.targetSubject && (
+                        <span className="bg-emerald-100 dark:bg-emerald-950 font-black text-emerald-700 dark:text-emerald-300 px-1.5 py-0.5 rounded text-[8px] border border-emerald-200 dark:border-emerald-800">
+                          {q.targetSubject} {q.weight ? `• ${q.weight.toFixed(3)} pts` : ''}
+                        </span>
+                      )}
+                      {q.area && (
+                        <span className="bg-purple-100 dark:bg-purple-950 font-black text-purple-700 dark:text-purple-300 px-1.5 py-0.5 rounded text-[8px] border border-purple-200 dark:border-purple-800">
+                          {q.area}
+                        </span>
+                      )}
                       {(() => {
                         const proc = getQuestionProcess(q);
                         const style = getProcessBadgeStyle(proc);
                         return (
                           <span className={`${style.bg} ${style.text} ${style.border} border font-black px-1.5 py-0.5 rounded text-[8px] flex items-center gap-0.5`}>
-                            <span>{style.icon}</span>
                             <span>{proc}</span>
                           </span>
                         );
@@ -756,7 +1039,7 @@ const AdminView: React.FC<AdminViewProps> = ({
             </div>
 
             <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-800 p-6 md:p-8 sticky top-[100px]">
-              <h3 className="text-xl font-bold text-gray-800 dark:text-gray-100 mb-6 flex items-center gap-2">👁️ Vista Previa Real</h3>
+              <h3 className="text-xl font-bold text-gray-800 dark:text-gray-100 mb-6 flex items-center gap-2">Vista Previa Real</h3>
               <div ref={previewRef} className="space-y-4 max-h-[40vh] overflow-y-auto pr-2">
                 <div className="p-4 bg-gray-50 dark:bg-slate-800 border dark:border-slate-700 rounded-xl text-sm whitespace-pre-wrap">
                   {questionText ? formatQuestionText(questionText) : <span className="text-gray-400 italic">Escribe algo...</span>}
@@ -778,7 +1061,9 @@ const AdminView: React.FC<AdminViewProps> = ({
       {activeTab === 'TEXTS' && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-800 p-8">
-            <h2 className="text-2xl font-black text-gray-800 dark:text-gray-100 mb-6 flex items-center gap-3">📖 {editingTextId ? 'Editar Lectura' : 'Nueva Lectura'}</h2>
+            <h2 className="text-2xl font-black text-gray-800 dark:text-gray-100 mb-6 flex items-center gap-3">
+              {editingTextId ? 'Editar Lectura' : 'Nueva Lectura'}
+            </h2>
             <div className="space-y-4">
               <select value={textSubject} onChange={(e) => setTextSubject(e.target.value)} className="w-full bg-gray-50 dark:bg-slate-800 border dark:border-slate-700 rounded-xl p-3 outline-none dark:text-gray-200">
                 <option value="Comprensión Lectora">Comprensión Lectora</option>
@@ -801,8 +1086,16 @@ const AdminView: React.FC<AdminViewProps> = ({
                   <p className="text-xs text-gray-400 line-clamp-2">{t.content}</p>
                 </div>
                 <div className="flex gap-2">
-                  <button onClick={() => handleEditExistingText(t)} className="p-2 text-indigo-400">✏️</button>
-                  <button onClick={() => setTextToDelete(t.id)} className="p-2 text-rose-400">🗑️</button>
+                  <button onClick={() => handleEditExistingText(t)} className="p-2 text-indigo-400 hover:text-indigo-600 transition-colors" title="Editar">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                    </svg>
+                  </button>
+                  <button onClick={() => setTextToDelete(t.id)} className="p-2 text-rose-400 hover:text-rose-600 transition-colors" title="Eliminar">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                  </button>
                 </div>
               </div>
             ))}
@@ -824,7 +1117,7 @@ const AdminView: React.FC<AdminViewProps> = ({
                 className="bg-gray-50 dark:bg-slate-800 border dark:border-slate-700 rounded-xl px-3.5 py-2 text-xs font-semibold outline-none dark:text-gray-200"
               >
                 <option value="">Todos los Procesos</option>
-                {ADMISSION_PROCESSES.map(p => <option key={p} value={p}>{p}</option>)}
+                {availableProcessesList.map(p => <option key={p} value={p}>{p}</option>)}
               </select>
               <select 
                 value={manageFilterCourse} 
@@ -847,14 +1140,31 @@ const AdminView: React.FC<AdminViewProps> = ({
                       <span className="bg-indigo-50 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400 text-[10px] font-black px-2 py-0.5 rounded uppercase">
                         {q.subject}
                       </span>
+                      {q.targetSubject && (
+                        <span className="bg-emerald-50 dark:bg-emerald-900/50 text-emerald-600 dark:text-emerald-400 text-[10px] font-black px-2 py-0.5 rounded uppercase border border-emerald-200 dark:border-emerald-800">
+                          {q.targetSubject} {q.weight ? `• ${q.weight.toFixed(3)} pts` : ''}
+                        </span>
+                      )}
+                      {q.area && (
+                        <span className="bg-purple-50 dark:bg-purple-900/50 text-purple-600 dark:text-purple-400 text-[10px] font-black px-2 py-0.5 rounded uppercase border border-purple-200 dark:border-purple-800">
+                          {q.area}
+                        </span>
+                      )}
                       <span className={`${procStyle.bg} ${procStyle.text} ${procStyle.border} border text-[9px] font-black px-2 py-0.5 rounded flex items-center gap-1`}>
-                        <span>{procStyle.icon}</span>
                         <span>{proc}</span>
                       </span>
                     </div>
                     <div className="flex gap-1.5 shrink-0">
-                      <button onClick={() => handleEditExisting(q)} className="p-1 text-indigo-400 hover:text-indigo-600 dark:hover:text-indigo-300 transition-colors" title="Editar">✏️</button>
-                      <button onClick={() => handleDeleteExisting(q.id)} className="p-1 text-rose-400 hover:text-rose-600 dark:hover:text-rose-300 transition-colors" title="Eliminar">🗑️</button>
+                      <button onClick={() => handleEditExisting(q)} className="p-1 text-indigo-400 hover:text-indigo-600 dark:hover:text-indigo-300 transition-colors" title="Editar">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                        </svg>
+                      </button>
+                      <button onClick={() => handleDeleteExisting(q.id)} className="p-1 text-rose-400 hover:text-rose-600 dark:hover:text-rose-300 transition-colors" title="Eliminar">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                      </button>
                     </div>
                   </div>
                   <p className="text-sm font-medium mb-4 line-clamp-3 whitespace-pre-wrap dark:text-gray-200">{parseHTMLTags(q.questionText)}</p>
@@ -878,7 +1188,11 @@ const AdminView: React.FC<AdminViewProps> = ({
           {/* Individual Form */}
           <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-800 p-6 md:p-8">
             <h2 className="text-2xl font-black text-gray-800 dark:text-gray-100 mb-6 flex items-center gap-3">
-              <span className="bg-indigo-600 text-white p-2 rounded-lg">🎴</span>
+              <span className="bg-indigo-600 text-white p-2 rounded-lg">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                </svg>
+              </span>
               Nueva Flashcard
             </h2>
             
@@ -917,7 +1231,7 @@ const AdminView: React.FC<AdminViewProps> = ({
 
               {/* Dynamic Preview face recto-verso */}
               <div className="p-4 bg-gray-50 dark:bg-slate-800 border dark:border-slate-700 rounded-xl">
-                <h4 className="text-xs font-black text-indigo-500 uppercase mb-2">👁️ Vista Previa de Tarjeta</h4>
+                <h4 className="text-xs font-black text-indigo-500 uppercase mb-2">Vista Previa de Tarjeta</h4>
                 <div className="grid grid-cols-2 gap-3 text-xs" ref={fcPreviewRef}>
                   <div className="p-3 bg-white dark:bg-slate-900 border rounded-lg min-h-[80px]">
                     <span className="font-bold block text-[10px] text-gray-400 uppercase mb-1">Anverso:</span>
@@ -940,7 +1254,11 @@ const AdminView: React.FC<AdminViewProps> = ({
           <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-800 p-6 md:p-8 flex flex-col justify-between">
             <div>
               <h2 className="text-2xl font-black text-gray-800 dark:text-gray-100 mb-6 flex items-center gap-3">
-                <span className="bg-indigo-600 text-white p-2 rounded-lg">⚡</span>
+                <span className="bg-indigo-600 text-white p-2 rounded-lg">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                  </svg>
+                </span>
                 Carga en Masa de Flashcards
               </h2>
               
@@ -1102,7 +1420,11 @@ const AdminView: React.FC<AdminViewProps> = ({
         <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-800 p-6 md:p-8 animate-fade-in text-gray-800 dark:text-gray-100">
           <div className="mb-6">
             <h2 className="text-2xl font-black text-gray-800 dark:text-gray-100 flex items-center gap-3">
-              <span className="bg-indigo-600 dark:bg-indigo-700 text-white p-2 rounded-lg">🖼️</span>
+              <span className="bg-indigo-600 dark:bg-indigo-700 text-white p-2 rounded-lg">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+              </span>
               Portadas de Cursos
             </h2>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
@@ -1204,7 +1526,11 @@ const AdminView: React.FC<AdminViewProps> = ({
           <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 md:p-8 max-w-xl w-full shadow-2xl border border-gray-100 dark:border-slate-800 my-8">
             <div className="flex justify-between items-center mb-6">
               <h3 className="text-xl md:text-2xl font-black text-gray-900 dark:text-white flex items-center gap-2">
-                <span className="p-1.5 bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 rounded-lg">✏️</span>
+                <span className="p-1.5 bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 rounded-lg">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                  </svg>
+                </span>
                 Editar Flashcard
               </h3>
               <button 
