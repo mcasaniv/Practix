@@ -842,7 +842,7 @@ const App: React.FC = () => {
   const showNavbar = nav.view !== 'FLASHCARDS_PLAY' && nav.view !== 'QUIZ' && nav.view !== 'MEGA_QUIZ' && nav.view !== 'MIXED_QUIZ';
 
   return (
-    <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-slate-950 transition-colors duration-300">
+    <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-slate-950 transition-colors duration-300 w-full overflow-x-hidden">
       {showNavbar && (
         <Navbar 
           onNavigate={handleNavigate} 

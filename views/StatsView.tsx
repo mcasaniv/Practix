@@ -13,6 +13,8 @@ interface StatsViewProps {
   onUpdateProfile?: (profile: UserProfile) => void;
 }
 
+const STATS_PROCESS_STORAGE_KEY = 'practix_stats_selected_process';
+
 export const StatsView: React.FC<StatsViewProps> = ({
   questions,
   results,
@@ -23,7 +25,27 @@ export const StatsView: React.FC<StatsViewProps> = ({
   onUpdateProfile
 }) => {
   const [expandedCourse, setExpandedCourse] = useState<string | null>(null);
-  const [selectedProcess, setSelectedProcess] = useState<string>(''); // '' = Todos los procesos
+  const [selectedProcess, setSelectedProcessState] = useState<string>(() => {
+    try {
+      return localStorage.getItem(STATS_PROCESS_STORAGE_KEY) || '';
+    } catch {
+      return '';
+    }
+  });
+
+  const setSelectedProcess = (proc: string) => {
+    setSelectedProcessState(proc);
+    try {
+      if (proc) {
+        localStorage.setItem(STATS_PROCESS_STORAGE_KEY, proc);
+      } else {
+        localStorage.removeItem(STATS_PROCESS_STORAGE_KEY);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   const [profileName, setProfileName] = useState(userProfile?.name || 'Estudiante Practix');
   const [profileAvatarUrl, setProfileAvatarUrl] = useState(userProfile?.avatarUrl || '');
   const [savedAlert, setSavedAlert] = useState(false);

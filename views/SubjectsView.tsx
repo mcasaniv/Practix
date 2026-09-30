@@ -26,7 +26,7 @@ const SubjectsView: React.FC<SubjectsViewProps> = ({
     <div className="space-y-6 sm:space-y-8">
       {/* Header */}
       <div className="flex items-center gap-3.5 sm:gap-4">
-        <div className={`w-12 h-12 sm:w-14 sm:h-14 rounded-2xl overflow-hidden shadow-md ${course.color.split(' ')[0]} dark:opacity-90 shrink-0`}>
+        <div className={`w-14 h-14 sm:w-16 sm:h-16 rounded-2xl overflow-hidden shadow-md ${course.color.split(' ')[0]} dark:opacity-90 shrink-0`}>
           <img 
             src={course.icon} 
             alt={courseName} 
@@ -47,11 +47,8 @@ const SubjectsView: React.FC<SubjectsViewProps> = ({
       </div>
       
       {/* Subjects Grid */}
-      <div 
-        className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 p-3 sm:p-4 rounded-3xl"
-        style={{ backgroundColor: '#020126' }}
-      >
-        {course.subjects.map((subject, index) => {
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+        {course.subjects.map((subject) => {
           const subjectQuestionsCount = questions.filter(q => q.subject === subject).length;
           const isSavedExamsSubject = subject === 'Exámenes Rendidos' || subject === 'Exámenes Simulacros';
           const isOfficialExamsSubject = subject === 'Simulacros Oficiales';
@@ -60,12 +57,9 @@ const SubjectsView: React.FC<SubjectsViewProps> = ({
             <div 
               key={subject}
               onClick={() => onSelectSubject(subject)}
-              className="bg-white dark:bg-[#020b38] border border-gray-100 dark:border-indigo-900/50 hover:dark:border-indigo-600/70 rounded-2xl p-4 sm:p-5 shadow-sm hover:shadow-md active:scale-[0.98] cursor-pointer group transition-all flex items-center justify-between min-h-[58px]"
+              className="bg-white dark:bg-[#060a22] border border-gray-100 dark:border-indigo-950/80 hover:border-indigo-200 hover:dark:border-indigo-800/80 rounded-2xl p-4 sm:p-5 shadow-sm hover:shadow-md active:scale-[0.98] cursor-pointer group transition-all flex items-center justify-between min-h-[58px]"
             >
-              <div 
-                className="min-w-0 pr-3 rounded-xl p-1.5"
-                style={index === 1 ? { backgroundColor: '#000523' } : undefined}
-              >
+              <div className="min-w-0 pr-3">
                 <h3 className="text-base sm:text-lg font-black text-gray-800 dark:text-gray-100 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors truncate">
                   {subject}
                 </h3>
@@ -83,7 +77,7 @@ const SubjectsView: React.FC<SubjectsViewProps> = ({
                         : 'Sin preguntas registradas')}
                 </span>
               </div>
-              <div className="w-8 h-8 rounded-full bg-indigo-50 dark:bg-indigo-900/50 flex items-center justify-center text-indigo-600 dark:text-indigo-300 border border-indigo-100 dark:border-indigo-800/60 group-hover:bg-indigo-600 group-hover:text-white dark:group-hover:bg-indigo-600 dark:group-hover:text-white transition-all shrink-0">
+              <div className="w-8 h-8 rounded-full bg-indigo-50 dark:bg-indigo-950/80 flex items-center justify-center text-indigo-600 dark:text-indigo-300 border border-indigo-100 dark:border-indigo-900/60 group-hover:bg-indigo-600 group-hover:text-white dark:group-hover:bg-indigo-600 dark:group-hover:text-white transition-all shrink-0">
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 group-hover:translate-x-0.5 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" />
                 </svg>

@@ -204,7 +204,7 @@ const HomeView: React.FC<HomeViewProps> = ({
             >
               <div>
                 <div className="flex items-center gap-3.5 mb-3">
-                  <div className={`w-12 h-12 rounded-xl overflow-hidden ${course.color.split(' ')[0]} dark:opacity-90 relative shadow-inner shrink-0`}>
+                  <div className={`w-14 h-14 sm:w-16 sm:h-16 rounded-2xl overflow-hidden ${course.color.split(' ')[0]} dark:opacity-90 relative shadow-inner shrink-0`}>
                     <img 
                       src={course.icon} 
                       alt={course.name} 

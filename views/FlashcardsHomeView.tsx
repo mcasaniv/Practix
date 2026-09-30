@@ -146,7 +146,7 @@ const FlashcardsHomeView: React.FC<FlashcardsHomeViewProps> = ({
                   </div>
                 )}
 
-                <div className={`w-12 h-12 rounded-xl overflow-hidden mb-3.5 ${course.color.split(' ')[0]} dark:opacity-90 relative shadow-inner`}>
+                <div className={`w-14 h-14 sm:w-16 sm:h-16 rounded-2xl overflow-hidden mb-3.5 ${course.color.split(' ')[0]} dark:opacity-90 relative shadow-inner`}>
                   <img 
                     src={course.icon} 
                     alt={course.name} 

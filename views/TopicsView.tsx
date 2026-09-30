@@ -506,11 +506,11 @@ const TopicsView: React.FC<TopicsViewProps> = ({
 
       {/* Exámenes Registrados y Resueltos Section (Solo para Exámenes Rendidos / Exámenes Simulacros) */}
       {(subjectName === 'Exámenes Rendidos' || subjectName === 'Exámenes Simulacros') && (
-        <div className="bg-white dark:bg-[#030718] border border-gray-100 dark:border-indigo-950/70 rounded-3xl p-6 md:p-8 shadow-sm">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 pb-4 border-b border-gray-100 dark:border-indigo-950/50">
+        <div className="bg-white dark:bg-slate-900/60 border border-gray-100 dark:border-slate-800 rounded-3xl p-6 md:p-8 shadow-sm">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 pb-4 border-b border-gray-100 dark:border-slate-800">
             <div>
               <div className="flex items-center gap-2 mb-1">
-                <span className="p-2 bg-indigo-100 dark:bg-indigo-950/70 text-indigo-600 dark:text-indigo-300 rounded-xl text-lg">
+                <span className="p-2 bg-indigo-50 dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 rounded-xl text-lg border border-indigo-100 dark:border-slate-700">
                   <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
                   </svg>
@@ -535,8 +535,8 @@ const TopicsView: React.FC<TopicsViewProps> = ({
           </div>
 
           {(!savedExams || savedExams.length === 0) ? (
-            <div className="text-center py-10 bg-gray-50 dark:bg-[#030718]/90 rounded-2xl border-2 border-dashed border-gray-200 dark:border-indigo-950 p-8">
-              <div className="w-12 h-12 mx-auto mb-3 text-indigo-400 dark:text-indigo-400 flex items-center justify-center">
+            <div className="text-center py-10 bg-gray-50/70 dark:bg-slate-900/40 rounded-2xl border-2 border-dashed border-gray-200 dark:border-slate-800 p-8">
+              <div className="w-12 h-12 mx-auto mb-3 text-indigo-500 dark:text-indigo-400 flex items-center justify-center">
                 <svg xmlns="http://www.w3.org/2000/svg" className="w-10 h-10" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M5 19a2 2 0 01-2-2V7a2 2 0 012-2h4l2 2h4a2 2 0 012 2v1M5 19h14a2 2 0 002-2v-5a2 2 0 00-2-2H9a2 2 0 00-2 2v5a2 2 0 01-2 2z" />
                 </svg>
@@ -577,16 +577,16 @@ const TopicsView: React.FC<TopicsViewProps> = ({
                 return (
                   <div 
                     key={exam.id} 
-                    className="bg-gray-50 dark:bg-[#060a22] border border-gray-200/80 dark:border-indigo-950/80 hover:dark:border-indigo-900/60 rounded-2xl p-5 shadow-sm hover:shadow-md transition-all flex flex-col justify-between"
+                    className="bg-white dark:bg-slate-900 border border-gray-200/90 dark:border-slate-800 hover:border-indigo-300 hover:dark:border-indigo-600/60 rounded-2xl p-5 shadow-sm hover:shadow-md transition-all flex flex-col justify-between"
                   >
                     <div>
                       <div className="flex items-center justify-between gap-2 mb-3">
                         <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className="text-[10px] font-black uppercase px-2.5 py-1 rounded-md bg-indigo-100 dark:bg-indigo-950/70 text-indigo-700 dark:text-indigo-300 tracking-wider border border-indigo-200 dark:border-indigo-900/50">
+                          <span className="text-[10px] font-black uppercase px-2.5 py-1 rounded-md bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 tracking-wider border border-indigo-200 dark:border-indigo-800/60">
                             {exam.mode === 'CUSTOM' ? 'Personalizado' : 'Simulacro General'}
                           </span>
                           {exam.selectedExamWeeks && exam.selectedExamWeeks.length > 0 && (
-                            <span className="text-[10px] font-black uppercase px-2.5 py-1 rounded-md bg-emerald-100 dark:bg-emerald-950/70 text-emerald-700 dark:text-emerald-300 tracking-wider border border-emerald-200 dark:border-emerald-900/50">
+                            <span className="text-[10px] font-black uppercase px-2.5 py-1 rounded-md bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 tracking-wider border border-emerald-200 dark:border-emerald-800/60">
                               {exam.selectedExamWeeks.length === 1 
                                 ? `Semana ${exam.selectedExamWeeks[0]}`
                                 : exam.selectedExamWeeks.length === 2 && exam.selectedExamWeeks[0] === 1 && exam.selectedExamWeeks[1] === 2
@@ -598,7 +598,7 @@ const TopicsView: React.FC<TopicsViewProps> = ({
                             </span>
                           )}
                         </div>
-                        <span className="text-[10px] font-black uppercase px-2.5 py-1 rounded-md bg-purple-100 dark:bg-purple-950/70 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-900/50 tracking-wider">
+                        <span className="text-[10px] font-black uppercase px-2.5 py-1 rounded-md bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800/60 tracking-wider">
                           {exam.area}
                         </span>
                       </div>
@@ -607,7 +607,7 @@ const TopicsView: React.FC<TopicsViewProps> = ({
                         {exam.title}
                       </h4>
 
-                      <p className="text-xs text-gray-400 dark:text-indigo-300/60 mb-4">
+                      <p className="text-xs text-gray-400 dark:text-gray-400 mb-4">
                         {exam.totalQuestions} preguntas • Registrado: {createdDateStr}
                         {exam.attemptsCount && exam.attemptsCount > 1 ? ` • Intento #${exam.attemptsCount}` : ''}
                       </p>
@@ -629,7 +629,7 @@ const TopicsView: React.FC<TopicsViewProps> = ({
                       </div>
                     </div>
 
-                    <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-gray-200/60 dark:border-indigo-950/70 mt-2">
+                    <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-gray-100 dark:border-slate-800/80 mt-2">
                       {onViewExamResolution && (
                         <button
                           onClick={() => onViewExamResolution(exam)}
@@ -658,10 +658,10 @@ const TopicsView: React.FC<TopicsViewProps> = ({
 
                       <button
                         onClick={() => setExamToPrint(exam)}
-                        className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 dark:bg-indigo-950/50 dark:hover:bg-indigo-900/50 dark:text-indigo-300 border border-indigo-200/80 dark:border-indigo-900/60 font-bold text-xs py-2.5 px-3 rounded-xl transition-all shadow-sm active:scale-95 flex items-center justify-center gap-1.5"
+                        className="bg-gray-100 hover:bg-gray-200 text-gray-700 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-gray-200 border border-gray-200 dark:border-slate-700 font-bold text-xs py-2.5 px-3 rounded-xl transition-all shadow-sm active:scale-95 flex items-center justify-center gap-1.5"
                         title="Imprimir o Exportar a PDF"
                       >
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-indigo-600 dark:text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
                         </svg>
                         <span>PDF</span>
@@ -670,7 +670,7 @@ const TopicsView: React.FC<TopicsViewProps> = ({
                       {onDeleteSavedExam && (
                         <button
                           onClick={() => setExamToDelete(exam.id)}
-                          className="p-2.5 text-rose-500 hover:bg-rose-100/60 dark:hover:bg-rose-950/50 rounded-xl transition-colors"
+                          className="p-2.5 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-xl transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center shrink-0"
                           title="Eliminar examen del registro"
                         >
                           <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">

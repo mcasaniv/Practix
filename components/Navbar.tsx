@@ -88,15 +88,15 @@ const Navbar: React.FC<NavbarProps> = ({
   return (
     <>
       {/* TOP NAVIGATION BAR */}
-      <nav className={`bg-indigo-700 dark:bg-indigo-950 text-white shadow-md ${isExamView ? 'relative' : 'sticky top-0'} z-40 transition-colors`}>
+      <nav className={`w-full bg-indigo-700 dark:bg-indigo-950 text-white shadow-md ${isExamView ? 'relative' : 'sticky top-0'} z-40 transition-colors`}>
         {/* DESKTOP TOP BAR (lg and above: 1024px+) */}
-        <div className="hidden lg:block">
-          <div className="max-w-7xl mx-auto px-4 lg:px-6 py-3 flex items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
+        <div className="hidden lg:block w-full">
+          <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-6 py-2.5 flex items-center justify-between gap-2 xl:gap-4 w-full">
+            <div className="flex items-center gap-2 xl:gap-3 shrink-0">
               {currentView !== 'HOME' && (
                 <button 
                   onClick={onBack}
-                  className="p-2 hover:bg-indigo-600 dark:hover:bg-indigo-800 rounded-full transition-colors flex items-center justify-center min-w-[40px] min-h-[40px]"
+                  className="p-2 hover:bg-indigo-600 dark:hover:bg-indigo-800 rounded-full transition-colors flex items-center justify-center min-w-[38px] min-h-[38px]"
                   title="Volver"
                   aria-label="Volver atrás"
                 >
@@ -106,10 +106,10 @@ const Navbar: React.FC<NavbarProps> = ({
                 </button>
               )}
               <div 
-                className="cursor-pointer flex items-center gap-2.5 group" 
+                className="cursor-pointer flex items-center gap-2 group shrink-0" 
                 onClick={() => onNavigate('HOME')}
               >
-                <div className="w-9 h-9 flex items-center justify-center overflow-hidden transition-all duration-300 group-hover:scale-105 shrink-0" title="Practix">
+                <div className="w-8 h-8 xl:w-9 xl:h-9 flex items-center justify-center overflow-hidden transition-all duration-300 group-hover:scale-105 shrink-0" title="Practix">
                   <img 
                     src="https://i.imgur.com/hqV69r2.png" 
                     onError={(e) => {
@@ -127,43 +127,43 @@ const Navbar: React.FC<NavbarProps> = ({
                     referrerPolicy="no-referrer"
                   />
                 </div>
-                <h1 className="text-xl font-black tracking-tight text-white group-hover:text-indigo-100 transition-colors">Practix</h1>
+                <h1 className="text-lg xl:text-xl font-black tracking-tight text-white group-hover:text-indigo-100 transition-colors">Practix</h1>
               </div>
 
               {/* Desktop Nav Switcher */}
-              <div className="flex bg-indigo-800/70 dark:bg-indigo-900/60 p-1 rounded-xl ml-3 text-xs border border-indigo-400/20">
+              <div className="flex bg-indigo-800/70 dark:bg-indigo-900/60 p-1 rounded-xl ml-1.5 xl:ml-3 text-xs border border-indigo-400/20 shrink-0">
                 <button 
                   id="nav-btn-practice"
                   onClick={() => onNavigate('HOME')}
-                  className={`px-3 py-1.5 rounded-lg font-bold transition-all ${isCursosActive ? 'bg-indigo-600 dark:bg-indigo-800 text-white shadow-sm' : 'text-indigo-200 hover:text-white'}`}
+                  className={`px-2 xl:px-3 py-1.5 rounded-lg font-bold transition-all ${isCursosActive ? 'bg-indigo-600 dark:bg-indigo-800 text-white shadow-sm' : 'text-indigo-200 hover:text-white'}`}
                 >
                   Práctica
                 </button>
                 <button 
                   id="nav-btn-decks"
                   onClick={() => onNavigate('CUSTOM_DECKS')}
-                  className={`px-3 py-1.5 rounded-lg font-bold transition-all ${isDecksActive ? 'bg-indigo-600 dark:bg-indigo-800 text-white shadow-sm' : 'text-indigo-200 hover:text-white'}`}
+                  className={`px-2 xl:px-3 py-1.5 rounded-lg font-bold transition-all ${isDecksActive ? 'bg-indigo-600 dark:bg-indigo-800 text-white shadow-sm' : 'text-indigo-200 hover:text-white'}`}
                 >
                   Mazos
                 </button>
                 <button 
                   id="nav-btn-flashcards"
                   onClick={() => onNavigate('FLASHCARDS_HOME')}
-                  className={`px-3 py-1.5 rounded-lg font-bold transition-all ${isFlashcardsActive ? 'bg-indigo-600 dark:bg-indigo-800 text-white shadow-sm' : 'text-indigo-200 hover:text-white'}`}
+                  className={`px-2 xl:px-3 py-1.5 rounded-lg font-bold transition-all ${isFlashcardsActive ? 'bg-indigo-600 dark:bg-indigo-800 text-white shadow-sm' : 'text-indigo-200 hover:text-white'}`}
                 >
                   Flashcards
                 </button>
                 <button 
                   id="nav-btn-exam"
                   onClick={() => onNavigate('EXAM_SETUP')}
-                  className={`px-3 py-1.5 rounded-lg font-bold transition-all ${isExamActive ? 'bg-indigo-600 dark:bg-indigo-800 text-white shadow-sm' : 'text-indigo-200 hover:text-white'}`}
+                  className={`px-2 xl:px-3 py-1.5 rounded-lg font-bold transition-all ${isExamActive ? 'bg-indigo-600 dark:bg-indigo-800 text-white shadow-sm' : 'text-indigo-200 hover:text-white'}`}
                 >
                   Simulacros
                 </button>
                 <button 
                   id="nav-btn-stats"
                   onClick={() => onNavigate('STATS')}
-                  className={`px-3 py-1.5 rounded-lg font-bold transition-all ${isStatsActive ? 'bg-indigo-600 dark:bg-indigo-800 text-white shadow-sm' : 'text-indigo-200 hover:text-white'}`}
+                  className={`px-2 xl:px-3 py-1.5 rounded-lg font-bold transition-all ${isStatsActive ? 'bg-indigo-600 dark:bg-indigo-800 text-white shadow-sm' : 'text-indigo-200 hover:text-white'}`}
                 >
                   Estadísticas
                 </button>
@@ -171,19 +171,19 @@ const Navbar: React.FC<NavbarProps> = ({
             </div>
 
             {/* Desktop Right Counters & Controls */}
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1.5 xl:gap-2.5 shrink-0 ml-auto">
               {/* Contador de Preguntas */}
-              <div className="flex items-center gap-2 bg-indigo-800/50 dark:bg-indigo-900/50 px-3 py-1.5 rounded-xl border border-indigo-400/20 backdrop-blur-sm group">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-indigo-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <div className="flex items-center gap-1.5 bg-indigo-800/50 dark:bg-indigo-900/50 px-2 xl:px-3 py-1.5 rounded-xl border border-indigo-400/20 backdrop-blur-sm group shrink-0">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-indigo-300 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
                 </svg>
                 <div className="flex flex-col leading-none">
-                  <span className="text-[9px] uppercase font-black text-indigo-300/85 tracking-tighter">Preguntas</span>
-                  <span className="text-base font-black font-mono">{totalPracticed}</span>
+                  <span className="hidden xl:inline text-[9px] uppercase font-black text-indigo-300/85 tracking-tighter">Preguntas</span>
+                  <span className="text-sm xl:text-base font-black font-mono">{totalPracticed}</span>
                 </div>
                 <button 
                   onClick={() => setShowResetModal(true)}
-                  className="ml-1 p-1 hover:bg-white/10 rounded-full text-indigo-300 hover:text-white transition-all opacity-0 group-hover:opacity-100 focus:opacity-100"
+                  className="ml-0.5 p-1 hover:bg-white/10 rounded-full text-indigo-300 hover:text-white transition-all opacity-0 group-hover:opacity-100 focus:opacity-100"
                   title="Reiniciar contador de preguntas"
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -193,17 +193,17 @@ const Navbar: React.FC<NavbarProps> = ({
               </div>
 
               {/* Contador de Flashcards */}
-              <div className="flex items-center gap-2 bg-indigo-800/50 dark:bg-indigo-900/50 px-3 py-1.5 rounded-xl border border-indigo-400/20 backdrop-blur-sm group">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-indigo-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <div className="flex items-center gap-1.5 bg-indigo-800/50 dark:bg-indigo-900/50 px-2 xl:px-3 py-1.5 rounded-xl border border-indigo-400/20 backdrop-blur-sm group shrink-0">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-indigo-300 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
                 </svg>
                 <div className="flex flex-col leading-none">
-                  <span className="text-[9px] uppercase font-black text-indigo-300/85 tracking-tighter">Flashcards</span>
-                  <span className="text-base font-black font-mono">{totalFlashcardsPracticed}</span>
+                  <span className="hidden xl:inline text-[9px] uppercase font-black text-indigo-300/85 tracking-tighter">Flashcards</span>
+                  <span className="text-sm xl:text-base font-black font-mono">{totalFlashcardsPracticed}</span>
                 </div>
                 <button 
                   onClick={() => setShowResetFlashcardsModal(true)}
-                  className="ml-1 p-1 hover:bg-white/10 rounded-full text-indigo-300 hover:text-white transition-all opacity-0 group-hover:opacity-100 focus:opacity-100"
+                  className="ml-0.5 p-1 hover:bg-white/10 rounded-full text-indigo-300 hover:text-white transition-all opacity-0 group-hover:opacity-100 focus:opacity-100"
                   title="Reiniciar contador de flashcards"
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -215,50 +215,54 @@ const Navbar: React.FC<NavbarProps> = ({
               {/* Theme Toggle */}
               <button
                 onClick={toggleTheme}
-                className="p-2 bg-indigo-800/60 hover:bg-indigo-600 dark:bg-indigo-900/60 rounded-xl transition-colors min-w-[38px] min-h-[38px] flex items-center justify-center"
+                className="p-2 bg-indigo-800/60 hover:bg-indigo-600 dark:bg-indigo-900/60 rounded-xl transition-colors min-w-[36px] min-h-[36px] flex items-center justify-center shrink-0"
                 title={isDark ? "Modo Claro" : "Modo Oscuro"}
                 aria-label="Cambiar tema"
               >
                 {isDark ? (
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-amber-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 xl:h-5 xl:w-5 text-amber-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364-6.364l-.707.707M6.343 17.657l-.707.707M16.95 16.95l.707.707M7.05 7.05l.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
                   </svg>
                 ) : (
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-indigo-200" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 xl:h-5 xl:w-5 text-indigo-200" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
                   </svg>
                 )}
               </button>
 
               {/* Import / Export / Admin */}
-              <label className="cursor-pointer bg-indigo-800/60 hover:bg-indigo-600 dark:bg-indigo-900/60 px-3 py-2 rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <label 
+                className="cursor-pointer bg-indigo-800/60 hover:bg-indigo-600 dark:bg-indigo-900/60 p-2 xl:px-3 xl:py-2 rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 shrink-0"
+                title="Importar base de datos JSON"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
                 </svg>
-                <span>Importar</span>
+                <span className="hidden xl:inline">Importar</span>
                 <input type="file" className="hidden" accept=".json" onChange={handleFileChange} />
               </label>
 
               <button 
                 onClick={onExport}
-                className="bg-indigo-800/60 hover:bg-indigo-600 dark:bg-indigo-900/60 px-3 py-2 rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5"
+                className="bg-indigo-800/60 hover:bg-indigo-600 dark:bg-indigo-900/60 p-2 xl:px-3 xl:py-2 rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 shrink-0"
                 title="Exportar copia de seguridad JSON"
               >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                 </svg>
-                <span>Exportar</span>
+                <span className="hidden xl:inline">Exportar</span>
               </button>
 
               <button 
                 onClick={() => onNavigate('ADMIN')}
-                className={`px-3.5 py-2 rounded-xl text-xs font-black transition-all shadow-sm flex items-center gap-1.5 ${
+                className={`px-2.5 xl:px-3.5 py-2 rounded-xl text-xs font-black transition-all shadow-sm flex items-center gap-1.5 shrink-0 ${
                   isAdminActive 
                     ? 'bg-white text-indigo-700 ring-2 ring-indigo-400' 
                     : 'bg-white text-indigo-700 hover:bg-gray-100'
                 }`}
+                title="Panel de Administración"
               >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                 </svg>
