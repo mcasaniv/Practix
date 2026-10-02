@@ -1,7 +1,7 @@
 import React from 'react';
 import katex from 'katex';
-import { AREA_EXAM_CONFIGS } from './constants';
-import { Question } from './types';
+import { AREA_EXAM_CONFIGS, ACADEMIC_STRUCTURE } from './constants';
+import { Question, AppDatabase } from './types';
 
 /**
  * Safely renders a LaTeX math expression to an HTML string using KaTeX.
@@ -453,3 +453,251 @@ export const ALL_ACADEMIC_SUBJECTS: string[] = [
   'Inglés',
   'Inglés Lectura'
 ];
+
+/**
+ * Normalizes any question object regardless of key order, property aliases
+ * (Spanish/English), or missing optional fields.
+ */
+export function normalizeQuestionObject(item: any): Question | null {
+  if (!item || typeof item !== 'object') return null;
+
+  const questionText = (
+    item.questionText ??
+    item.pregunta ??
+    item.enunciado ??
+    item.q ??
+    item.texto ??
+    ''
+  ).toString().trim();
+
+  // Resolve options
+  let rawOptions = item.options ?? item.opciones ?? item.alternativas ?? item.respuestas;
+  let options: string[] = [];
+  if (Array.isArray(rawOptions)) {
+    options = rawOptions.map(o => (o !== null && o !== undefined ? o.toString().trim() : ''));
+  } else if (item.A !== undefined || item.a !== undefined) {
+    options = [
+      (item.A ?? item.a ?? '').toString().trim(),
+      (item.B ?? item.b ?? '').toString().trim(),
+      (item.C ?? item.c ?? '').toString().trim(),
+      (item.D ?? item.d ?? '').toString().trim(),
+      (item.E ?? item.e ?? '').toString().trim()
+    ].filter(Boolean);
+  }
+
+  if (!questionText || options.length < 2) return null;
+
+  // Resolve correctIndex
+  let correctIndex = 0;
+  const rawCorrect = item.correctIndex ?? item.clave ?? item.respuesta ?? item.correcta ?? item.rpta;
+  if (typeof rawCorrect === 'number') {
+    correctIndex = rawCorrect;
+  } else if (typeof rawCorrect === 'string') {
+    const trimmed = rawCorrect.trim().toUpperCase();
+    if (['A', 'B', 'C', 'D', 'E'].includes(trimmed)) {
+      correctIndex = trimmed.charCodeAt(0) - 65;
+    } else if (!isNaN(parseInt(trimmed, 10))) {
+      const num = parseInt(trimmed, 10);
+      correctIndex = num >= 1 && num <= 5 ? num - 1 : num;
+    }
+  }
+
+  // Resolve subject & course
+  let subject = (item.subject ?? item.materia ?? '').toString().trim();
+  let course = (item.course ?? item.curso ?? '').toString().trim();
+
+  // If subject is known in ACADEMIC_STRUCTURE, infer course if missing
+  if (!course && subject) {
+    const found = ACADEMIC_STRUCTURE.find(c => c.subjects.some(s => s.toLowerCase() === subject.toLowerCase()));
+    if (found) {
+      course = found.name;
+      const normSubj = found.subjects.find(s => s.toLowerCase() === subject.toLowerCase());
+      if (normSubj) subject = normSubj;
+    }
+  }
+
+  // Fallbacks
+  if (!course) course = 'Ciencias';
+  if (!subject) subject = 'General';
+
+  const topic = (item.topic ?? item.tema ?? 'General').toString().trim();
+  const explanation = (
+    item.explanation ??
+    item.explicacion ??
+    item.solucion ??
+    item.solucionario ??
+    item.resolucion ??
+    ''
+  ).toString().trim();
+
+  const process = (
+    item.process ??
+    item.proceso ??
+    item.fase ??
+    item.cepre ??
+    'Ceprunsa I Fase 2027'
+  ).toString().trim();
+
+  let week: number | undefined = undefined;
+  const rawWeek = item.week ?? item.semana;
+  if (rawWeek !== undefined && rawWeek !== null && rawWeek !== '') {
+    const parsedWeek = Number(rawWeek);
+    if (!isNaN(parsedWeek)) week = parsedWeek;
+  }
+
+  return {
+    id: item.id && typeof item.id === 'string' && item.id.trim() ? item.id.trim() : crypto.randomUUID(),
+    course,
+    subject,
+    topic,
+    questionText,
+    options,
+    correctIndex: Math.max(0, Math.min(correctIndex, options.length - 1)),
+    explanation,
+    process,
+    week,
+    order: typeof item.order === 'number' ? item.order : 999,
+    createdAt: typeof item.createdAt === 'number' ? item.createdAt : Date.now(),
+    imageUrl: item.imageUrl || item.imagen || undefined,
+    readingTextId: item.readingTextId || undefined,
+    optionsImageUrls: item.optionsImageUrls || undefined,
+    explanationImageUrl: item.explanationImageUrl || undefined,
+    targetSubject: item.targetSubject || undefined,
+    area: item.area || undefined,
+    weight: item.weight ? Number(item.weight) : undefined
+  };
+}
+
+export interface ImportResult {
+  database: AppDatabase;
+  importedCount: number;
+  mode: 'REPLACE_ALL' | 'MERGED_QUESTIONS';
+}
+
+/**
+ * Universal JSON parser that handles:
+ * - Questions with properties in ANY order
+ * - Raw arrays: [ {...}, {...} ]
+ * - Full database backup objects: { questions: [...], results: {...} }
+ * - Question collections: { questions: [...] } or { preguntas: [...] }
+ * - Un-bracketed object lists: { ... }, { ... }
+ * - JSON Lines (one JSON per line)
+ */
+export function parseAndNormalizeImport(
+  jsonStrOrObj: any,
+  currentDb: AppDatabase
+): ImportResult {
+  let parsed: any = jsonStrOrObj;
+
+  if (typeof jsonStrOrObj === 'string') {
+    let text = jsonStrOrObj.trim();
+    if (!text) {
+      throw new Error("El contenido del archivo JSON está vacío.");
+    }
+
+    try {
+      parsed = JSON.parse(text);
+    } catch (e1) {
+      // 1. Try wrapping un-bracketed list with [ ... ]
+      if ((text.startsWith('{') && text.endsWith('}')) || text.includes('},\n{') || text.includes('},\r\n{') || text.includes('},{')) {
+        try {
+          parsed = JSON.parse(`[${text.replace(/,\s*$/, '')}]`);
+        } catch {
+          // Continue to JSON Lines fallback
+        }
+      }
+
+      // 2. Try JSON Lines (one object per line)
+      if (!parsed) {
+        const lineObjects: any[] = [];
+        const lines = text.split('\n');
+        for (const line of lines) {
+          const l = line.trim();
+          if (!l) continue;
+          try {
+            const obj = JSON.parse(l.replace(/,\s*$/, ''));
+            if (obj && typeof obj === 'object') lineObjects.push(obj);
+          } catch {
+            // ignore non-json line
+          }
+        }
+        if (lineObjects.length > 0) {
+          parsed = lineObjects;
+        } else {
+          throw new Error("Formato de JSON inválido. Verifica que sea un JSON válido o una lista de preguntas entre [ ... ].");
+        }
+      }
+    }
+  }
+
+  // Case 1: Raw array of questions [ { ... }, { ... } ]
+  if (Array.isArray(parsed)) {
+    const validQuestions = parsed.map(normalizeQuestionObject).filter(Boolean) as Question[];
+    if (validQuestions.length === 0) {
+      throw new Error("No se encontraron preguntas válidas en el archivo JSON.");
+    }
+
+    // Merge into current database (avoid duplicate ids or update existing)
+    const existingMap = new Map((currentDb.questions || []).map(q => [q.id, q]));
+    validQuestions.forEach(q => existingMap.set(q.id, q));
+
+    return {
+      database: {
+        ...currentDb,
+        questions: Array.from(existingMap.values())
+      },
+      importedCount: validQuestions.length,
+      mode: 'MERGED_QUESTIONS'
+    };
+  }
+
+  // Case 2: Object containing an array under questions, preguntas, data, items
+  if (parsed && typeof parsed === 'object') {
+    const rawList = parsed.questions || parsed.preguntas || parsed.data || parsed.items;
+    if (Array.isArray(rawList)) {
+      const validQuestions = rawList.map(normalizeQuestionObject).filter(Boolean) as Question[];
+      
+      // If it's a full backup object (has results, flashcards, or readingTexts)
+      if (parsed.results !== undefined || parsed.flashcards !== undefined || parsed.readingTexts !== undefined) {
+        return {
+          database: {
+            ...currentDb,
+            ...parsed,
+            questions: validQuestions
+          },
+          importedCount: validQuestions.length,
+          mode: 'REPLACE_ALL'
+        };
+      } else {
+        // It's a question pack object: merge with current database
+        const existingMap = new Map((currentDb.questions || []).map(q => [q.id, q]));
+        validQuestions.forEach(q => existingMap.set(q.id, q));
+        return {
+          database: {
+            ...currentDb,
+            questions: Array.from(existingMap.values())
+          },
+          importedCount: validQuestions.length,
+          mode: 'MERGED_QUESTIONS'
+        };
+      }
+    }
+
+    // Case 3: A single question object: { "course": ..., "questionText": ... }
+    const singleQ = normalizeQuestionObject(parsed);
+    if (singleQ) {
+      const existingMap = new Map((currentDb.questions || []).map(q => [q.id, q]));
+      existingMap.set(singleQ.id, singleQ);
+      return {
+        database: {
+          ...currentDb,
+          questions: Array.from(existingMap.values())
+        },
+        importedCount: 1,
+        mode: 'MERGED_QUESTIONS'
+      };
+    }
+  }
+
+  throw new Error("Formato de JSON no reconocido como banco de preguntas ni copia de seguridad.");
+}

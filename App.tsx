@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Question, AppDatabase, ViewType, NavigationState, TopicResult, ReadingText, Flashcard, SavedExam, UserProfile, CustomDeck } from './types';
 import { ACADEMIC_STRUCTURE, DB_STORAGE_KEY } from './constants';
-import { getQuestionProcess } from './utils';
+import { getQuestionProcess, parseAndNormalizeImport } from './utils';
 import Navbar from './components/Navbar';
 import HomeView from './views/HomeView';
 import SubjectsView from './views/SubjectsView';
@@ -224,14 +224,20 @@ const App: React.FC = () => {
     setNav(prev => ({ ...prev, view, ...params }));
   }, []);
 
-  const handleImport = useCallback((data: AppDatabase) => {
-    if (!data.results) data.results = {};
-    if (!data.readingTexts) data.readingTexts = [];
-    if (!data.flashcards) data.flashcards = [];
-    if (data.totalPracticed === undefined) data.totalPracticed = 0;
-    setDb(data);
-    showToast('Base de datos importada con éxito.');
-  }, [showToast]);
+  const handleImport = useCallback((rawData: any) => {
+    try {
+      const result = parseAndNormalizeImport(rawData, db);
+      const sanitized = sanitizeDatabase(result.database);
+      setDb(sanitized);
+      if (result.mode === 'MERGED_QUESTIONS') {
+        showToast(`Se importaron e integraron ${result.importedCount} preguntas con éxito.`);
+      } else {
+        showToast(`Base de datos importada con éxito (${sanitized.questions.length} preguntas).`);
+      }
+    } catch (err: any) {
+      showToast(err?.message || "Error al procesar el archivo JSON.");
+    }
+  }, [db, showToast]);
 
   const handleExport = useCallback(() => {
     const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(db, null, 2));
@@ -842,7 +848,7 @@ const App: React.FC = () => {
   const showNavbar = nav.view !== 'FLASHCARDS_PLAY' && nav.view !== 'QUIZ' && nav.view !== 'MEGA_QUIZ' && nav.view !== 'MIXED_QUIZ';
 
   return (
-    <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-slate-950 transition-colors duration-300 w-full overflow-x-hidden">
+    <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-slate-950 transition-colors duration-300 w-full overflow-x-clip">
       {showNavbar && (
         <Navbar 
           onNavigate={handleNavigate} 

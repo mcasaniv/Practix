@@ -4,7 +4,7 @@ import { ViewType, NavigationState, AppDatabase } from '../types';
 interface NavbarProps {
   onNavigate: (view: ViewType, params?: Partial<NavigationState>) => void;
   onBack: () => void;
-  onImport: (data: AppDatabase) => void;
+  onImport: (data: any) => void;
   onExport: () => void;
   onResetPracticed: () => void;
   onResetFlashcardsPracticed: () => void;
@@ -45,14 +45,15 @@ const Navbar: React.FC<NavbarProps> = ({
     const reader = new FileReader();
     reader.onload = (event) => {
       try {
-        const json = JSON.parse(event.target?.result as string);
-        onImport(json);
+        const text = event.target?.result as string;
+        onImport(text);
         setShowMobileMenu(false);
-      } catch (err) {
-        onToast("Error al procesar el archivo JSON.");
+      } catch (err: any) {
+        onToast(err?.message || "Error al procesar el archivo JSON.");
       }
     };
     reader.readAsText(file);
+    e.target.value = '';
   };
 
   const getBreadcrumbTitle = () => {
@@ -88,7 +89,10 @@ const Navbar: React.FC<NavbarProps> = ({
   return (
     <>
       {/* TOP NAVIGATION BAR */}
-      <nav className={`w-full bg-indigo-700 dark:bg-indigo-950 text-white shadow-md ${isExamView ? 'relative' : 'sticky top-0'} z-40 transition-colors`}>
+      <nav 
+        className={`w-full bg-indigo-700 dark:bg-indigo-950 text-white shadow-md ${isExamView ? 'relative' : 'sticky top-0'} z-40 transition-colors`}
+        style={!isExamView ? { position: 'sticky', top: 0, zIndex: 40 } : undefined}
+      >
         {/* DESKTOP TOP BAR (lg and above: 1024px+) */}
         <div className="hidden lg:block w-full">
           <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-6 py-2.5 flex items-center justify-between gap-2 xl:gap-4 w-full">

@@ -2,7 +2,7 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Question, ReadingText, Flashcard } from '../types';
 import { ACADEMIC_STRUCTURE, ADMISSION_PROCESSES, DEFAULT_ADMISSION_PROCESS, CEPRE_BASE_TYPES } from '../constants';
-import { formatQuestionText, parseHTMLTags, getQuestionProcess, getProcessBadgeStyle, getProcessShortName, getAvailableProcesses, getOfficialSubjectWeight, ALL_ACADEMIC_SUBJECTS } from '../utils';
+import { formatQuestionText, parseHTMLTags, getQuestionProcess, getProcessBadgeStyle, getProcessShortName, getAvailableProcesses, getOfficialSubjectWeight, ALL_ACADEMIC_SUBJECTS, parseAndNormalizeImport } from '../utils';
 
 interface AdminViewProps {
   questions: Question[];
@@ -90,9 +90,59 @@ const AdminView: React.FC<AdminViewProps> = ({
   courseCovers = {},
   onSaveCourseCovers
 }) => {
-  const [activeTab, setActiveTab] = useState<'EDITOR' | 'MANAGE' | 'TEXTS' | 'FLASHCARDS_ADD' | 'FLASHCARDS_MANAGE' | 'COVERS'>('EDITOR');
+  const [activeTab, setActiveTab] = useState<'EDITOR' | 'JSON_IMPORT' | 'MANAGE' | 'TEXTS' | 'FLASHCARDS_ADD' | 'FLASHCARDS_MANAGE' | 'COVERS'>('EDITOR');
   const [currentBatch, setCurrentBatch] = useState<Question[]>([]);
   
+  // JSON Questions Bulk Import State
+  const [jsonImportText, setJsonImportText] = useState('');
+  const [jsonParsedQuestions, setJsonParsedQuestions] = useState<Question[]>([]);
+  const [jsonImportError, setJsonImportError] = useState<string | null>(null);
+
+  const handleProcessJsonImport = (textToProcess?: string) => {
+    const raw = (textToProcess !== undefined ? textToProcess : jsonImportText).trim();
+    if (!raw) {
+      setJsonImportError("Pega el texto JSON o carga un archivo.");
+      setJsonParsedQuestions([]);
+      return;
+    }
+    setJsonImportError(null);
+    try {
+      const result = parseAndNormalizeImport(raw, { questions: [], results: {}, flashcards: [], readingTexts: [] });
+      if (result.database.questions.length > 0) {
+        setJsonParsedQuestions(result.database.questions);
+        showToast(`Se detectaron ${result.database.questions.length} preguntas listas para importar.`);
+      } else {
+        setJsonImportError("No se encontraron preguntas válidas en el texto proporcionado.");
+        setJsonParsedQuestions([]);
+      }
+    } catch (err: any) {
+      setJsonImportError(err?.message || "Error al procesar el formato JSON.");
+      setJsonParsedQuestions([]);
+    }
+  };
+
+  const handleJsonFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const content = (event.target?.result as string) || '';
+      setJsonImportText(content);
+      handleProcessJsonImport(content);
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  };
+
+  const handleSaveJsonQuestions = () => {
+    if (jsonParsedQuestions.length === 0) return;
+    onSaveBatch(jsonParsedQuestions);
+    showToast(`Se guardaron ${jsonParsedQuestions.length} preguntas en el banco.`);
+    setJsonImportText('');
+    setJsonParsedQuestions([]);
+    setActiveTab('MANAGE');
+  };
+
   const [tempCovers, setTempCovers] = useState<Record<string, string>>({});
 
   const courseCoversStr = JSON.stringify(courseCovers);
@@ -656,6 +706,15 @@ const AdminView: React.FC<AdminViewProps> = ({
           {isEditing ? 'Editando' : 'Añadir'}
         </button>
         <button 
+          onClick={() => setActiveTab('JSON_IMPORT')}
+          className={`px-4 md:px-6 py-2.5 rounded-xl font-bold text-[11px] md:text-xs transition-all flex items-center gap-1.5 ${activeTab === 'JSON_IMPORT' ? 'bg-white dark:bg-slate-800 text-indigo-700 dark:text-indigo-300 shadow-md' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'}`}
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+          </svg>
+          <span>Subir JSON</span>
+        </button>
+        <button 
           onClick={() => setActiveTab('TEXTS')}
           className={`px-4 md:px-6 py-2.5 rounded-xl font-bold text-[11px] md:text-xs transition-all ${activeTab === 'TEXTS' ? 'bg-white dark:bg-slate-800 text-indigo-700 dark:text-indigo-300 shadow-md' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'}`}
         >
@@ -1055,6 +1114,203 @@ const AdminView: React.FC<AdminViewProps> = ({
               </div>
             </div>
           </div>
+        </div>
+      )}
+
+      {activeTab === 'JSON_IMPORT' && (
+        <div className="space-y-6 animate-fade-in">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 sm:p-8 border border-gray-100 dark:border-slate-800 shadow-sm space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-gray-100 dark:border-slate-800 pb-5">
+              <div>
+                <h2 className="text-xl sm:text-2xl font-black text-gray-800 dark:text-gray-100 flex items-center gap-2.5">
+                  <span className="p-2 bg-indigo-600 text-white rounded-xl shadow-md">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                    </svg>
+                  </span>
+                  <span>Importar Preguntas en Lote (JSON)</span>
+                </h2>
+                <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 mt-1">
+                  Pega tu lista de preguntas en formato JSON o sube un archivo .json. El sistema lee las propiedades sin importar su orden.
+                </p>
+              </div>
+
+              <label className="cursor-pointer bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/60 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 px-4 py-2.5 rounded-xl font-bold text-xs transition-all flex items-center gap-2 shrink-0 self-start sm:self-auto shadow-sm">
+                <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                </svg>
+                <span>Cargar archivo .json</span>
+                <input type="file" accept=".json" onChange={handleJsonFileUpload} className="hidden" />
+              </label>
+            </div>
+
+            {/* Guía rápida informativa */}
+            <div className="bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/60 rounded-2xl p-4 text-xs text-slate-600 dark:text-slate-300 space-y-1">
+              <div className="font-bold flex items-center gap-1.5 text-indigo-600 dark:text-indigo-400">
+                <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span>Compatibilidad Total:</span>
+              </div>
+              <p className="leading-relaxed">
+                • <strong>No importa el orden de las propiedades:</strong> Puedes tener <code className="bg-gray-200 dark:bg-slate-700 px-1 py-0.5 rounded text-[11px]">"process"</code> al inicio o al final, <code className="bg-gray-200 dark:bg-slate-700 px-1 py-0.5 rounded text-[11px]">"course"</code> antes o después de <code className="bg-gray-200 dark:bg-slate-700 px-1 py-0.5 rounded text-[11px]">"questionText"</code>, etc.
+              </p>
+              <p className="leading-relaxed">
+                • <strong>Formatos soportados:</strong> Arreglos <code className="bg-gray-200 dark:bg-slate-700 px-1 py-0.5 rounded text-[11px]">[&#123;...&#125;, &#123;...&#125;]</code>, objetos separados por comas sin corchetes <code className="bg-gray-200 dark:bg-slate-700 px-1 py-0.5 rounded text-[11px]">&#123;...&#125;, &#123;...&#125;</code>, o paquetes <code className="bg-gray-200 dark:bg-slate-700 px-1 py-0.5 rounded text-[11px]">&#123; "questions": [...] &#125;</code>.
+              </p>
+              <p className="leading-relaxed">
+                • <strong>Nombres en español o inglés:</strong> Reconoce <code className="bg-gray-200 dark:bg-slate-700 px-1 py-0.5 rounded text-[11px]">pregunta</code> / <code className="bg-gray-200 dark:bg-slate-700 px-1 py-0.5 rounded text-[11px]">questionText</code>, <code className="bg-gray-200 dark:bg-slate-700 px-1 py-0.5 rounded text-[11px]">opciones</code> / <code className="bg-gray-200 dark:bg-slate-700 px-1 py-0.5 rounded text-[11px]">options</code>, <code className="bg-gray-200 dark:bg-slate-700 px-1 py-0.5 rounded text-[11px]">clave</code> / <code className="bg-gray-200 dark:bg-slate-700 px-1 py-0.5 rounded text-[11px]">correctIndex</code>, <code className="bg-gray-200 dark:bg-slate-700 px-1 py-0.5 rounded text-[11px]">explicacion</code> / <code className="bg-gray-200 dark:bg-slate-700 px-1 py-0.5 rounded text-[11px]">explanation</code>.
+              </p>
+            </div>
+
+            {/* Textarea */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-xs font-black uppercase text-gray-400 dark:text-gray-500 tracking-wider">
+                  Contenido JSON:
+                </label>
+                {jsonImportText && (
+                  <button
+                    type="button"
+                    onClick={() => { setJsonImportText(''); setJsonParsedQuestions([]); setJsonImportError(null); }}
+                    className="text-xs text-rose-500 hover:underline font-bold"
+                  >
+                    Limpiar
+                  </button>
+                )}
+              </div>
+              <textarea
+                value={jsonImportText}
+                onChange={(e) => setJsonImportText(e.target.value)}
+                placeholder={'[\n  {\n    "course": "Ciencias",\n    "subject": "Biología",\n    "topic": "El Origen de la Vida",\n    "process": "Ceprunsa I Fase 2027",\n    "questionText": "...",\n    "options": ["...", "..."],\n    "correctIndex": 0,\n    "explanation": "..."\n  }\n]'}
+                rows={12}
+                className="w-full bg-gray-50 dark:bg-slate-950 font-mono text-xs text-gray-800 dark:text-gray-200 border border-gray-200 dark:border-slate-800 rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500 transition-all leading-relaxed"
+              />
+            </div>
+
+            {/* Error banner */}
+            {jsonImportError && (
+              <div className="bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 p-4 rounded-xl text-rose-700 dark:text-rose-300 text-xs flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span>{jsonImportError}</span>
+              </div>
+            )}
+
+            {/* Botones de acción */}
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                onClick={() => handleProcessJsonImport()}
+                className="bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs px-6 py-3 rounded-xl transition-all shadow-md active:scale-95 flex items-center gap-2 min-h-[44px]"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                </svg>
+                <span>Analizar y Previsualizar</span>
+              </button>
+
+              {jsonParsedQuestions.length > 0 && (
+                <button
+                  type="button"
+                  onClick={handleSaveJsonQuestions}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs px-6 py-3 rounded-xl transition-all shadow-md active:scale-95 flex items-center gap-2 min-h-[44px]"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  <span>Guardar {jsonParsedQuestions.length} Preguntas en el Banco</span>
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Previsualización de preguntas parseadas */}
+          {jsonParsedQuestions.length > 0 && (
+            <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 sm:p-8 border border-gray-100 dark:border-slate-800 shadow-sm space-y-6">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-lg font-black text-gray-800 dark:text-gray-100">
+                    Preguntas Detectadas ({jsonParsedQuestions.length})
+                  </h3>
+                  <p className="text-xs text-gray-400 dark:text-gray-500">
+                    Revisa las preguntas antes de guardarlas en tu base de datos.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleSaveJsonQuestions}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs px-5 py-2.5 rounded-xl transition-all shadow-md flex items-center gap-2 self-start sm:self-auto"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  <span>Guardar Todas ({jsonParsedQuestions.length})</span>
+                </button>
+              </div>
+
+              <div className="space-y-4 max-h-[600px] overflow-y-auto pr-1">
+                {jsonParsedQuestions.map((q, idx) => (
+                  <div key={q.id || idx} className="bg-gray-50 dark:bg-slate-950 p-4 sm:p-5 rounded-2xl border border-gray-200 dark:border-slate-800 space-y-3">
+                    <div className="flex flex-wrap items-center gap-2 text-[10px] font-black uppercase">
+                      <span className="bg-indigo-100 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 px-2 py-0.5 rounded-md">
+                        #{idx + 1}
+                      </span>
+                      <span className="bg-purple-100 dark:bg-purple-900/60 text-purple-700 dark:text-purple-300 px-2 py-0.5 rounded-md">
+                        {q.course} • {q.subject}
+                      </span>
+                      <span className="bg-gray-200 dark:bg-slate-800 text-gray-700 dark:text-gray-300 px-2 py-0.5 rounded-md">
+                        {q.process}
+                      </span>
+                      {q.week !== undefined && (
+                        <span className="bg-amber-100 dark:bg-amber-900/60 text-amber-700 dark:text-amber-300 px-2 py-0.5 rounded-md">
+                          Semana {q.week}
+                        </span>
+                      )}
+                      <span className="text-gray-500 dark:text-gray-400 font-bold truncate max-w-xs">
+                        Tema: {q.topic}
+                      </span>
+                    </div>
+
+                    <div className="text-sm font-bold text-gray-800 dark:text-gray-200 leading-relaxed whitespace-pre-wrap">
+                      {formatQuestionText(q.questionText)}
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                      {q.options.map((opt, optIdx) => (
+                        <div
+                          key={optIdx}
+                          className={`p-2.5 rounded-xl border flex items-center gap-2 ${
+                            optIdx === q.correctIndex
+                              ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200 font-bold'
+                              : 'bg-white dark:bg-slate-900 border-gray-200 dark:border-slate-800 text-gray-600 dark:text-gray-400'
+                          }`}
+                        >
+                          <span className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black shrink-0 bg-gray-100 dark:bg-slate-800">
+                            {String.fromCharCode(65 + optIdx)}
+                          </span>
+                          <span className="truncate">{opt}</span>
+                          {optIdx === q.correctIndex && (
+                            <span className="ml-auto text-[10px] text-emerald-600 dark:text-emerald-400 font-black uppercase">
+                              Correcta
+                            </span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+
+                    {q.explanation && (
+                      <div className="text-xs text-gray-500 dark:text-gray-400 bg-white dark:bg-slate-900 p-3 rounded-xl border border-gray-100 dark:border-slate-800/80">
+                        <span className="font-bold text-gray-700 dark:text-gray-300">Solución: </span>
+                        {q.explanation}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
