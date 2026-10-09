@@ -1,6 +1,6 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Question, ReadingText, TopicResult, SavedExam } from '../types';
-import { getQuestionProcess, getProcessBadgeStyle, getProcessShortName, getAvailableProcesses } from '../utils';
+import { getQuestionProcess, getProcessBadgeStyle, getProcessShortName, getAvailableProcesses, getQuestionArea, getQuestionAreas, matchesQuestionArea, getAreaBadgeStyle } from '../utils';
 import { PrintExamModal } from '../components/PrintExamModal';
 import { UploadExamQuestionsModal } from '../components/UploadExamQuestionsModal';
 
@@ -12,7 +12,7 @@ interface TopicsViewProps {
   readingTexts?: ReadingText[];
   results: Record<string, TopicResult>;
   savedExams?: SavedExam[];
-  onSelectTopic: (topic: string, mode?: 'CLASSIC' | 'QUIZZIZ', process?: string) => void;
+  onSelectTopic: (topic: string, mode?: 'CLASSIC' | 'QUIZZIZ', process?: string, areaFilter?: 'Biomédicas' | 'Ingenierías' | 'Sociales' | 'Todas') => void;
   onStartMixedQuiz: (questions: Question[], mode?: 'CLASSIC' | 'QUIZZIZ') => void;
   onDeleteTopic: (topic: string) => void;
   onMoveTopic: (topic: string, direction: 'UP' | 'DOWN') => void;
@@ -46,6 +46,7 @@ const TopicsView: React.FC<TopicsViewProps> = ({
   onToast
 }) => {
   const [selectedProcess, setSelectedProcess] = useState<string>(''); // '' = Todos los procesos
+  const [activeAreaFilter, setActiveAreaFilter] = useState<'Biomédicas' | 'Ingenierías' | 'Sociales' | 'Todas'>(selectedArea || 'Biomédicas');
   const [mixedCount, setMixedCount] = useState<number>(Math.min(10, questions.length));
   const [topicToDelete, setTopicToDelete] = useState<string | null>(null);
   const [examToDelete, setExamToDelete] = useState<string | null>(null);
@@ -53,6 +54,13 @@ const TopicsView: React.FC<TopicsViewProps> = ({
   const [groupByWeeks, setGroupByWeeks] = useState<boolean>(true);
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [uploadModalInitialTopic, setUploadModalInitialTopic] = useState('');
+
+  // Sincronizar filtro cuando cambia el área del usuario
+  useEffect(() => {
+    if (selectedArea) {
+      setActiveAreaFilter(selectedArea);
+    }
+  }, [selectedArea]);
 
   // Lista dinámica de procesos presentes en esta materia o disponibles
   const availableProcesses = useMemo(() => {
@@ -72,11 +80,34 @@ const TopicsView: React.FC<TopicsViewProps> = ({
     return stats;
   }, [questions, availableProcesses]);
 
-  // Preguntas filtradas según el proceso de admisión seleccionado
+  // Conteo de preguntas en esta materia por cada área académica
+  const areaStats = useMemo(() => {
+    const stats: Record<string, number> = {
+      'Biomédicas': 0,
+      'Ingenierías': 0,
+      'Sociales': 0,
+      'Todas': 0
+    };
+    questions.forEach(q => {
+      const qAreas = getQuestionAreas(q);
+      qAreas.forEach(a => {
+        if (stats[a] !== undefined) stats[a]++;
+      });
+      if (q.area === 'Todas' || (Array.isArray(q.areas) && q.areas.length >= 3)) {
+        stats['Todas']++;
+      }
+    });
+    return stats;
+  }, [questions]);
+
+  // Preguntas filtradas según el proceso de admisión Y el área de postulación seleccionada
   const filteredQuestions = useMemo(() => {
-    if (!selectedProcess) return questions;
-    return questions.filter(q => getQuestionProcess(q) === selectedProcess);
-  }, [questions, selectedProcess]);
+    return questions.filter(q => {
+      if (selectedProcess && getQuestionProcess(q) !== selectedProcess) return false;
+      if (!matchesQuestionArea(q, activeAreaFilter)) return false;
+      return true;
+    });
+  }, [questions, selectedProcess, activeAreaFilter]);
 
   const handleStartMixed = (mode: 'CLASSIC' | 'QUIZZIZ' = 'CLASSIC') => {
     if (filteredQuestions.length === 0) return;
@@ -88,27 +119,31 @@ const TopicsView: React.FC<TopicsViewProps> = ({
   const topics = useMemo(() => {
     const grouped = filteredQuestions.reduce((acc, q) => {
       const proc = getQuestionProcess(q);
+      const qAreas = getQuestionAreas(q);
       if (!acc[q.topic]) {
         acc[q.topic] = {
           name: q.topic,
           count: 0,
           order: q.order ?? 999,
           week: q.week,
-          processes: new Set<string>()
+          processes: new Set<string>(),
+          areas: new Set<string>()
         };
       }
       acc[q.topic].count++;
       acc[q.topic].processes.add(proc);
+      qAreas.forEach(a => acc[q.topic].areas.add(a));
       if (q.week !== undefined && acc[q.topic].week === undefined) {
         acc[q.topic].week = q.week;
       }
       return acc;
-    }, {} as Record<string, { name: string; count: number; order: number; week?: number; processes: Set<string> }>);
+    }, {} as Record<string, { name: string; count: number; order: number; week?: number; processes: Set<string>; areas: Set<string> }>);
 
-    return (Object.values(grouped) as { name: string; count: number; order: number; week?: number; processes: Set<string> }[])
+    return (Object.values(grouped) as { name: string; count: number; order: number; week?: number; processes: Set<string>; areas: Set<string> }[])
       .map(t => ({
         ...t,
-        processesList: Array.from(t.processes)
+        processesList: Array.from(t.processes),
+        areasList: Array.from(t.areas)
       }))
       .sort((a, b) => a.order - b.order);
   }, [filteredQuestions]);
@@ -273,6 +308,22 @@ const TopicsView: React.FC<TopicsViewProps> = ({
               {topic.week !== undefined && topic.week !== null && (
                 <span>• Semana {topic.week}</span>
               )}
+              {topic.areasList && topic.areasList.length > 0 && (
+                <div className="flex items-center gap-1 flex-wrap">
+                  {topic.areasList.map(a => {
+                    const badge = getAreaBadgeStyle(a);
+                    return (
+                      <span 
+                        key={a}
+                        className={`text-[10px] font-black px-2 py-0.5 rounded-md ${badge.bg} ${badge.text} border ${badge.border}`}
+                        title={`Práctica para el área ${a}`}
+                      >
+                        {badge.icon} {a === 'Todas' ? 'Común' : a}
+                      </span>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -324,7 +375,7 @@ const TopicsView: React.FC<TopicsViewProps> = ({
 
           {/* Examen Clásico */}
           <button 
-            onClick={() => onSelectTopic(topic.name, 'CLASSIC', selectedProcess || undefined)}
+            onClick={() => onSelectTopic(topic.name, 'CLASSIC', selectedProcess || undefined, activeAreaFilter)}
             className="flex-1 md:flex-initial bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white px-3.5 sm:px-4 py-2.5 rounded-xl text-xs font-black transition-all shadow-md flex items-center justify-center gap-1.5 min-h-[44px]"
             title="Práctica estándar de preguntas"
           >
@@ -336,7 +387,7 @@ const TopicsView: React.FC<TopicsViewProps> = ({
 
           {/* Jugar Practix */}
           <button 
-            onClick={() => onSelectTopic(topic.name, 'QUIZZIZ', selectedProcess || undefined)}
+            onClick={() => onSelectTopic(topic.name, 'QUIZZIZ', selectedProcess || undefined, activeAreaFilter)}
             className="flex-1 md:flex-initial bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 active:scale-95 text-white px-3.5 sm:px-4 py-2.5 rounded-xl text-xs font-black transition-all shadow-md flex items-center justify-center gap-1.5 min-h-[44px]"
             title="Modo Juego Practix con tiempo y comodines"
           >
@@ -430,6 +481,76 @@ const TopicsView: React.FC<TopicsViewProps> = ({
           )}
         </div>
       </div>
+
+      {/* Selector de Área de Postulación y Práctica Semanal (Biomédicas, Ingenierías, Sociales, Todas) */}
+      {!((subjectName === 'Exámenes Rendidos' || subjectName === 'Exámenes Simulacros') && questions.length === 0) && (
+        <div className="bg-gradient-to-r from-indigo-50/70 via-purple-50/40 to-blue-50/60 dark:from-[#020b38] dark:via-[#090b2c] dark:to-[#040827] border border-indigo-100 dark:border-indigo-900/60 rounded-2xl p-4 sm:p-5 shadow-sm space-y-3">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="p-1 bg-indigo-600 text-white rounded-md text-[10px] font-black uppercase">
+                  Área
+                </span>
+                <label className="text-xs font-black uppercase text-indigo-950 dark:text-indigo-200 tracking-wider">
+                  Prácticas Semanales por Área Universitaria:
+                </label>
+              </div>
+              <p className="text-[11px] text-gray-500 dark:text-indigo-300/80 mt-0.5">
+                {selectedArea ? (
+                  <>
+                    Tu área de postulación configurada es <strong className="text-indigo-700 dark:text-indigo-300">{selectedArea}</strong>. Puedes cambiar de área para explorar y practicar preguntas de otras carreras.
+                  </>
+                ) : (
+                  <>
+                    Selecciona el área para ver las prácticas correspondientes (Biomédicas, Ingenierías, Sociales o Todas).
+                  </>
+                )}
+              </p>
+            </div>
+
+            {activeAreaFilter !== 'Todas' && (
+              <span className={`px-2.5 py-1 rounded-xl text-xs font-black border self-start sm:self-auto shrink-0 ${getAreaBadgeStyle(activeAreaFilter).bg} ${getAreaBadgeStyle(activeAreaFilter).text} ${getAreaBadgeStyle(activeAreaFilter).border}`}>
+                {getAreaBadgeStyle(activeAreaFilter).icon} {activeAreaFilter} {activeAreaFilter === selectedArea ? '★ Tu Área' : ''}
+              </span>
+            )}
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
+            {(['Biomédicas', 'Ingenierías', 'Sociales', 'Todas'] as const).map(areaKey => {
+              const badge = getAreaBadgeStyle(areaKey);
+              const isSelected = activeAreaFilter === areaKey;
+              const isUserArea = selectedArea === areaKey;
+              const count = areaKey === 'Todas' ? questions.length : areaStats[areaKey] || 0;
+
+              return (
+                <button
+                  key={areaKey}
+                  type="button"
+                  onClick={() => setActiveAreaFilter(areaKey)}
+                  className={`p-3 rounded-xl font-black text-xs transition-all flex flex-col items-center justify-center gap-1 border-2 min-h-[56px] text-center ${
+                    isSelected
+                      ? `${badge.bg} ${badge.text} ${badge.border} shadow-md ring-2 ring-indigo-400/30 scale-[1.02]`
+                      : 'bg-white/80 dark:bg-[#030d42]/80 text-gray-700 dark:text-indigo-200 border-gray-200/90 dark:border-indigo-900/60 hover:border-indigo-300'
+                  }`}
+                >
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-base">{badge.icon}</span>
+                    <span className="text-xs">{areaKey === 'Todas' ? 'Ver Todas' : areaKey}</span>
+                  </div>
+                  <div className="flex items-center gap-1 text-[10px] font-bold">
+                    <span>{count} preg.</span>
+                    {isUserArea && (
+                      <span className="bg-indigo-600 text-white text-[9px] px-1.5 py-0.2 rounded-full font-black uppercase">
+                        Tu área
+                      </span>
+                    )}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Selector de Proceso de Admisión (Ceprunsa I, Ceprequintos, Ceprunsa II, Todos) */}
       {!((subjectName === 'Exámenes Rendidos' || subjectName === 'Exámenes Simulacros') && filteredQuestions.length === 0) && (

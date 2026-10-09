@@ -1,12 +1,14 @@
 import React from 'react';
 import { ACADEMIC_STRUCTURE } from '../constants';
-import { CourseStructure, Question, TopicResult, SavedExam } from '../types';
+import { CourseStructure, Question, TopicResult, SavedExam, TargetArea } from '../types';
+import { matchesQuestionArea, getAreaBadgeStyle } from '../utils';
 
 interface SubjectsViewProps {
   courseName: string;
   questions?: Question[];
   results?: Record<string, TopicResult>;
   savedExams?: SavedExam[];
+  selectedArea?: TargetArea;
   onSelectSubject: (subject: string) => void;
   academicStructure?: CourseStructure[];
 }
@@ -15,6 +17,7 @@ const SubjectsView: React.FC<SubjectsViewProps> = ({
   courseName, 
   questions = [],
   savedExams = [],
+  selectedArea = 'Biomédicas',
   onSelectSubject,
   academicStructure = ACADEMIC_STRUCTURE
 }) => {
@@ -22,34 +25,47 @@ const SubjectsView: React.FC<SubjectsViewProps> = ({
 
   if (!course) return <div className="text-gray-600 dark:text-gray-300 p-4">Curso no encontrado.</div>;
 
+  const currentArea: TargetArea = (selectedArea === 'Ingenierías' || selectedArea === 'Sociales') ? selectedArea : 'Biomédicas';
+  const areaBadge = getAreaBadgeStyle(currentArea);
+
   return (
     <div className="space-y-6 sm:space-y-8">
       {/* Header */}
-      <div className="flex items-center gap-3.5 sm:gap-4">
-        <div className={`w-14 h-14 sm:w-16 sm:h-16 rounded-2xl overflow-hidden shadow-md ${course.color.split(' ')[0]} dark:opacity-90 shrink-0`}>
-          <img 
-            src={course.icon} 
-            alt={courseName} 
-            className="w-full h-full object-cover"
-            referrerPolicy="no-referrer"
-          />
-        </div>
-        <div className="min-w-0">
-          <h2 className="text-2xl sm:text-3xl font-black text-gray-800 dark:text-gray-100 truncate">
-            Materias de {courseName}
-          </h2>
-          <p className="text-xs sm:text-sm font-medium text-gray-400 dark:text-gray-500 truncate">
-            {courseName === 'Exámenes' 
-              ? 'Accede a tus simulacros dados, historial y resoluciones' 
-              : 'Selecciona una materia para acceder a sus semanas, prácticas y simulacros'}
-          </p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white dark:bg-[#060a22] p-4 sm:p-6 rounded-2xl sm:rounded-3xl border border-gray-100 dark:border-indigo-950 shadow-sm">
+        <div className="flex items-center gap-3.5 sm:gap-4">
+          <div className={`w-14 h-14 sm:w-16 sm:h-16 rounded-2xl overflow-hidden shadow-md ${course.color.split(' ')[0]} dark:opacity-90 shrink-0`}>
+            <img 
+              src={course.icon} 
+              alt={courseName} 
+              className="w-full h-full object-cover"
+              referrerPolicy="no-referrer"
+            />
+          </div>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-[10px] font-black uppercase text-indigo-600 dark:text-indigo-400">Curso</span>
+              <span className={`text-[10px] font-black px-2 py-0.5 rounded-full uppercase border ${areaBadge.bg} ${areaBadge.text} ${areaBadge.border}`}>
+                {areaBadge.icon} Área: {selectedArea}
+              </span>
+            </div>
+            <h2 className="text-2xl sm:text-3xl font-black text-gray-800 dark:text-gray-100 truncate">
+              Materias de {courseName}
+            </h2>
+            <p className="text-xs sm:text-sm font-medium text-gray-400 dark:text-gray-500 truncate">
+              {courseName === 'Exámenes' 
+                ? 'Accede a tus simulacros dados, historial y resoluciones' 
+                : `Prácticas semanales adaptadas para el área de ${selectedArea}`}
+            </p>
+          </div>
         </div>
       </div>
       
       {/* Subjects Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
         {course.subjects.map((subject) => {
-          const subjectQuestionsCount = questions.filter(q => q.subject === subject).length;
+          const subjectQuestions = questions.filter(q => q.subject === subject);
+          const subjectQuestionsCount = subjectQuestions.length;
+          const areaQuestionsCount = subjectQuestions.filter(q => matchesQuestionArea(q, currentArea)).length;
           const isSavedExamsSubject = subject === 'Exámenes Rendidos' || subject === 'Exámenes Simulacros';
           const isOfficialExamsSubject = subject === 'Simulacros Oficiales';
           
@@ -73,7 +89,9 @@ const SubjectsView: React.FC<SubjectsViewProps> = ({
                         ? `${subjectQuestionsCount} preguntas de exámenes pasados`
                         : 'Subir y practicar exámenes pasados')
                     : (subjectQuestionsCount > 0 
-                        ? `${subjectQuestionsCount} preguntas disponibles` 
+                        ? (areaQuestionsCount !== subjectQuestionsCount 
+                            ? `${areaQuestionsCount} para ${currentArea} (${subjectQuestionsCount} total)`
+                            : `${subjectQuestionsCount} preguntas disponibles`)
                         : 'Sin preguntas registradas')}
                 </span>
               </div>

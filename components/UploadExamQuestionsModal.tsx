@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
-import { Question } from '../types';
+import { Question, AcademicArea, TargetArea } from '../types';
 import { CEPRE_BASE_TYPES } from '../constants';
-import { ALL_ACADEMIC_SUBJECTS, getOfficialSubjectWeight, formatQuestionText, parseHTMLTags } from '../utils';
+import { ALL_ACADEMIC_SUBJECTS, getOfficialSubjectWeight, formatQuestionText, parseHTMLTags, getAreaBadgeStyle } from '../utils';
 
 interface UploadExamQuestionsModalProps {
   isOpen: boolean;
@@ -9,7 +9,7 @@ interface UploadExamQuestionsModalProps {
   onSaveQuestions: (questions: Question[]) => void;
   existingTopics?: string[];
   initialTopic?: string;
-  initialArea?: 'Biomédicas' | 'Ingenierías' | 'Sociales';
+  initialArea?: AcademicArea;
   onToast?: (msg: string) => void;
 }
 
@@ -22,8 +22,40 @@ export const UploadExamQuestionsModal: React.FC<UploadExamQuestionsModalProps> =
   initialArea = 'Biomédicas',
   onToast
 }) => {
-  // Step 1: Exam Context
-  const [area, setArea] = useState<'Biomédicas' | 'Ingenierías' | 'Sociales'>(initialArea);
+  // Step 1: Exam Context - Multi-area selection (1, 2, or 3 areas)
+  const [selectedAreas, setSelectedAreas] = useState<TargetArea[]>(() => {
+    if (initialArea === 'Ingenierías' || initialArea === 'Sociales' || initialArea === 'Biomédicas') {
+      return [initialArea];
+    }
+    if (initialArea === 'Todas') {
+      return ['Biomédicas', 'Ingenierías', 'Sociales'];
+    }
+    return ['Biomédicas'];
+  });
+
+  const handleToggleArea = (target: TargetArea) => {
+    setSelectedAreas(prev => {
+      if (prev.includes(target)) {
+        if (prev.length === 1) {
+          if (onToast) onToast('Debes seleccionar al menos un área.');
+          return prev;
+        }
+        return prev.filter(a => a !== target);
+      }
+      return [...prev, target];
+    });
+  };
+
+  const resolvedAreaTag: AcademicArea = useMemo(() => {
+    if (selectedAreas.length >= 3) return 'Todas';
+    return selectedAreas[0] || 'Biomédicas';
+  }, [selectedAreas]);
+
+  const areaDisplay = useMemo(() => {
+    if (selectedAreas.length >= 3) return 'Todas las 3 áreas';
+    return selectedAreas.join(' y ') || 'Biomédicas';
+  }, [selectedAreas]);
+
   const [targetSubject, setTargetSubject] = useState<string>('Física');
   const [deckMode, setDeckMode] = useState<'EXISTING' | 'NEW'>(existingTopics.length > 0 && initialTopic ? 'EXISTING' : 'NEW');
   const [selectedExistingDeck, setSelectedExistingDeck] = useState<string>(initialTopic || (existingTopics[0] || ''));
@@ -55,8 +87,9 @@ export const UploadExamQuestionsModal: React.FC<UploadExamQuestionsModalProps> =
 
   // Calculate official weight
   const currentWeight = useMemo(() => {
-    return getOfficialSubjectWeight(targetSubject, area);
-  }, [targetSubject, area]);
+    const primary = selectedAreas[0] || 'Biomédicas';
+    return getOfficialSubjectWeight(targetSubject, primary);
+  }, [targetSubject, selectedAreas]);
 
   // Resolved Deck Name
   const resolvedDeckName = useMemo(() => {
@@ -102,7 +135,8 @@ export const UploadExamQuestionsModal: React.FC<UploadExamQuestionsModalProps> =
       week: week !== '' ? Number(week) : undefined,
       process: resolvedProcess,
       targetSubject: targetSubject,
-      area: area,
+      area: resolvedAreaTag,
+      areas: [...selectedAreas],
       weight: currentWeight
     };
 
@@ -273,7 +307,8 @@ export const UploadExamQuestionsModal: React.FC<UploadExamQuestionsModalProps> =
       week: week !== '' ? Number(week) : undefined,
       process: resolvedProcess,
       targetSubject: targetSubject,
-      area: area,
+      area: resolvedAreaTag,
+      areas: [...selectedAreas],
       weight: currentWeight
     }));
 
@@ -291,8 +326,9 @@ export const UploadExamQuestionsModal: React.FC<UploadExamQuestionsModalProps> =
     }
 
     onSaveQuestions(questionsQueue);
+    const areasStr = selectedAreas.length === 3 ? 'Común (3 áreas)' : selectedAreas.join(' + ');
     if (onToast) {
-      onToast(`¡Éxito! Se guardaron ${questionsQueue.length} preguntas de ${targetSubject} en "${resolvedDeckName}" (${area}).`);
+      onToast(`¡Éxito! Se guardaron ${questionsQueue.length} preguntas de ${targetSubject} en "${resolvedDeckName}" (${areasStr}).`);
     }
     setQuestionsQueue([]);
     onClose();
@@ -345,10 +381,10 @@ export const UploadExamQuestionsModal: React.FC<UploadExamQuestionsModalProps> =
               <div>
                 <span className="text-xs font-black uppercase tracking-wider text-indigo-700 dark:text-indigo-300 flex items-center gap-1.5">
                   <span className="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center text-[10px]">1</span>
-                  Especificación de Área y Materia del Examen
+                  Especificación de Área(s) y Materia del Examen
                 </span>
                 <p className="text-xs text-gray-500 dark:text-gray-300 mt-1">
-                  En un examen oficial cada materia tiene un valor por pregunta distinto según el Área postulada.
+                  Permite asignar el mazo a una sola área, a dos áreas (ej. Biomédicas + Ingenierías) o a las tres áreas a la vez.
                 </p>
               </div>
               
@@ -360,26 +396,45 @@ export const UploadExamQuestionsModal: React.FC<UploadExamQuestionsModalProps> =
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Área del Examen */}
+              {/* Área del Examen: Permite escoger 1, 2 o las 3 áreas */}
               <div>
-                <label className="block text-xs font-black uppercase tracking-wider text-indigo-950 dark:text-indigo-200 mb-2">
-                  Área del Examen a Subir:
-                </label>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-xs font-black uppercase tracking-wider text-indigo-950 dark:text-indigo-200">
+                    Áreas a las que Aplica:
+                  </label>
+                  <span className="text-[11px] font-bold text-indigo-600 dark:text-indigo-300">
+                    {selectedAreas.length === 3
+                      ? '✓ Las 3 Áreas (Común)'
+                      : selectedAreas.length === 2
+                      ? `✓ 2 Áreas seleccionadas`
+                      : `✓ 1 Área seleccionada`}
+                  </span>
+                </div>
+
+                {/* Chips de selección múltiple (activa / desactiva con un clic) */}
+                <div className="grid grid-cols-3 gap-2 mb-2">
                   {(['Biomédicas', 'Ingenierías', 'Sociales'] as const).map(areaOpt => {
-                    const isSelected = area === areaOpt;
+                    const isSelected = selectedAreas.includes(areaOpt);
+                    const badge = getAreaBadgeStyle(areaOpt);
                     return (
                       <button
                         key={areaOpt}
                         type="button"
-                        onClick={() => setArea(areaOpt)}
-                        className={`py-2.5 px-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex flex-col items-center justify-center border-2 min-h-[46px] ${
+                        onClick={() => handleToggleArea(areaOpt)}
+                        className={`py-2 px-2.5 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1.5 border-2 min-h-[46px] ${
                           isSelected
-                            ? 'bg-indigo-600 text-white border-indigo-600 shadow-md scale-[1.02]'
-                            : 'bg-white dark:bg-[#030d42] text-indigo-950 dark:text-indigo-200 border-indigo-200 dark:border-indigo-800/70 hover:border-indigo-400'
+                            ? 'bg-indigo-600 text-white border-indigo-600 shadow-md ring-2 ring-indigo-400/40 scale-[1.02]'
+                            : 'bg-white dark:bg-[#030d42] text-gray-600 dark:text-gray-300 border-indigo-200 dark:border-indigo-800/70 hover:border-indigo-400 opacity-60'
                         }`}
+                        title={isSelected ? `Quitar ${areaOpt}` : `Añadir ${areaOpt}`}
                       >
-                        <span>{areaOpt}</span>
+                        <span className="text-base">{badge.icon}</span>
+                        <span className="text-[11px] font-bold">{areaOpt}</span>
+                        {isSelected && (
+                          <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5 ml-auto text-emerald-300" viewBox="0 0 20 20" fill="currentColor">
+                            <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                          </svg>
+                        )}
                       </button>
                     );
                   })}
@@ -397,10 +452,11 @@ export const UploadExamQuestionsModal: React.FC<UploadExamQuestionsModalProps> =
                   className="w-full bg-white dark:bg-[#030d42] border-2 border-indigo-300 dark:border-indigo-700 rounded-xl p-2.5 text-sm font-black outline-none text-indigo-950 dark:text-indigo-100 focus:ring-2 focus:ring-indigo-500 shadow-sm"
                 >
                   {ALL_ACADEMIC_SUBJECTS.map(subj => {
-                    const w = getOfficialSubjectWeight(subj, area);
+                    const primary = selectedAreas[0] || 'Biomédicas';
+                    const w = getOfficialSubjectWeight(subj, primary);
                     return (
                       <option key={subj} value={subj}>
-                        {subj} — ({w.toFixed(3)} pts en {area})
+                        {subj} — ({w.toFixed(3)} pts en {primary})
                       </option>
                     );
                   })}
@@ -413,7 +469,7 @@ export const UploadExamQuestionsModal: React.FC<UploadExamQuestionsModalProps> =
               <div className="flex items-center gap-2">
                 <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0"></span>
                 <span className="font-bold text-gray-700 dark:text-gray-200">
-                  Cada pregunta de <strong className="text-indigo-600 dark:text-indigo-400">{targetSubject}</strong> sumará <strong className="text-emerald-600 dark:text-emerald-400">{currentWeight.toFixed(5)} pts</strong> en el mazo oficial ({area}).
+                  Cada pregunta de <strong className="text-indigo-600 dark:text-indigo-400">{targetSubject}</strong> sumará <strong className="text-emerald-600 dark:text-emerald-400">{currentWeight.toFixed(5)} pts</strong> en el mazo oficial ({selectedAreas.length === 3 ? 'Común a las 3 áreas' : selectedAreas.join(' + ')}).
                 </span>
               </div>
             </div>
@@ -751,7 +807,7 @@ Explicación: El Joule (J) es la unidad del Sistema Internacional para energía 
                     <span>Preguntas Listas para Subir ({questionsQueue.length})</span>
                   </h4>
                   <p className="text-xs text-emerald-700 dark:text-emerald-300">
-                    Se guardarán en el mazo <strong>"{resolvedDeckName}"</strong> ({area}).
+                    Se guardarán en el mazo <strong>"{resolvedDeckName}"</strong> ({areaDisplay}).
                   </p>
                 </div>
 

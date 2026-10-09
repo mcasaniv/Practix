@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Question, AppDatabase, ViewType, NavigationState, TopicResult, ReadingText, Flashcard, SavedExam, UserProfile, CustomDeck } from './types';
 import { ACADEMIC_STRUCTURE, DB_STORAGE_KEY } from './constants';
-import { getQuestionProcess, parseAndNormalizeImport } from './utils';
+import { getQuestionProcess, parseAndNormalizeImport, matchesQuestionArea } from './utils';
 import Navbar from './components/Navbar';
 import HomeView from './views/HomeView';
 import SubjectsView from './views/SubjectsView';
@@ -15,6 +15,7 @@ import FlashcardsHomeView from './views/FlashcardsHomeView';
 import FlashcardsPlayView from './views/FlashcardsPlayView';
 import { CustomDecksView } from './views/CustomDecksView';
 import { StatsView } from './views/StatsView';
+import { ProfileView } from './views/ProfileView';
 
 const sanitizeDatabase = (data: AppDatabase): AppDatabase => {
   // Migrate legacy Ecología and Anatomía records to Biología, and filter out Francés
@@ -517,7 +518,10 @@ const App: React.FC = () => {
       ...prev,
       userProfile: profile
     }));
-  }, [setDb]);
+    if (profile.targetArea) {
+      handleSetSelectedArea(profile.targetArea);
+    }
+  }, [setDb, handleSetSelectedArea]);
 
   const handleResetPracticed = useCallback(() => {
     setDb(prev => ({ ...prev, totalPracticed: 0 }));
@@ -618,7 +622,7 @@ const App: React.FC = () => {
 
   const handleBack = useCallback(() => {
     setNav(prev => {
-      if (prev.view === 'ADMIN' || prev.view === 'MEGA_QUIZ' || prev.view === 'EXAM_SETUP' || prev.view === 'STATS') return { ...prev, view: 'HOME', examMode: undefined, selectedExamSubjects: undefined, selectedExamWeeks: undefined, retakeExam: undefined };
+      if (prev.view === 'ADMIN' || prev.view === 'MEGA_QUIZ' || prev.view === 'EXAM_SETUP' || prev.view === 'STATS' || prev.view === 'PROFILE' || prev.view === 'CUSTOM_DECKS') return { ...prev, view: 'HOME', examMode: undefined, selectedExamSubjects: undefined, selectedExamWeeks: undefined, retakeExam: undefined };
       if (prev.view === 'QUIZ' || prev.view === 'MIXED_QUIZ') return { ...prev, view: 'TOPICS', mixedQuestions: undefined };
       if (prev.view === 'TOPICS') return { ...prev, view: 'SUBJECTS', selectedTopic: undefined };
       if (prev.view === 'SUBJECTS') return { ...prev, view: 'HOME', selectedSubject: undefined };
@@ -675,6 +679,7 @@ const App: React.FC = () => {
             questions={db.questions}
             results={db.results || {}}
             savedExams={db.savedExams || []}
+            selectedArea={selectedArea}
             onSelectSubject={(subject) => handleNavigate('TOPICS', { selectedCourse: nav.selectedCourse, selectedSubject: subject })} 
           />
         );
@@ -689,7 +694,7 @@ const App: React.FC = () => {
             readingTexts={db.readingTexts || []}
             results={db.results || {}}
             savedExams={db.savedExams || []}
-            onSelectTopic={(topic, mode, process) => handleNavigate('QUIZ', { selectedTopic: topic, quizMode: mode, selectedProcess: process })}
+            onSelectTopic={(topic, mode, process, areaFilter) => handleNavigate('QUIZ', { selectedTopic: topic, quizMode: mode, selectedProcess: process, selectedAreaFilter: areaFilter })}
             onStartMixedQuiz={(questions, mode) => handleNavigate('MIXED_QUIZ', { mixedQuestions: questions, quizMode: mode })}
             onDeleteTopic={(topic) => deleteTopic(topic, nav.selectedSubject!)}
             onMoveTopic={(topic, dir) => moveTopic(topic, nav.selectedSubject!, dir)}
@@ -702,16 +707,24 @@ const App: React.FC = () => {
             onToast={showToast}
           />
         );
-      case 'QUIZ':
+      case 'QUIZ': {
+        const areaToFilter = nav.selectedAreaFilter || selectedArea;
+        const topicFilteredQuestions = db.questions.filter(q => 
+          q.topic === nav.selectedTopic && 
+          q.subject === nav.selectedSubject && 
+          (!nav.selectedProcess || getQuestionProcess(q) === nav.selectedProcess) &&
+          matchesQuestionArea(q, areaToFilter)
+        );
+        const finalQuizQuestions = topicFilteredQuestions.length > 0 ? topicFilteredQuestions : db.questions.filter(q => 
+          q.topic === nav.selectedTopic && 
+          q.subject === nav.selectedSubject && 
+          (!nav.selectedProcess || getQuestionProcess(q) === nav.selectedProcess)
+        );
         return (
           <QuizView 
             topicName={nav.selectedTopic!}
             subjectName={nav.selectedSubject!}
-            questions={db.questions.filter(q => 
-              q.topic === nav.selectedTopic && 
-              q.subject === nav.selectedSubject && 
-              (!nav.selectedProcess || getQuestionProcess(q) === nav.selectedProcess)
-            )}
+            questions={finalQuizQuestions}
             readingTexts={db.readingTexts || []}
             results={db.results || {}}
             initialMode={nav.quizMode || 'CLASSIC'}
@@ -720,6 +733,7 @@ const App: React.FC = () => {
             onBack={handleBack}
           />
         );
+      }
       case 'MIXED_QUIZ':
         return (
           <QuizView 
@@ -816,6 +830,23 @@ const App: React.FC = () => {
             onUpdateProfile={handleUpdateUserProfile}
           />
         );
+      case 'PROFILE':
+        return (
+          <ProfileView 
+            userProfile={db.userProfile}
+            onUpdateProfile={handleUpdateUserProfile}
+            selectedArea={selectedArea}
+            onSetSelectedArea={handleSetSelectedArea}
+            totalPracticed={db.totalPracticed || 0}
+            totalFlashcardsPracticed={db.totalFlashcardsPracticed || 0}
+            savedExamsCount={db.savedExams?.length || 0}
+            courseCovers={db.courseCovers}
+            onSaveCourseCovers={handleSaveCourseCovers}
+            academicStructure={academicStructure}
+            onToast={showToast}
+            onNavigateToHome={() => handleNavigate('HOME')}
+          />
+        );
       case 'CUSTOM_DECKS':
         return (
           <CustomDecksView 
@@ -863,6 +894,7 @@ const App: React.FC = () => {
           toggleTheme={() => setIsDark(!isDark)}
           totalPracticed={db.totalPracticed || 0}
           totalFlashcardsPracticed={db.totalFlashcardsPracticed || 0}
+          userProfile={db.userProfile}
           onToast={showToast}
         />
       )}

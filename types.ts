@@ -6,6 +6,9 @@ export interface ReadingText {
   subject: string;
 }
 
+export type AcademicArea = 'Biomédicas' | 'Ingenierías' | 'Sociales' | 'Todas';
+export type TargetArea = 'Biomédicas' | 'Ingenierías' | 'Sociales';
+
 export interface Question {
   id: string;
   course: string;
@@ -24,7 +27,8 @@ export interface Question {
   week?: number; // Opcional: Semana a la que pertenece el tema (1, 2, 3...)
   process?: string; // Proceso de admisión (ej: 'Ceprunsa I Fase 2027', 'Ceprunsa II Fase 2027', 'Ceprequintos 2027')
   targetSubject?: string; // Materia académica específica (ej: 'Física', 'Literatura', 'Biología')
-  area?: 'Biomédicas' | 'Ingenierías' | 'Sociales'; // Área de admisión oficial
+  area?: AcademicArea; // Área oficial de la práctica Ceprunsa (Biomédicas, Ingenierías, Sociales o Todas)
+  areas?: TargetArea[]; // Áreas a las que aplica la pregunta (permite 1, 2 o las 3 áreas)
   weight?: number; // Valor/puntaje oficial asignado a la pregunta
 }
 
@@ -79,8 +83,16 @@ export interface SavedExam {
 }
 
 export interface UserProfile {
+  uid?: string;
   name: string;
+  email?: string;
+  bio?: string;
   avatarUrl?: string;
+  targetArea?: TargetArea;
+  targetCareer?: string;
+  plan?: string;
+  soundEffectsEnabled?: boolean;
+  motivationalQuotesEnabled?: boolean;
 }
 
 export interface CustomDeck {
@@ -89,6 +101,8 @@ export interface CustomDeck {
   description?: string;
   icon?: string; // Icon id e.g. 'star', 'brain', 'flame'
   color?: string; // e.g. 'indigo', 'purple', 'emerald', 'amber', 'rose', 'cyan'
+  course?: string;
+  coverUrl?: string;
   questionIds: string[];
   createdAt: number;
   updatedAt?: number;
@@ -110,7 +124,7 @@ export interface AppDatabase {
   customDecks?: CustomDeck[];
 }
 
-export type ViewType = 'HOME' | 'SUBJECTS' | 'TOPICS' | 'QUIZ' | 'ADMIN' | 'MEGA_QUIZ' | 'MIXED_QUIZ' | 'EXAM_SETUP' | 'FLASHCARDS_HOME' | 'FLASHCARDS_SUBJECTS' | 'FLASHCARDS_PLAY' | 'STATS' | 'CUSTOM_DECKS';
+export type ViewType = 'HOME' | 'SUBJECTS' | 'TOPICS' | 'QUIZ' | 'ADMIN' | 'MEGA_QUIZ' | 'MIXED_QUIZ' | 'EXAM_SETUP' | 'FLASHCARDS_HOME' | 'FLASHCARDS_SUBJECTS' | 'FLASHCARDS_PLAY' | 'STATS' | 'CUSTOM_DECKS' | 'PROFILE';
 
 export type ExamMode = 'GENERAL' | 'CUSTOM';
 
@@ -129,6 +143,7 @@ export interface NavigationState {
   retakeExam?: SavedExam;
   isReviewMode?: boolean;
   quizMode?: 'CLASSIC' | 'QUIZZIZ';
+  selectedAreaFilter?: 'Biomédicas' | 'Ingenierías' | 'Sociales' | 'Todas';
 }
 
 export interface CourseStructure {

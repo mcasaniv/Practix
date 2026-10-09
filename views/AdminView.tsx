@@ -1,8 +1,8 @@
 
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { Question, ReadingText, Flashcard } from '../types';
+import { Question, ReadingText, Flashcard, AcademicArea, TargetArea } from '../types';
 import { ACADEMIC_STRUCTURE, ADMISSION_PROCESSES, DEFAULT_ADMISSION_PROCESS, CEPRE_BASE_TYPES } from '../constants';
-import { formatQuestionText, parseHTMLTags, getQuestionProcess, getProcessBadgeStyle, getProcessShortName, getAvailableProcesses, getOfficialSubjectWeight, ALL_ACADEMIC_SUBJECTS, parseAndNormalizeImport } from '../utils';
+import { formatQuestionText, parseHTMLTags, getQuestionProcess, getProcessBadgeStyle, getProcessShortName, getAvailableProcesses, getOfficialSubjectWeight, ALL_ACADEMIC_SUBJECTS, getAreaBadgeStyle, ACADEMIC_AREAS, getQuestionArea, getQuestionAreas, matchesQuestionArea } from '../utils';
 
 interface AdminViewProps {
   questions: Question[];
@@ -90,58 +90,8 @@ const AdminView: React.FC<AdminViewProps> = ({
   courseCovers = {},
   onSaveCourseCovers
 }) => {
-  const [activeTab, setActiveTab] = useState<'EDITOR' | 'JSON_IMPORT' | 'MANAGE' | 'TEXTS' | 'FLASHCARDS_ADD' | 'FLASHCARDS_MANAGE' | 'COVERS'>('EDITOR');
+  const [activeTab, setActiveTab] = useState<'EDITOR' | 'MANAGE' | 'TEXTS' | 'FLASHCARDS_ADD' | 'FLASHCARDS_MANAGE'>('EDITOR');
   const [currentBatch, setCurrentBatch] = useState<Question[]>([]);
-  
-  // JSON Questions Bulk Import State
-  const [jsonImportText, setJsonImportText] = useState('');
-  const [jsonParsedQuestions, setJsonParsedQuestions] = useState<Question[]>([]);
-  const [jsonImportError, setJsonImportError] = useState<string | null>(null);
-
-  const handleProcessJsonImport = (textToProcess?: string) => {
-    const raw = (textToProcess !== undefined ? textToProcess : jsonImportText).trim();
-    if (!raw) {
-      setJsonImportError("Pega el texto JSON o carga un archivo.");
-      setJsonParsedQuestions([]);
-      return;
-    }
-    setJsonImportError(null);
-    try {
-      const result = parseAndNormalizeImport(raw, { questions: [], results: {}, flashcards: [], readingTexts: [] });
-      if (result.database.questions.length > 0) {
-        setJsonParsedQuestions(result.database.questions);
-        showToast(`Se detectaron ${result.database.questions.length} preguntas listas para importar.`);
-      } else {
-        setJsonImportError("No se encontraron preguntas válidas en el texto proporcionado.");
-        setJsonParsedQuestions([]);
-      }
-    } catch (err: any) {
-      setJsonImportError(err?.message || "Error al procesar el formato JSON.");
-      setJsonParsedQuestions([]);
-    }
-  };
-
-  const handleJsonFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const content = (event.target?.result as string) || '';
-      setJsonImportText(content);
-      handleProcessJsonImport(content);
-    };
-    reader.readAsText(file);
-    e.target.value = '';
-  };
-
-  const handleSaveJsonQuestions = () => {
-    if (jsonParsedQuestions.length === 0) return;
-    onSaveBatch(jsonParsedQuestions);
-    showToast(`Se guardaron ${jsonParsedQuestions.length} preguntas en el banco.`);
-    setJsonImportText('');
-    setJsonParsedQuestions([]);
-    setActiveTab('MANAGE');
-  };
 
   const [tempCovers, setTempCovers] = useState<Record<string, string>>({});
 
@@ -209,6 +159,28 @@ const AdminView: React.FC<AdminViewProps> = ({
   const [readingTextId, setReadingTextId] = useState('');
   const [imageUrl, setImageUrl] = useState('');
 
+  // Area state: Aplica a TODAS las preguntas (permite seleccionar 1, 2 o las 3 áreas)
+  const [questionAreas, setQuestionAreas] = useState<TargetArea[]>(['Biomédicas']);
+  const [questionArea, setQuestionArea] = useState<AcademicArea>('Biomédicas');
+  const [manageFilterArea, setManageFilterArea] = useState<string>('');
+
+  const handleToggleQuestionArea = (target: TargetArea) => {
+    setQuestionAreas(prev => {
+      if (prev.includes(target)) {
+        if (prev.length === 1) {
+          showToast('La pregunta debe pertenecer al menos a un área.');
+          return prev;
+        }
+        const next = prev.filter(a => a !== target);
+        setQuestionArea(next.length === 3 ? 'Todas' : next[0]);
+        return next;
+      }
+      const next = [...prev, target];
+      setQuestionArea(next.length === 3 ? 'Todas' : next[0]);
+      return next;
+    });
+  };
+
   // Official Exam state (para Exámenes / Simulacros Oficiales)
   const [examArea, setExamArea] = useState<'Biomédicas' | 'Ingenierías' | 'Sociales'>('Biomédicas');
   const [examTargetSubject, setExamTargetSubject] = useState<string>('Física');
@@ -217,8 +189,9 @@ const AdminView: React.FC<AdminViewProps> = ({
   const isOfficialExamCourse = course === 'Exámenes' || subject === 'Simulacros Oficiales' || subject === 'Exámenes Simulacros';
 
   const officialAutoWeight = useMemo(() => {
-    return getOfficialSubjectWeight(examTargetSubject, examArea);
-  }, [examTargetSubject, examArea]);
+    const areaForWeight = (questionArea === 'Ingenierías' || questionArea === 'Sociales') ? questionArea : 'Biomédicas';
+    return getOfficialSubjectWeight(examTargetSubject, areaForWeight);
+  }, [examTargetSubject, questionArea]);
 
   const effectiveWeight = useMemo(() => {
     if (examCustomWeight && !isNaN(Number(examCustomWeight)) && Number(examCustomWeight) > 0) {
@@ -330,6 +303,8 @@ const AdminView: React.FC<AdminViewProps> = ({
     setReadingTextId('');
     setImageUrl('');
     setWeek('');
+    setQuestionArea('Biomédicas');
+    setQuestionAreas(['Biomédicas']);
     if (full) {
       setCourse('');
       setSubject('');
@@ -376,7 +351,8 @@ const AdminView: React.FC<AdminViewProps> = ({
       explanationImageUrl: explanationImageUrl || undefined,
       week: week !== '' ? Number(week) : undefined,
       targetSubject: isOfficialExamCourse ? examTargetSubject : undefined,
-      area: isOfficialExamCourse ? examArea : undefined,
+      area: questionAreas.length === 3 ? 'Todas' : questionAreas[0],
+      areas: [...questionAreas],
       weight: isOfficialExamCourse ? effectiveWeight : undefined
     };
 
@@ -470,8 +446,12 @@ const AdminView: React.FC<AdminViewProps> = ({
     if (q.targetSubject) {
       setExamTargetSubject(q.targetSubject);
     }
-    if (q.area) {
-      setExamArea(q.area);
+    const resolvedAreas = getQuestionAreas(q);
+    setQuestionAreas(resolvedAreas);
+    const resolvedArea = resolvedAreas.length === 3 ? 'Todas' : (resolvedAreas[0] || 'Biomédicas');
+    setQuestionArea(resolvedArea);
+    if (resolvedAreas.length > 0) {
+      setExamArea(resolvedAreas[0]);
     }
     if (q.weight) {
       setExamCustomWeight(String(q.weight));
@@ -691,9 +671,36 @@ const AdminView: React.FC<AdminViewProps> = ({
       const matchCourse = !manageFilterCourse || q.course === manageFilterCourse;
       const matchSubject = !manageFilterSubject || q.subject === manageFilterSubject;
       const matchProcess = !manageFilterProcess || getQuestionProcess(q) === manageFilterProcess;
-      return matchCourse && matchSubject && matchProcess;
+      const resolvedArea = q.area || 'Biomédicas';
+      const matchArea = !manageFilterArea || resolvedArea === manageFilterArea;
+      return matchCourse && matchSubject && matchProcess && matchArea;
     });
-  }, [questions, manageFilterCourse, manageFilterSubject, manageFilterProcess]);
+  }, [questions, manageFilterCourse, manageFilterSubject, manageFilterProcess, manageFilterArea]);
+
+  const handleBatchAssignArea = (targetArea: AcademicArea) => {
+    if (filteredQuestions.length === 0) return;
+    const targetIds = new Set(filteredQuestions.map(q => q.id));
+    const updatedAll = questions.map(q => {
+      if (targetIds.has(q.id)) {
+        return { ...q, area: targetArea };
+      }
+      return q;
+    });
+    // Replace questions in batch by saving them
+    onSaveBatch(updatedAll.filter(q => targetIds.has(q.id)));
+    showToast(`Se asignó el área "${targetArea}" a ${targetIds.size} preguntas.`);
+  };
+
+  const handleMarkLegacyAsBiomedicas = () => {
+    const legacyWithoutExplicitArea = questions.filter(q => !q.area);
+    if (legacyWithoutExplicitArea.length === 0) {
+      showToast("Todas las preguntas ya tienen un área asignada.");
+      return;
+    }
+    const updated = legacyWithoutExplicitArea.map(q => ({ ...q, area: 'Biomédicas' as AcademicArea }));
+    onSaveBatch(updated);
+    showToast(`Se marcaron ${updated.length} preguntas anteriores como Biomédicas.`);
+  };
 
   return (
     <div className="max-w-7xl mx-auto">
@@ -704,15 +711,6 @@ const AdminView: React.FC<AdminViewProps> = ({
           className={`px-4 md:px-6 py-2.5 rounded-xl font-bold text-[11px] md:text-xs transition-all ${activeTab === 'EDITOR' ? 'bg-white dark:bg-slate-800 text-indigo-700 dark:text-indigo-300 shadow-md' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'}`}
         >
           {isEditing ? 'Editando' : 'Añadir'}
-        </button>
-        <button 
-          onClick={() => setActiveTab('JSON_IMPORT')}
-          className={`px-4 md:px-6 py-2.5 rounded-xl font-bold text-[11px] md:text-xs transition-all flex items-center gap-1.5 ${activeTab === 'JSON_IMPORT' ? 'bg-white dark:bg-slate-800 text-indigo-700 dark:text-indigo-300 shadow-md' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'}`}
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-          </svg>
-          <span>Subir JSON</span>
         </button>
         <button 
           onClick={() => setActiveTab('TEXTS')}
@@ -737,12 +735,6 @@ const AdminView: React.FC<AdminViewProps> = ({
           className={`px-4 md:px-6 py-2.5 rounded-xl font-bold text-[11px] md:text-xs transition-all ${activeTab === 'FLASHCARDS_MANAGE' ? 'bg-white dark:bg-slate-800 text-indigo-700 dark:text-indigo-300 shadow-md' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'}`}
         >
           Banco Flashcards ({flashcards.length})
-        </button>
-        <button 
-          onClick={() => setActiveTab('COVERS')}
-          className={`px-4 md:px-6 py-2.5 rounded-xl font-bold text-[11px] md:text-xs transition-all ${activeTab === 'COVERS' ? 'bg-white dark:bg-slate-800 text-indigo-700 dark:text-indigo-300 shadow-md' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'}`}
-        >
-          Portadas
         </button>
       </div>
 
@@ -867,80 +859,97 @@ const AdminView: React.FC<AdminViewProps> = ({
                   </div>
                 </div>
 
-                {/* Panel exclusivo para Exámenes Oficiales: Selección de Área y Materia Académica */}
-                {isOfficialExamCourse && (
-                  <div className="md:col-span-2 bg-gradient-to-br from-indigo-50/70 to-purple-50/70 dark:from-indigo-950/40 dark:to-purple-950/40 p-4 sm:p-5 rounded-2xl border-2 border-indigo-200 dark:border-indigo-800 space-y-4 shadow-sm animate-fade-in">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-indigo-100 dark:border-indigo-900/60 pb-3">
-                      <div>
-                        <h4 className="text-sm font-black text-indigo-900 dark:text-indigo-200 flex items-center gap-2">
-                          <span className="p-1.5 bg-indigo-600 text-white rounded-lg">
-                            <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                            </svg>
-                          </span>
-                          <span>Especificación de Materia y Área del Examen</span>
-                        </h4>
-                        <p className="text-[11px] text-gray-600 dark:text-gray-300 mt-0.5">
-                          En un simulacro oficial cada pregunta pertenece a una materia (Física, Literatura, etc.) y tiene un valor distinto según el Área.
-                        </p>
+                {/* Selector de Área / Práctica de Admisión: Permite 1, 2 o las 3 áreas */}
+                <div className="md:col-span-2 bg-gray-50 dark:bg-slate-800/80 p-4 sm:p-5 rounded-2xl border border-gray-200 dark:border-slate-700 space-y-3 shadow-sm">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-gray-200 dark:border-slate-700/80 pb-3">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="p-1.5 bg-gray-700 dark:bg-slate-700 text-white rounded-lg text-xs font-black">
+                          ÁREAS
+                        </span>
+                        <label className="text-sm font-black text-gray-800 dark:text-gray-100 uppercase tracking-wide">
+                          Áreas a las que Aplica esta Pregunta
+                        </label>
                       </div>
-                      <div className="bg-indigo-600 text-white px-3 py-1.5 rounded-xl font-mono text-xs font-black self-start sm:self-auto shrink-0 shadow-sm flex items-center gap-1.5">
-                        <span className="text-[10px] uppercase font-bold text-indigo-200">Valor:</span>
-                        <span>{effectiveWeight.toFixed(5)} pts</span>
-                      </div>
+                      <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1">
+                        Puedes escoger si esta pregunta va para 1 área, 2 áreas (ej. Biomédicas + Ingenierías) o las 3 áreas a la vez.
+                      </p>
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      {/* 1. Selector de Área */}
-                      <div>
-                        <label className="block text-[11px] font-black uppercase tracking-wider text-indigo-900 dark:text-indigo-300 mb-2">
-                          Área del Examen Evaluado:
-                        </label>
-                        <div className="grid grid-cols-3 gap-2">
-                          {(['Biomédicas', 'Ingenierías', 'Sociales'] as const).map(areaOption => (
-                            <button
-                              key={areaOption}
-                              type="button"
-                              onClick={() => setExamArea(areaOption)}
-                              className={`py-2 px-2 text-xs font-black rounded-xl transition-all text-center min-h-[40px] flex items-center justify-center ${
-                                examArea === areaOption
-                                  ? 'bg-indigo-600 text-white shadow-md'
-                                  : 'bg-white dark:bg-slate-900 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-slate-700 hover:border-indigo-400'
-                              }`}
-                            >
-                              {areaOption}
-                            </button>
-                          ))}
+                    <div className="flex items-center gap-1.5 self-start sm:self-auto shrink-0 flex-wrap">
+                      <span className="text-[10px] font-bold text-gray-400 uppercase">Seleccionadas ({questionAreas.length}):</span>
+                      {questionAreas.map(a => {
+                        const b = getAreaBadgeStyle(a);
+                        return (
+                          <span key={a} className={`px-2 py-0.5 rounded-lg text-xs font-black border ${b.bg} ${b.text} ${b.border}`}>
+                            {b.icon} {a}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
+                    {(['Biomédicas', 'Ingenierías', 'Sociales'] as const).map(aOption => {
+                      const badge = getAreaBadgeStyle(aOption);
+                      const isSelected = questionAreas.includes(aOption);
+                      return (
+                        <button
+                          key={aOption}
+                          type="button"
+                          onClick={() => handleToggleQuestionArea(aOption)}
+                          className={`p-3 rounded-xl font-black text-xs transition-all flex items-center justify-between border-2 min-h-[50px] ${
+                            isSelected
+                              ? 'border-indigo-600 dark:border-indigo-400 bg-white dark:bg-slate-800 text-indigo-700 dark:text-indigo-300 shadow-md ring-2 ring-indigo-400/30 scale-[1.01]'
+                              : 'border-gray-200 dark:border-slate-700 bg-white/70 dark:bg-slate-900/60 text-gray-500 dark:text-gray-400 hover:border-indigo-300 opacity-60'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className="text-base">{badge.icon}</span>
+                            <span className="text-xs font-black">{aOption}</span>
+                          </div>
+                          {isSelected ? (
+                            <span className="text-[10px] font-black text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950 px-2 py-0.5 rounded-md">
+                              Activa ✓
+                            </span>
+                          ) : (
+                            <span className="text-[10px] font-bold text-gray-400">
+                              + Añadir
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Panel adicional si es un simulacro oficial */}
+                  {isOfficialExamCourse && (
+                    <div className="pt-3 border-t border-indigo-100 dark:border-indigo-900/60 space-y-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-[11px] font-black uppercase text-indigo-900 dark:text-indigo-300 mb-1">
+                            Materia Académica en el Simulacro:
+                          </label>
+                          <select
+                            value={examTargetSubject}
+                            onChange={(e) => setExamTargetSubject(e.target.value)}
+                            className="w-full bg-white dark:bg-slate-900 border border-indigo-300 dark:border-indigo-700 rounded-xl p-2.5 text-xs font-black outline-none"
+                          >
+                            {ALL_ACADEMIC_SUBJECTS.map(subjName => (
+                              <option key={subjName} value={subjName}>
+                                {subjName} ({getOfficialSubjectWeight(subjName, examArea).toFixed(3)} pts en {examArea})
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="flex items-center justify-between bg-white/80 dark:bg-slate-900/80 p-2.5 rounded-xl border border-indigo-100 dark:border-slate-800 text-xs">
+                          <span className="text-gray-500 font-bold">Puntaje por acierto:</span>
+                          <span className="font-mono font-black text-indigo-600 dark:text-indigo-400">{effectiveWeight.toFixed(5)} pts</span>
                         </div>
                       </div>
 
-                      {/* 2. Selector de Materia Académica de esta Pregunta */}
-                      <div>
-                        <label className="block text-[11px] font-black uppercase tracking-wider text-indigo-900 dark:text-indigo-300 mb-2">
-                          ¿De qué materia es esta pregunta?:
-                        </label>
-                        <select
-                          value={examTargetSubject}
-                          onChange={(e) => setExamTargetSubject(e.target.value)}
-                          className="w-full bg-white dark:bg-slate-900 border-2 border-indigo-300 dark:border-indigo-700 rounded-xl p-2.5 text-sm font-black outline-none text-indigo-950 dark:text-indigo-100 focus:ring-2 focus:ring-indigo-500 shadow-sm"
-                        >
-                          {ALL_ACADEMIC_SUBJECTS.map(subjName => (
-                            <option key={subjName} value={subjName}>
-                              {subjName} ({getOfficialSubjectWeight(subjName, examArea).toFixed(3)} pts en {examArea})
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    </div>
-
-                    {/* Nota explicativa de equivalencia */}
-                    <div className="p-3 bg-white/70 dark:bg-slate-900/70 rounded-xl border border-indigo-100 dark:border-slate-800 text-xs text-gray-600 dark:text-gray-300 flex items-center justify-between flex-wrap gap-2">
-                      <div className="flex items-center gap-2">
-                        <span className="font-bold text-indigo-600 dark:text-indigo-400">{examTargetSubject}:</span>
-                        <span>Vale <strong>{officialAutoWeight.toFixed(5)} puntos</strong> en {examArea}</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-[11px] text-gray-400">Puntaje personalizado (opc):</span>
+                      <div className="flex items-center gap-2 pt-1">
+                        <span className="text-[11px] text-gray-400 font-bold">Puntaje personalizado (opc):</span>
                         <input
                           type="number"
                           step="0.0001"
@@ -948,12 +957,11 @@ const AdminView: React.FC<AdminViewProps> = ({
                           value={examCustomWeight}
                           onChange={(e) => setExamCustomWeight(e.target.value)}
                           className="w-24 bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-700 rounded-lg px-2 py-1 text-xs font-mono font-bold outline-none"
-                          title="Si deseas asignar un puntaje diferente al oficial"
                         />
                       </div>
                     </div>
-                  </div>
-                )}
+                  )}
+                </div>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div className="sm:col-span-2">
                     <label className="block text-xs font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-2">Tema / Práctica</label>
@@ -1117,203 +1125,6 @@ const AdminView: React.FC<AdminViewProps> = ({
         </div>
       )}
 
-      {activeTab === 'JSON_IMPORT' && (
-        <div className="space-y-6 animate-fade-in">
-          <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 sm:p-8 border border-gray-100 dark:border-slate-800 shadow-sm space-y-6">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-gray-100 dark:border-slate-800 pb-5">
-              <div>
-                <h2 className="text-xl sm:text-2xl font-black text-gray-800 dark:text-gray-100 flex items-center gap-2.5">
-                  <span className="p-2 bg-indigo-600 text-white rounded-xl shadow-md">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-                    </svg>
-                  </span>
-                  <span>Importar Preguntas en Lote (JSON)</span>
-                </h2>
-                <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 mt-1">
-                  Pega tu lista de preguntas en formato JSON o sube un archivo .json. El sistema lee las propiedades sin importar su orden.
-                </p>
-              </div>
-
-              <label className="cursor-pointer bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/60 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 px-4 py-2.5 rounded-xl font-bold text-xs transition-all flex items-center gap-2 shrink-0 self-start sm:self-auto shadow-sm">
-                <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                </svg>
-                <span>Cargar archivo .json</span>
-                <input type="file" accept=".json" onChange={handleJsonFileUpload} className="hidden" />
-              </label>
-            </div>
-
-            {/* Guía rápida informativa */}
-            <div className="bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/60 rounded-2xl p-4 text-xs text-slate-600 dark:text-slate-300 space-y-1">
-              <div className="font-bold flex items-center gap-1.5 text-indigo-600 dark:text-indigo-400">
-                <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                <span>Compatibilidad Total:</span>
-              </div>
-              <p className="leading-relaxed">
-                • <strong>No importa el orden de las propiedades:</strong> Puedes tener <code className="bg-gray-200 dark:bg-slate-700 px-1 py-0.5 rounded text-[11px]">"process"</code> al inicio o al final, <code className="bg-gray-200 dark:bg-slate-700 px-1 py-0.5 rounded text-[11px]">"course"</code> antes o después de <code className="bg-gray-200 dark:bg-slate-700 px-1 py-0.5 rounded text-[11px]">"questionText"</code>, etc.
-              </p>
-              <p className="leading-relaxed">
-                • <strong>Formatos soportados:</strong> Arreglos <code className="bg-gray-200 dark:bg-slate-700 px-1 py-0.5 rounded text-[11px]">[&#123;...&#125;, &#123;...&#125;]</code>, objetos separados por comas sin corchetes <code className="bg-gray-200 dark:bg-slate-700 px-1 py-0.5 rounded text-[11px]">&#123;...&#125;, &#123;...&#125;</code>, o paquetes <code className="bg-gray-200 dark:bg-slate-700 px-1 py-0.5 rounded text-[11px]">&#123; "questions": [...] &#125;</code>.
-              </p>
-              <p className="leading-relaxed">
-                • <strong>Nombres en español o inglés:</strong> Reconoce <code className="bg-gray-200 dark:bg-slate-700 px-1 py-0.5 rounded text-[11px]">pregunta</code> / <code className="bg-gray-200 dark:bg-slate-700 px-1 py-0.5 rounded text-[11px]">questionText</code>, <code className="bg-gray-200 dark:bg-slate-700 px-1 py-0.5 rounded text-[11px]">opciones</code> / <code className="bg-gray-200 dark:bg-slate-700 px-1 py-0.5 rounded text-[11px]">options</code>, <code className="bg-gray-200 dark:bg-slate-700 px-1 py-0.5 rounded text-[11px]">clave</code> / <code className="bg-gray-200 dark:bg-slate-700 px-1 py-0.5 rounded text-[11px]">correctIndex</code>, <code className="bg-gray-200 dark:bg-slate-700 px-1 py-0.5 rounded text-[11px]">explicacion</code> / <code className="bg-gray-200 dark:bg-slate-700 px-1 py-0.5 rounded text-[11px]">explanation</code>.
-              </p>
-            </div>
-
-            {/* Textarea */}
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <label className="text-xs font-black uppercase text-gray-400 dark:text-gray-500 tracking-wider">
-                  Contenido JSON:
-                </label>
-                {jsonImportText && (
-                  <button
-                    type="button"
-                    onClick={() => { setJsonImportText(''); setJsonParsedQuestions([]); setJsonImportError(null); }}
-                    className="text-xs text-rose-500 hover:underline font-bold"
-                  >
-                    Limpiar
-                  </button>
-                )}
-              </div>
-              <textarea
-                value={jsonImportText}
-                onChange={(e) => setJsonImportText(e.target.value)}
-                placeholder={'[\n  {\n    "course": "Ciencias",\n    "subject": "Biología",\n    "topic": "El Origen de la Vida",\n    "process": "Ceprunsa I Fase 2027",\n    "questionText": "...",\n    "options": ["...", "..."],\n    "correctIndex": 0,\n    "explanation": "..."\n  }\n]'}
-                rows={12}
-                className="w-full bg-gray-50 dark:bg-slate-950 font-mono text-xs text-gray-800 dark:text-gray-200 border border-gray-200 dark:border-slate-800 rounded-2xl p-4 outline-none focus:ring-2 focus:ring-indigo-500 transition-all leading-relaxed"
-              />
-            </div>
-
-            {/* Error banner */}
-            {jsonImportError && (
-              <div className="bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 p-4 rounded-xl text-rose-700 dark:text-rose-300 text-xs flex items-center gap-2">
-                <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                <span>{jsonImportError}</span>
-              </div>
-            )}
-
-            {/* Botones de acción */}
-            <div className="flex flex-wrap items-center gap-3">
-              <button
-                type="button"
-                onClick={() => handleProcessJsonImport()}
-                className="bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs px-6 py-3 rounded-xl transition-all shadow-md active:scale-95 flex items-center gap-2 min-h-[44px]"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                </svg>
-                <span>Analizar y Previsualizar</span>
-              </button>
-
-              {jsonParsedQuestions.length > 0 && (
-                <button
-                  type="button"
-                  onClick={handleSaveJsonQuestions}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs px-6 py-3 rounded-xl transition-all shadow-md active:scale-95 flex items-center gap-2 min-h-[44px]"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
-                  <span>Guardar {jsonParsedQuestions.length} Preguntas en el Banco</span>
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* Previsualización de preguntas parseadas */}
-          {jsonParsedQuestions.length > 0 && (
-            <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 sm:p-8 border border-gray-100 dark:border-slate-800 shadow-sm space-y-6">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div>
-                  <h3 className="text-lg font-black text-gray-800 dark:text-gray-100">
-                    Preguntas Detectadas ({jsonParsedQuestions.length})
-                  </h3>
-                  <p className="text-xs text-gray-400 dark:text-gray-500">
-                    Revisa las preguntas antes de guardarlas en tu base de datos.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={handleSaveJsonQuestions}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs px-5 py-2.5 rounded-xl transition-all shadow-md flex items-center gap-2 self-start sm:self-auto"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
-                  <span>Guardar Todas ({jsonParsedQuestions.length})</span>
-                </button>
-              </div>
-
-              <div className="space-y-4 max-h-[600px] overflow-y-auto pr-1">
-                {jsonParsedQuestions.map((q, idx) => (
-                  <div key={q.id || idx} className="bg-gray-50 dark:bg-slate-950 p-4 sm:p-5 rounded-2xl border border-gray-200 dark:border-slate-800 space-y-3">
-                    <div className="flex flex-wrap items-center gap-2 text-[10px] font-black uppercase">
-                      <span className="bg-indigo-100 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 px-2 py-0.5 rounded-md">
-                        #{idx + 1}
-                      </span>
-                      <span className="bg-purple-100 dark:bg-purple-900/60 text-purple-700 dark:text-purple-300 px-2 py-0.5 rounded-md">
-                        {q.course} • {q.subject}
-                      </span>
-                      <span className="bg-gray-200 dark:bg-slate-800 text-gray-700 dark:text-gray-300 px-2 py-0.5 rounded-md">
-                        {q.process}
-                      </span>
-                      {q.week !== undefined && (
-                        <span className="bg-amber-100 dark:bg-amber-900/60 text-amber-700 dark:text-amber-300 px-2 py-0.5 rounded-md">
-                          Semana {q.week}
-                        </span>
-                      )}
-                      <span className="text-gray-500 dark:text-gray-400 font-bold truncate max-w-xs">
-                        Tema: {q.topic}
-                      </span>
-                    </div>
-
-                    <div className="text-sm font-bold text-gray-800 dark:text-gray-200 leading-relaxed whitespace-pre-wrap">
-                      {formatQuestionText(q.questionText)}
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-                      {q.options.map((opt, optIdx) => (
-                        <div
-                          key={optIdx}
-                          className={`p-2.5 rounded-xl border flex items-center gap-2 ${
-                            optIdx === q.correctIndex
-                              ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200 font-bold'
-                              : 'bg-white dark:bg-slate-900 border-gray-200 dark:border-slate-800 text-gray-600 dark:text-gray-400'
-                          }`}
-                        >
-                          <span className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black shrink-0 bg-gray-100 dark:bg-slate-800">
-                            {String.fromCharCode(65 + optIdx)}
-                          </span>
-                          <span className="truncate">{opt}</span>
-                          {optIdx === q.correctIndex && (
-                            <span className="ml-auto text-[10px] text-emerald-600 dark:text-emerald-400 font-black uppercase">
-                              Correcta
-                            </span>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-
-                    {q.explanation && (
-                      <div className="text-xs text-gray-500 dark:text-gray-400 bg-white dark:bg-slate-900 p-3 rounded-xl border border-gray-100 dark:border-slate-800/80">
-                        <span className="font-bold text-gray-700 dark:text-gray-300">Solución: </span>
-                        {q.explanation}
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
       {activeTab === 'TEXTS' && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-800 p-8">
@@ -1368,6 +1179,17 @@ const AdminView: React.FC<AdminViewProps> = ({
             </div>
             <div className="flex flex-wrap gap-2.5 w-full sm:w-auto">
               <select 
+                value={manageFilterArea} 
+                onChange={(e) => setManageFilterArea(e.target.value)} 
+                className="bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 text-indigo-900 dark:text-indigo-200 rounded-xl px-3.5 py-2 text-xs font-black outline-none"
+              >
+                <option value="">Todas las Áreas</option>
+                <option value="Biomédicas">🧬 Biomédicas</option>
+                <option value="Ingenierías">⚙️ Ingenierías</option>
+                <option value="Sociales">⚖️ Sociales</option>
+                <option value="Todas">🌐 Común / Todas</option>
+              </select>
+              <select 
                 value={manageFilterProcess} 
                 onChange={(e) => setManageFilterProcess(e.target.value)} 
                 className="bg-gray-50 dark:bg-slate-800 border dark:border-slate-700 rounded-xl px-3.5 py-2 text-xs font-semibold outline-none dark:text-gray-200"
@@ -1383,6 +1205,52 @@ const AdminView: React.FC<AdminViewProps> = ({
                 <option value="">Todos los Cursos</option>
                 {ACADEMIC_STRUCTURE.map(c => <option key={c.name} value={c.name}>{c.name}</option>)}
               </select>
+            </div>
+          </div>
+
+          {/* Barra de Acciones por Área en Lote */}
+          <div className="mb-6 p-4 bg-indigo-50/50 dark:bg-slate-800/60 rounded-2xl border border-indigo-100 dark:border-slate-700/80 flex flex-col md:flex-row items-start md:items-center justify-between gap-3 text-xs">
+            <div>
+              <span className="font-black text-indigo-950 dark:text-indigo-200">
+                Asignación de Área en Lote ({filteredQuestions.length} preguntas visibles):
+              </span>
+              <p className="text-[11px] text-gray-500 dark:text-gray-400">
+                Cambia en un solo clic el área de las preguntas filtradas según corresponda.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => handleBatchAssignArea('Biomédicas')}
+                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-[11px] transition-all shadow-sm flex items-center gap-1"
+                title="Asignar preguntas visibles al área de Biomédicas"
+              >
+                <span>🧬 Biomédicas</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleBatchAssignArea('Ingenierías')}
+                className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold text-[11px] transition-all shadow-sm flex items-center gap-1"
+                title="Asignar preguntas visibles al área de Ingenierías"
+              >
+                <span>⚙️ Ingenierías</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleBatchAssignArea('Sociales')}
+                className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-bold text-[11px] transition-all shadow-sm flex items-center gap-1"
+                title="Asignar preguntas visibles al área de Sociales"
+              >
+                <span>⚖️ Sociales</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleBatchAssignArea('Todas')}
+                className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-bold text-[11px] transition-all shadow-sm flex items-center gap-1"
+                title="Marcar como Común a Todas las áreas"
+              >
+                <span>🌐 Común</span>
+              </button>
             </div>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -1401,11 +1269,25 @@ const AdminView: React.FC<AdminViewProps> = ({
                           {q.targetSubject} {q.weight ? `• ${q.weight.toFixed(3)} pts` : ''}
                         </span>
                       )}
-                      {q.area && (
-                        <span className="bg-purple-50 dark:bg-purple-900/50 text-purple-600 dark:text-purple-400 text-[10px] font-black px-2 py-0.5 rounded uppercase border border-purple-200 dark:border-purple-800">
-                          {q.area}
-                        </span>
-                      )}
+                      {(() => {
+                        const qAreas = getQuestionAreas(q);
+                        if (qAreas.length === 3) {
+                          return (
+                            <span className="bg-amber-50 dark:bg-amber-900/50 text-amber-600 dark:text-amber-400 text-[10px] font-black px-2 py-0.5 rounded uppercase border border-amber-200 dark:border-amber-800">
+                              🌐 Común (3 Áreas)
+                            </span>
+                          );
+                        }
+                        return qAreas.map(a => {
+                          const b = getAreaBadgeStyle(a);
+                          return (
+                            <span key={a} className={`${b.bg} ${b.text} ${b.border} border text-[10px] font-black px-2 py-0.5 rounded uppercase flex items-center gap-1`}>
+                              <span>{b.icon}</span>
+                              <span>{a}</span>
+                            </span>
+                          );
+                        });
+                      })()}
                       <span className={`${procStyle.bg} ${procStyle.text} ${procStyle.border} border text-[9px] font-black px-2 py-0.5 rounded flex items-center gap-1`}>
                         <span>{proc}</span>
                       </span>
@@ -1669,80 +1551,6 @@ const AdminView: React.FC<AdminViewProps> = ({
               ))}
             </div>
           )}
-        </div>
-      )}
-
-      {activeTab === 'COVERS' && (
-        <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-800 p-6 md:p-8 animate-fade-in text-gray-800 dark:text-gray-100">
-          <div className="mb-6">
-            <h2 className="text-2xl font-black text-gray-800 dark:text-gray-100 flex items-center gap-3">
-              <span className="bg-indigo-600 dark:bg-indigo-700 text-white p-2 rounded-lg">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                </svg>
-              </span>
-              Portadas de Cursos
-            </h2>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
-              Ingresa los links de las imágenes de portada (cover) que deseas asignar a cada curso. Si lo dejas vacío o usas "Restablecer", se restaurará la imagen ilustrativa predeterminada.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {coursesWithFullData.map((course) => {
-              const currentUrl = tempCovers[course.name] ?? '';
-              return (
-                <div key={course.name} className="flex flex-col sm:flex-row gap-4 p-5 bg-gray-50 dark:bg-slate-800/40 rounded-2xl border border-gray-100 dark:border-slate-800/80 transition-shadow hover:shadow-md">
-                  <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-xl overflow-hidden shrink-0 border border-gray-200 dark:border-slate-700 shadow-inner relative group bg-gray-150 dark:bg-slate-800 flex items-center justify-center">
-                    <img 
-                      src={currentUrl || course.defaultIcon} 
-                      alt={course.name} 
-                      className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
-                      referrerPolicy="no-referrer"
-                      onError={(e) => {
-                        e.currentTarget.onerror = null;
-                        e.currentTarget.src = 'https://images.unsplash.com/photo-1543002588-bfa74002ed7e?w=300';
-                      }}
-                    />
-                    <div className="absolute bottom-1 right-1 bg-black/60 backdrop-blur-[2px] text-white text-[9px] font-black px-1.5 py-0.5 rounded tracking-wider uppercase">
-                      {currentUrl ? 'Personalizada' : 'Por Defecto'}
-                    </div>
-                  </div>
-
-                  <div className="flex-grow flex flex-col justify-between gap-3">
-                    <div>
-                      <h4 className="font-extrabold text-gray-800 dark:text-gray-100 text-lg">{course.name}</h4>
-                      <p className="text-xs text-gray-400 dark:text-gray-500 line-clamp-1">{course.subjects.join(', ')}</p>
-                    </div>
-
-                    <div className="space-y-2">
-                      <input 
-                        type="url" 
-                        value={currentUrl} 
-                        onChange={(e) => handleCoverChange(course.name, e.target.value)} 
-                        placeholder="Link de imagen (https://...)" 
-                        className="w-full text-xs bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-lg p-2.5 outline-none dark:text-gray-200 focus:border-indigo-500 dark:focus:border-indigo-600 transition-colors"
-                      />
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => handleSaveSingleCover(course.name)}
-                          className="flex-grow py-2 px-3 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition-all active:scale-[0.98]"
-                        >
-                          Guardar Link
-                        </button>
-                        <button
-                          onClick={() => handleResetSingleCover(course.name)}
-                          className="py-2 px-3 rounded-lg bg-gray-200 dark:bg-slate-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-slate-600 text-xs font-bold transition-all active:scale-[0.98]"
-                        >
-                          Restablecer
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
         </div>
       )}
 

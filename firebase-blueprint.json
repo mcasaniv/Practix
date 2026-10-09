@@ -1,0 +1,42 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Information and study preferences of the authenticated user.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "displayName": { "type": "string" },
+        "email": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "selectedArea": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "lastLoginAt": { "type": "string" }
+      },
+      "required": ["uid", "email"]
+    },
+    "UserProgress": {
+      "title": "UserProgress",
+      "description": "User practice history, scores, and statistics synced across devices.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "totalPracticed": { "type": "number" },
+        "totalFlashcardsPracticed": { "type": "number" },
+        "results": { "type": "object" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["userId"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "Stores user profile data accessible only by the owner."
+    },
+    "/users/{userId}/progress/data": {
+      "schema": "UserProgress",
+      "description": "Stores individual user progress and quiz results."
+    }
+  }
+}

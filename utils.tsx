@@ -1,7 +1,7 @@
 import React from 'react';
 import katex from 'katex';
 import { AREA_EXAM_CONFIGS, ACADEMIC_STRUCTURE } from './constants';
-import { Question, AppDatabase } from './types';
+import { Question, AppDatabase, AcademicArea, TargetArea } from './types';
 
 /**
  * Safely renders a LaTeX math expression to an HTML string using KaTeX.
@@ -454,6 +454,93 @@ export const ALL_ACADEMIC_SUBJECTS: string[] = [
   'Inglés Lectura'
 ];
 
+export const ACADEMIC_AREAS: AcademicArea[] = ['Biomédicas', 'Ingenierías', 'Sociales', 'Todas'];
+
+/**
+ * Returns the assigned area for a question. Defaults to 'Biomédicas' for legacy questions.
+ */
+export function getQuestionArea(q: Question): AcademicArea {
+  if (Array.isArray(q.areas) && q.areas.length > 0) {
+    if (q.areas.length >= 3) return 'Todas';
+    return q.areas[0];
+  }
+  if (q.area === 'Biomédicas' || q.area === 'Ingenierías' || q.area === 'Sociales' || q.area === 'Todas') {
+    return q.area;
+  }
+  return 'Biomédicas'; // Default for pre-existing questions as specified by user
+}
+
+/**
+ * Returns all areas where a question applies (can be 1, 2, or 3 areas).
+ */
+export function getQuestionAreas(q: Question): TargetArea[] {
+  if (Array.isArray(q.areas) && q.areas.length > 0) {
+    const valid = q.areas.filter(a => a === 'Biomédicas' || a === 'Ingenierías' || a === 'Sociales');
+    if (valid.length > 0) return valid;
+  }
+  if (q.area === 'Todas') {
+    return ['Biomédicas', 'Ingenierías', 'Sociales'];
+  }
+  if (q.area === 'Ingenierías') return ['Ingenierías'];
+  if (q.area === 'Sociales') return ['Sociales'];
+  return ['Biomédicas'];
+}
+
+/**
+ * Checks if a question matches a selected filter area.
+ * Questions tagged as 'Todas' or belonging to multiple areas match any target area they include.
+ */
+export function matchesQuestionArea(q: Question, targetArea: TargetArea | 'ALL' | AcademicArea): boolean {
+  if (targetArea === 'ALL' || targetArea === 'Todas') return true;
+  const qAreas = getQuestionAreas(q);
+  return qAreas.includes(targetArea as TargetArea);
+}
+
+/**
+ * Visual styling and iconography for admission areas.
+ */
+export function getAreaBadgeStyle(area?: string) {
+  switch (area) {
+    case 'Biomédicas':
+      return {
+        bg: 'bg-emerald-50 dark:bg-emerald-950/60',
+        text: 'text-emerald-700 dark:text-emerald-300',
+        border: 'border-emerald-200 dark:border-emerald-800',
+        dot: 'bg-emerald-500',
+        icon: '🧬',
+        name: 'Biomédicas'
+      };
+    case 'Ingenierías':
+      return {
+        bg: 'bg-blue-50 dark:bg-blue-950/60',
+        text: 'text-blue-700 dark:text-blue-300',
+        border: 'border-blue-200 dark:border-blue-800',
+        dot: 'bg-blue-500',
+        icon: '⚙️',
+        name: 'Ingenierías'
+      };
+    case 'Sociales':
+      return {
+        bg: 'bg-purple-50 dark:bg-purple-950/60',
+        text: 'text-purple-700 dark:text-purple-300',
+        border: 'border-purple-200 dark:border-purple-800',
+        dot: 'bg-purple-500',
+        icon: '⚖️',
+        name: 'Sociales'
+      };
+    case 'Todas':
+    default:
+      return {
+        bg: 'bg-amber-50 dark:bg-amber-950/60',
+        text: 'text-amber-700 dark:text-amber-300',
+        border: 'border-amber-200 dark:border-amber-800',
+        dot: 'bg-amber-500',
+        icon: '🌐',
+        name: 'Todas las áreas'
+      };
+  }
+}
+
 /**
  * Normalizes any question object regardless of key order, property aliases
  * (Spanish/English), or missing optional fields.
@@ -563,7 +650,29 @@ export function normalizeQuestionObject(item: any): Question | null {
     optionsImageUrls: item.optionsImageUrls || undefined,
     explanationImageUrl: item.explanationImageUrl || undefined,
     targetSubject: item.targetSubject || undefined,
-    area: item.area || undefined,
+    areas: (() => {
+      if (Array.isArray(item.areas) && item.areas.length > 0) {
+        return item.areas.map((a: any) => {
+          const str = String(a).toLowerCase();
+          if (str.includes('biomed') || str.includes('bioméd')) return 'Biomédicas';
+          if (str.includes('ingenier') || str.includes('ing')) return 'Ingenierías';
+          if (str.includes('social') || str.includes('soc')) return 'Sociales';
+          return null;
+        }).filter(Boolean) as any;
+      }
+      return undefined;
+    })(),
+    area: (() => {
+      const raw = item.area ?? item.areaPostulacion ?? item.areaAdmision ?? item.practicaArea;
+      if (typeof raw === 'string') {
+        const lower = raw.trim().toLowerCase();
+        if (lower.includes('bioméd') || lower.includes('biomed')) return 'Biomédicas';
+        if (lower.includes('ingenier') || lower.includes('ing')) return 'Ingenierías';
+        if (lower.includes('social') || lower.includes('soc')) return 'Sociales';
+        if (lower.includes('tod') || lower.includes('comun') || lower.includes('común')) return 'Todas';
+      }
+      return item.area || 'Biomédicas';
+    })(),
     weight: item.weight ? Number(item.weight) : undefined
   };
 }

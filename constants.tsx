@@ -177,3 +177,12 @@ export const CUSTOM_DECK_COLORS = [
 ];
 
 export const CUSTOM_DECK_ICONS = ['star', 'brain', 'target', 'flame', 'zap', 'gem', 'lightbulb', 'rocket', 'book', 'trophy', 'flask', 'dna'] as const;
+
+// Carreras oficiales del Área de Biomédicas (Ceprunsa / UNSA)
+export const BIOMEDICAS_CAREERS = [
+  'Medicina',
+  'Enfermería',
+  'Biología',
+  'Nutrición',
+  'Ingeniería Pesquera'
+] as const;

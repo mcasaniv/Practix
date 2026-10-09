@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { CustomDeck, Question, ReadingText, TopicResult } from '../types';
+import { CustomDeck, Question, ReadingText, TopicResult, CourseStructure } from '../types';
 import { CUSTOM_DECK_COLORS, CUSTOM_DECK_ICONS, ACADEMIC_STRUCTURE } from '../constants';
 import { formatQuestionText, parseHTMLTags, getQuestionProcess, getProcessBadgeStyle, getProcessShortName } from '../utils';
 import { PrintExamModal } from '../components/PrintExamModal';
@@ -9,6 +9,8 @@ interface CustomDecksViewProps {
   questions: Question[];
   readingTexts?: ReadingText[];
   results?: Record<string, TopicResult>;
+  academicStructure?: CourseStructure[];
+  courseCovers?: Record<string, string>;
   onCreateDeck: (deck: Omit<CustomDeck, 'id' | 'createdAt'>) => void;
   onUpdateDeck: (deck: CustomDeck) => void;
   onDeleteDeck: (deckId: string) => void;
@@ -19,10 +21,23 @@ interface CustomDecksViewProps {
   onBackToHome: () => void;
 }
 
+const DECK_COVER_PRESETS = [
+  { course: 'Matemática', label: 'Fórmulas y Geometría', url: 'https://images.unsplash.com/photo-1635070041078-e363dbe005cb?w=600' },
+  { course: 'Comunicación', label: 'Biblioteca y Letras', url: 'https://images.unsplash.com/photo-1457369804613-52c61a468e7d?w=600' },
+  { course: 'Ciencias', label: 'Laboratorio y Física', url: 'https://images.unsplash.com/photo-1532094349884-543bc11b234d?w=600' },
+  { course: 'Sociales', label: 'Historia y Mapas', url: 'https://images.unsplash.com/photo-1461360370896-922624d12aa1?w=600' },
+  { course: 'DPCC', label: 'Filosofía y Mente', url: 'https://images.unsplash.com/photo-1507668077129-56e32842fceb?w=600' },
+  { course: 'Razonamiento', label: 'Lógica y Estrategia', url: 'https://images.unsplash.com/photo-1529699211952-734e80c4d42b?w=600' },
+  { course: 'Idioma', label: 'Inglés y Mundo', url: 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?w=600' },
+  { course: 'Exámenes', label: 'Simulacros y Claves', url: 'https://images.unsplash.com/photo-1434030216411-0b793f4b4173?w=600' },
+];
+
 export const CustomDecksView: React.FC<CustomDecksViewProps> = ({
   decks = [],
   questions = [],
   readingTexts = [],
+  academicStructure,
+  courseCovers = {},
   onCreateDeck,
   onUpdateDeck,
   onDeleteDeck,
@@ -37,14 +52,37 @@ export const CustomDecksView: React.FC<CustomDecksViewProps> = ({
   const [deckToDelete, setDeckToDelete] = useState<CustomDeck | null>(null);
   const [deckToPrint, setDeckToPrint] = useState<CustomDeck | null>(null);
 
+  const coursesList = useMemo(() => {
+    return academicStructure || ACADEMIC_STRUCTURE;
+  }, [academicStructure]);
+
+  const getCourseCover = (courseName?: string) => {
+    if (!courseName) return '';
+    const custom = courseCovers?.[courseName];
+    if (custom) return custom;
+    const found = coursesList.find(c => c.name === courseName);
+    return found?.icon || '';
+  };
+
   // Form State for new deck
   const [newTitle, setNewTitle] = useState('');
   const [newDesc, setNewDesc] = useState('');
   const [newIcon, setNewIcon] = useState('⭐');
   const [newColor, setNewColor] = useState('purple');
+  const [newCourse, setNewCourse] = useState('Matemática');
+  const [newCoverUrl, setNewCoverUrl] = useState('');
 
-  // Manage Deck Modal Tabs: 'LIST' | 'BANK' | 'CREATE_Q'
-  const [manageTab, setManageTab] = useState<'LIST' | 'BANK' | 'CREATE_Q'>('LIST');
+  // Edit Deck in Manage state
+  const [editTitle, setEditTitle] = useState('');
+  const [editDesc, setEditDesc] = useState('');
+  const [editIcon, setEditIcon] = useState('⭐');
+  const [editColor, setEditColor] = useState('purple');
+  const [editCourse, setEditCourse] = useState('Matemática');
+  const [editCoverUrl, setEditCoverUrl] = useState('');
+  const [editSuccessMsg, setEditSuccessMsg] = useState(false);
+
+  // Manage Deck Modal Tabs: 'LIST' | 'BANK' | 'CREATE_Q' | 'EDIT_DECK'
+  const [manageTab, setManageTab] = useState<'LIST' | 'BANK' | 'CREATE_Q' | 'EDIT_DECK'>('LIST');
   const [searchBank, setSearchBank] = useState('');
   const [bankCourseFilter, setBankCourseFilter] = useState('');
   const [bankProcessFilter, setBankProcessFilter] = useState('');
@@ -70,15 +108,48 @@ export const CustomDecksView: React.FC<CustomDecksViewProps> = ({
     return Array.from(set);
   }, [questions]);
 
+  const handleCoverFileUpload = (setter: (url: string) => void, e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      alert("Por favor selecciona una imagen válida (JPG, PNG, WebP).");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const dataUrl = event.target?.result as string;
+      if (dataUrl) {
+        setter(dataUrl);
+      }
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  };
+
+  const openManagingDeck = (deck: CustomDeck) => {
+    setManagingDeck(deck);
+    setEditTitle(deck.title || '');
+    setEditDesc(deck.description || '');
+    setEditIcon(deck.icon || '⭐');
+    setEditColor(deck.color || 'purple');
+    setEditCourse(deck.course || 'Matemática');
+    setEditCoverUrl(deck.coverUrl || '');
+    setManageTab('LIST');
+  };
+
   const handleCreateSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTitle.trim()) return;
+
+    const finalCover = newCoverUrl.trim() || getCourseCover(newCourse);
 
     onCreateDeck({
       title: newTitle.trim(),
       description: newDesc.trim() || undefined,
       icon: newIcon,
       color: newColor,
+      course: newCourse,
+      coverUrl: finalCover || undefined,
       questionIds: []
     });
 
@@ -86,7 +157,29 @@ export const CustomDecksView: React.FC<CustomDecksViewProps> = ({
     setNewDesc('');
     setNewIcon('⭐');
     setNewColor('purple');
+    setNewCoverUrl('');
     setShowCreateModal(false);
+  };
+
+  const handleUpdateDeckSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!managingDeck || !editTitle.trim()) return;
+
+    const updated: CustomDeck = {
+      ...managingDeck,
+      title: editTitle.trim(),
+      description: editDesc.trim() || undefined,
+      icon: editIcon,
+      color: editColor,
+      course: editCourse,
+      coverUrl: editCoverUrl.trim() || getCourseCover(editCourse) || undefined,
+      updatedAt: Date.now()
+    };
+
+    onUpdateDeck(updated);
+    setManagingDeck(updated);
+    setEditSuccessMsg(true);
+    setTimeout(() => setEditSuccessMsg(false), 3000);
   };
 
   const handleCreateQuestionInDeck = (e: React.FormEvent) => {
@@ -224,117 +317,153 @@ export const CustomDecksView: React.FC<CustomDecksViewProps> = ({
             const colorCfg = getColorClasses(deck.color);
             const count = deck.questionIds?.length || 0;
             const times = deck.timesPracticed || 0;
+            const coverToDisplay = deck.coverUrl || getCourseCover(deck.course);
 
             return (
               <div
                 key={deck.id}
-                className="bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800 rounded-3xl p-5 sm:p-6 shadow-sm hover:shadow-xl active:scale-[0.99] transition-all flex flex-col justify-between group overflow-hidden relative"
+                className="bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800 rounded-3xl shadow-sm hover:shadow-xl active:scale-[0.99] transition-all flex flex-col justify-between group overflow-hidden relative"
               >
-                {/* Top strip with deck theme */}
-                <div className={`h-2.5 w-full bg-gradient-to-r ${colorCfg.banner} absolute top-0 left-0 right-0`} />
-
-                <div>
-                  <div className="flex items-start justify-between gap-3 mb-3 pt-1">
-                    <div className="flex items-center gap-3">
-                      <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shadow-inner ${colorCfg.bg} border ${colorCfg.border}`}>
-                        <svg xmlns="http://www.w3.org/2000/svg" className="w-6 h-6 text-purple-600 dark:text-purple-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-                        </svg>
-                      </div>
-                      <div className="min-w-0">
-                        <h3 className="text-lg font-black text-gray-800 dark:text-gray-100 truncate group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
-                          {deck.title}
-                        </h3>
-                        <div className="flex items-center gap-2 text-xs font-bold text-gray-400">
-                          <span>{count} {count === 1 ? 'pregunta' : 'preguntas'}</span>
-                          {times > 0 && (
-                            <span>• {times} {times === 1 ? 'práctica' : 'prácticas'}</span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    <button
-                      onClick={() => setDeckToDelete(deck)}
-                      className="p-2 text-gray-300 hover:text-rose-500 dark:text-slate-600 dark:hover:text-rose-400 rounded-xl transition-colors min-h-[40px] min-w-[40px] flex items-center justify-center"
-                      title="Eliminar mazo"
-                      aria-label="Eliminar mazo"
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                      </svg>
-                    </button>
-                  </div>
-
-                  {deck.description && (
-                    <p className="text-gray-500 dark:text-gray-400 text-xs line-clamp-2 leading-relaxed mb-4">
-                      {deck.description}
-                    </p>
-                  )}
-
-                  {deck.bestScore !== undefined && count > 0 && (
-                    <div className="mb-4 inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 text-xs font-black border border-emerald-200 dark:border-emerald-800">
-                      <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
-                      </svg>
-                      <span>Mejor puntaje: {deck.bestScore}/{count}</span>
-                    </div>
-                  )}
-                </div>
-
-                {/* Deck Action Buttons */}
-                <div className="pt-4 border-t border-gray-100 dark:border-slate-800 space-y-2">
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      disabled={count === 0}
-                      onClick={() => onPlayDeck(deck, 'CLASSIC')}
-                      className="py-2.5 px-3 rounded-xl bg-gray-50 dark:bg-slate-800 text-gray-700 dark:text-gray-200 hover:bg-indigo-50 hover:text-indigo-600 dark:hover:bg-indigo-950 dark:hover:text-indigo-300 border border-gray-200/80 dark:border-slate-700 text-xs font-bold transition-all disabled:opacity-40 disabled:pointer-events-none flex items-center justify-center gap-1.5 min-h-[44px]"
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                      <span>Clásico</span>
-                    </button>
-
-                    <button
-                      disabled={count === 0}
-                      onClick={() => onPlayDeck(deck, 'QUIZZIZ')}
-                      className={`py-2.5 px-3 rounded-xl text-white font-black text-xs transition-all shadow-md active:scale-95 disabled:opacity-40 disabled:pointer-events-none flex items-center justify-center gap-1.5 min-h-[44px] bg-gradient-to-r ${colorCfg.banner}`}
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                      <span>Jugar Practix</span>
-                    </button>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => {
-                        setManagingDeck(deck);
-                        setManageTab('LIST');
+                {/* Deck Cover Banner */}
+                {coverToDisplay ? (
+                  <div className="h-32 w-full relative overflow-hidden bg-slate-800 shrink-0">
+                    <img
+                      src={coverToDisplay}
+                      alt={deck.title}
+                      className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                      referrerPolicy="no-referrer"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).style.display = 'none';
                       }}
-                      className="flex-1 py-2 px-3 rounded-xl bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-900/60 font-black text-xs transition-all flex items-center justify-center gap-1.5 min-h-[40px] border border-purple-200 dark:border-purple-800"
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                      </svg>
-                      <span>Gestionar ({count})</span>
-                    </button>
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/35 to-black/20" />
+                    
+                    {/* Course tag on cover */}
+                    <div className="absolute top-3 left-3 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-black/60 backdrop-blur-md border border-white/20 text-white text-[10px] font-black uppercase tracking-wider">
+                      <span>{deck.course || 'Mazo Propio'}</span>
+                    </div>
 
-                    {count > 0 && (
+                    {/* Deck Icon on cover */}
+                    <div className="absolute top-3 right-3 flex items-center gap-1.5">
+                      <div className="w-8 h-8 rounded-xl bg-black/60 backdrop-blur-md border border-white/30 text-white flex items-center justify-center text-sm shadow">
+                        {deck.icon || '⭐'}
+                      </div>
                       <button
-                        onClick={() => setDeckToPrint(deck)}
-                        className="py-2 px-3 rounded-xl bg-gray-50 dark:bg-slate-800 hover:bg-gray-100 text-gray-600 dark:text-gray-300 font-bold text-xs transition-all flex items-center justify-center gap-1 min-h-[40px] border border-gray-200 dark:border-slate-700"
-                        title="Imprimir mazo"
+                        onClick={() => setDeckToDelete(deck)}
+                        className="w-8 h-8 rounded-xl bg-black/60 hover:bg-rose-600 text-white/80 hover:text-white backdrop-blur-md transition-colors flex items-center justify-center"
+                        title="Eliminar mazo"
                       >
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                         </svg>
                       </button>
+                    </div>
+
+                    {/* Title & Count Overlay on bottom of cover */}
+                    <div className="absolute bottom-2 left-3 right-3 flex items-end justify-between gap-2">
+                      <h3 className="text-base font-black text-white truncate drop-shadow">
+                        {deck.title}
+                      </h3>
+                      <span className="text-[10px] font-bold text-white/90 bg-white/20 backdrop-blur-sm px-2 py-0.5 rounded-full shrink-0">
+                        {count} {count === 1 ? 'preg.' : 'preg.'}
+                      </span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className={`h-20 w-full bg-gradient-to-r ${colorCfg.banner} relative p-3 flex items-start justify-between shrink-0`}>
+                    <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-black/40 backdrop-blur-md border border-white/20 text-white text-[10px] font-black uppercase tracking-wider">
+                      <span>{deck.course || 'Mazo Propio'}</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-7 h-7 rounded-lg bg-white/20 backdrop-blur-md border border-white/30 text-white flex items-center justify-center text-sm shadow">
+                        {deck.icon || '⭐'}
+                      </div>
+                      <button
+                        onClick={() => setDeckToDelete(deck)}
+                        className="w-7 h-7 rounded-lg bg-black/40 hover:bg-rose-600 text-white transition-colors flex items-center justify-center"
+                        title="Eliminar mazo"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                <div className="p-5 flex-1 flex flex-col justify-between">
+                  <div>
+                    {!coverToDisplay && (
+                      <h3 className="text-lg font-black text-gray-800 dark:text-gray-100 truncate mb-1">
+                        {deck.title}
+                      </h3>
                     )}
+                    {deck.description && (
+                      <p className="text-gray-500 dark:text-gray-400 text-xs line-clamp-2 leading-relaxed mb-3">
+                        {deck.description}
+                      </p>
+                    )}
+                    {deck.bestScore !== undefined && count > 0 && (
+                      <div className="mb-3 inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 text-xs font-black border border-emerald-200 dark:border-emerald-800">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
+                        </svg>
+                        <span>Mejor puntaje: {deck.bestScore}/{count}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Deck Action Buttons */}
+                  <div className="pt-3 border-t border-gray-100 dark:border-slate-800 space-y-2">
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        disabled={count === 0}
+                        onClick={() => onPlayDeck(deck, 'CLASSIC')}
+                        className="py-2.5 px-3 rounded-xl bg-gray-50 dark:bg-slate-800 text-gray-700 dark:text-gray-200 hover:bg-indigo-50 hover:text-indigo-600 dark:hover:bg-indigo-950 dark:hover:text-indigo-300 border border-gray-200/80 dark:border-slate-700 text-xs font-bold transition-all disabled:opacity-40 disabled:pointer-events-none flex items-center justify-center gap-1.5 min-h-[44px]"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <span>Clásico</span>
+                      </button>
+
+                      <button
+                        disabled={count === 0}
+                        onClick={() => onPlayDeck(deck, 'QUIZZIZ')}
+                        className={`py-2.5 px-3 rounded-xl text-white font-black text-xs transition-all shadow-md active:scale-95 disabled:opacity-40 disabled:pointer-events-none flex items-center justify-center gap-1.5 min-h-[44px] bg-gradient-to-r ${colorCfg.banner}`}
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <span>Jugar Practix</span>
+                      </button>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => openManagingDeck(deck)}
+                        className="flex-1 py-2 px-3 rounded-xl bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-900/60 font-black text-xs transition-all flex items-center justify-center gap-1.5 min-h-[40px] border border-purple-200 dark:border-purple-800"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                        </svg>
+                        <span>Gestionar ({count})</span>
+                      </button>
+
+                      {count > 0 && (
+                        <button
+                          onClick={() => setDeckToPrint(deck)}
+                          className="py-2 px-3 rounded-xl bg-gray-50 dark:bg-slate-800 hover:bg-gray-100 text-gray-600 dark:text-gray-300 font-bold text-xs transition-all flex items-center justify-center gap-1 min-h-[40px] border border-gray-200 dark:border-slate-700"
+                          title="Imprimir mazo"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                          </svg>
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -345,14 +474,19 @@ export const CustomDecksView: React.FC<CustomDecksViewProps> = ({
 
       {/* CREATE DECK MODAL */}
       {showCreateModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
-          <div className="bg-white dark:bg-slate-900 rounded-3xl max-w-md w-full p-6 shadow-2xl border border-gray-100 dark:border-slate-800 animate-scale-up space-y-5">
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 animate-fade-in overflow-y-auto">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl max-w-lg w-full p-6 sm:p-7 shadow-2xl border border-gray-100 dark:border-slate-800 animate-scale-up space-y-4 my-auto">
             <div className="flex items-center justify-between pb-3 border-b border-gray-100 dark:border-slate-800">
               <div className="flex items-center gap-2.5">
-                <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                </svg>
-                <h3 className="text-xl font-black text-gray-800 dark:text-gray-100">Crear Mazo Personalizado</h3>
+                <div className="w-9 h-9 rounded-xl bg-purple-100 dark:bg-purple-950/60 text-purple-600 dark:text-purple-300 flex items-center justify-center">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="text-lg font-black text-gray-800 dark:text-gray-100">Crear Mazo Personalizado</h3>
+                  <p className="text-[11px] text-gray-500 dark:text-gray-400">Escoge el curso y la portada para guardar tu mazo</p>
+                </div>
               </div>
               <button
                 onClick={() => setShowCreateModal(false)}
@@ -376,9 +510,119 @@ export const CustomDecksView: React.FC<CustomDecksViewProps> = ({
                   placeholder="Ej. Fórmulas de Física, Preguntas Trampa..."
                   value={newTitle}
                   onChange={(e) => setNewTitle(e.target.value)}
-                  className="w-full bg-gray-50 dark:bg-slate-800 border dark:border-slate-700 rounded-xl p-3 text-sm outline-none dark:text-gray-100 font-bold"
+                  className="w-full bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl p-3 text-sm outline-none dark:text-gray-100 font-bold focus:ring-2 focus:ring-purple-500"
                   autoFocus
                 />
+              </div>
+
+              {/* CURSO DONDE GUARDAR */}
+              <div>
+                <label className="block text-xs font-black uppercase text-gray-400 tracking-wider mb-1.5">
+                  Guardar en el Curso:
+                </label>
+                <select
+                  value={newCourse}
+                  onChange={(e) => {
+                    const c = e.target.value;
+                    setNewCourse(c);
+                    // Automatically offer course cover if user hasn't explicitly set a custom one
+                    if (!newCoverUrl) {
+                      setNewCoverUrl(getCourseCover(c));
+                    }
+                  }}
+                  className="w-full bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl p-2.5 text-xs font-bold outline-none dark:text-gray-100 focus:ring-2 focus:ring-purple-500 cursor-pointer"
+                >
+                  {coursesList.map(c => (
+                    <option key={c.name} value={c.name}>{c.name} ({c.subjects.slice(0, 2).join(', ')})</option>
+                  ))}
+                  <option value="General / Multi-materia">General / Multi-materia</option>
+                </select>
+              </div>
+
+              {/* PORTADA DEL MAZO */}
+              <div className="space-y-2 p-3 bg-gray-50 dark:bg-slate-800/60 rounded-2xl border border-gray-200 dark:border-slate-700">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-black uppercase text-gray-700 dark:text-gray-300 tracking-wider">
+                    Portada del Mazo
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setNewCoverUrl(getCourseCover(newCourse))}
+                    className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline"
+                  >
+                    Usar portada del curso
+                  </button>
+                </div>
+
+                {/* Live Preview of Cover Banner */}
+                <div className="h-28 w-full rounded-xl overflow-hidden relative border border-gray-200 dark:border-slate-700 bg-slate-900 shadow-inner group">
+                  <img
+                    src={newCoverUrl || getCourseCover(newCourse)}
+                    alt="Portada preview"
+                    className="w-full h-full object-cover"
+                    referrerPolicy="no-referrer"
+                    onError={(e) => {
+                      e.currentTarget.onerror = null;
+                      e.currentTarget.src = 'https://images.unsplash.com/photo-1543002588-bfa74002ed7e?w=300';
+                    }}
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-black/10" />
+                  <div className="absolute top-2 left-2 px-2 py-0.5 rounded-full bg-black/60 backdrop-blur-md text-white text-[9px] font-black uppercase tracking-wider">
+                    {newCourse}
+                  </div>
+                  <div className="absolute top-2 right-2 w-7 h-7 rounded-lg bg-black/60 backdrop-blur-md text-white flex items-center justify-center text-xs">
+                    {newIcon}
+                  </div>
+                  <div className="absolute bottom-2 left-2 right-2 text-white font-black text-xs truncate">
+                    {newTitle.trim() || 'Título de tu mazo'}
+                  </div>
+                </div>
+
+                {/* Input URL and File upload */}
+                <div className="flex gap-2">
+                  <input
+                    type="url"
+                    value={newCoverUrl}
+                    onChange={(e) => setNewCoverUrl(e.target.value)}
+                    placeholder="URL de imagen (https://...)"
+                    className="flex-1 px-3 py-2 text-xs bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-xl outline-none text-gray-800 dark:text-gray-100 focus:ring-2 focus:ring-purple-500 font-medium"
+                  />
+                  <label className="px-3 py-2 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/60 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 text-xs font-bold rounded-xl cursor-pointer transition-colors flex items-center gap-1 shrink-0 border border-indigo-200 dark:border-indigo-800">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                    <span>Subir foto</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => handleCoverFileUpload(setNewCoverUrl, e)}
+                    />
+                  </label>
+                </div>
+
+                {/* Presets Gallery */}
+                <div>
+                  <span className="text-[10px] font-bold text-gray-400 block mb-1">
+                    Portadas sugeridas para este curso:
+                  </span>
+                  <div className="flex gap-1.5 overflow-x-auto pb-1">
+                    {DECK_COVER_PRESETS.map((pre, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => setNewCoverUrl(pre.url)}
+                        className={`text-[10px] font-semibold px-2 py-1 rounded-lg border whitespace-nowrap transition-colors ${
+                          newCoverUrl === pre.url
+                            ? 'bg-purple-600 text-white border-purple-600'
+                            : 'bg-white dark:bg-slate-900 border-gray-200 dark:border-slate-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-800'
+                        }`}
+                      >
+                        {pre.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </div>
 
               <div>
@@ -390,7 +634,7 @@ export const CustomDecksView: React.FC<CustomDecksViewProps> = ({
                   value={newDesc}
                   onChange={(e) => setNewDesc(e.target.value)}
                   rows={2}
-                  className="w-full bg-gray-50 dark:bg-slate-800 border dark:border-slate-700 rounded-xl p-3 text-xs outline-none dark:text-gray-100"
+                  className="w-full bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl p-2.5 text-xs outline-none dark:text-gray-100 resize-none"
                 />
               </div>
 
@@ -404,7 +648,7 @@ export const CustomDecksView: React.FC<CustomDecksViewProps> = ({
                       key={icon}
                       type="button"
                       onClick={() => setNewIcon(icon)}
-                      className={`w-10 h-10 rounded-xl text-lg flex items-center justify-center transition-all ${
+                      className={`w-9 h-9 rounded-xl text-base flex items-center justify-center transition-all ${
                         newIcon === icon
                           ? 'bg-purple-600 text-white scale-110 shadow-md ring-2 ring-purple-400'
                           : 'bg-gray-100 dark:bg-slate-800 hover:bg-gray-200 dark:hover:bg-slate-700'
@@ -426,14 +670,14 @@ export const CustomDecksView: React.FC<CustomDecksViewProps> = ({
                       key={col.id}
                       type="button"
                       onClick={() => setNewColor(col.id)}
-                      className={`p-2.5 rounded-xl border text-xs font-black flex items-center gap-2 transition-all ${
+                      className={`p-2 rounded-xl border text-xs font-black flex items-center gap-1.5 transition-all ${
                         newColor === col.id
                           ? `${col.bg} ${col.text} ${col.border} ring-2 ring-current shadow-sm`
                           : 'bg-gray-50 dark:bg-slate-800 border-gray-200 dark:border-slate-700 text-gray-600 dark:text-gray-400'
                       }`}
                     >
-                      <span className={`w-3 h-3 rounded-full bg-gradient-to-r ${col.banner}`} />
-                      <span>{col.name}</span>
+                      <span className={`w-2.5 h-2.5 rounded-full bg-gradient-to-r ${col.banner}`} />
+                      <span className="truncate">{col.name}</span>
                     </button>
                   ))}
                 </div>
@@ -449,9 +693,9 @@ export const CustomDecksView: React.FC<CustomDecksViewProps> = ({
                 </button>
                 <button
                   type="submit"
-                  className="px-6 py-2.5 rounded-xl text-xs font-black text-white bg-indigo-600 hover:bg-indigo-700 active:scale-95 shadow-md transition-all min-h-[44px]"
+                  className="px-6 py-2.5 rounded-xl text-xs font-black text-white bg-purple-600 hover:bg-purple-700 active:scale-95 shadow-md transition-all min-h-[44px]"
                 >
-                  Crear Mazo
+                  Guardar Mazo en {newCourse}
                 </button>
               </div>
             </form>

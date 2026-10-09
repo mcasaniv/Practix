@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { ViewType, NavigationState, AppDatabase } from '../types';
+import React, { useState, useEffect } from 'react';
+import { ViewType, NavigationState, AppDatabase, UserProfile } from '../types';
 
 interface NavbarProps {
   onNavigate: (view: ViewType, params?: Partial<NavigationState>) => void;
@@ -15,6 +15,7 @@ interface NavbarProps {
   totalPracticed: number;
   totalFlashcardsPracticed: number;
   onToast: (message: string) => void;
+  userProfile?: UserProfile;
 }
 
 const Navbar: React.FC<NavbarProps> = ({ 
@@ -30,7 +31,8 @@ const Navbar: React.FC<NavbarProps> = ({
   toggleTheme,
   totalPracticed,
   totalFlashcardsPracticed,
-  onToast
+  onToast,
+  userProfile
 }) => {
   const [showResetModal, setShowResetModal] = useState(false);
   const [showResetFlashcardsModal, setShowResetFlashcardsModal] = useState(false);
@@ -74,6 +76,8 @@ const Navbar: React.FC<NavbarProps> = ({
         return 'Panel de Administración';
       case 'FLASHCARDS_HOME':
         return navState.selectedCourse ? `Flashcards / ${navState.selectedCourse}` : 'Flashcards';
+      case 'PROFILE':
+        return 'Mi Perfil de Postulante';
       default:
         return 'Practix';
     }
@@ -85,6 +89,7 @@ const Navbar: React.FC<NavbarProps> = ({
   const isExamActive = currentView === 'EXAM_SETUP';
   const isStatsActive = currentView === 'STATS';
   const isAdminActive = currentView === 'ADMIN';
+  const isProfileActive = currentView === 'PROFILE';
 
   return (
     <>
@@ -170,6 +175,16 @@ const Navbar: React.FC<NavbarProps> = ({
                   className={`px-2 xl:px-3 py-1.5 rounded-lg font-bold transition-all ${isStatsActive ? 'bg-indigo-600 dark:bg-indigo-800 text-white shadow-sm' : 'text-indigo-200 hover:text-white'}`}
                 >
                   Estadísticas
+                </button>
+                <button 
+                  id="nav-btn-profile"
+                  onClick={() => onNavigate('PROFILE')}
+                  className={`px-2 xl:px-3 py-1.5 rounded-lg font-bold transition-all flex items-center gap-1.5 ${isProfileActive ? 'bg-indigo-600 dark:bg-indigo-800 text-white shadow-sm' : 'text-indigo-200 hover:text-white'}`}
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                  </svg>
+                  <span>Perfil</span>
                 </button>
               </div>
             </div>
@@ -349,7 +364,7 @@ const Navbar: React.FC<NavbarProps> = ({
               {/* Theme Toggle Button */}
               <button
                 onClick={toggleTheme}
-                className="p-2 text-white hover:bg-white/15 active:scale-95 border border-transparent hover:border-white/10 rounded-xl transition-all min-w-[44px] min-h-[44px] flex items-center justify-center shadow-sm"
+                className="p-2 text-white hover:bg-white/15 active:scale-95 border border-transparent hover:border-white/10 rounded-xl transition-all min-w-[40px] min-h-[40px] flex items-center justify-center shadow-sm"
                 title={isDark ? "Modo Claro" : "Modo Oscuro"}
                 aria-label="Cambiar tema de color"
               >
@@ -367,7 +382,7 @@ const Navbar: React.FC<NavbarProps> = ({
               {/* Mobile Menu / More Button */}
               <button
                 onClick={() => setShowMobileMenu(true)}
-                className="p-2 text-white hover:bg-white/15 active:scale-95 border border-transparent hover:border-white/10 rounded-xl transition-all min-w-[44px] min-h-[44px] flex items-center justify-center shadow-sm"
+                className="p-2 text-white hover:bg-white/15 active:scale-95 border border-transparent hover:border-white/10 rounded-xl transition-all min-w-[40px] min-h-[40px] flex items-center justify-center shadow-sm"
                 title="Menú y herramientas"
                 aria-label="Abrir menú"
               >
@@ -383,7 +398,7 @@ const Navbar: React.FC<NavbarProps> = ({
       {/* MOBILE & TABLET FIXED BOTTOM NAVIGATION BAR (< lg, thumb-friendly ergonomic tabs) */}
       {!isExamView && (
         <div className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-t border-gray-200 dark:border-slate-800 pb-safe shadow-[0_-4px_20px_rgba(0,0,0,0.06)] dark:shadow-[0_-4px_20px_rgba(0,0,0,0.3)]">
-          <div className="max-w-xl md:max-w-2xl mx-auto grid grid-cols-5 h-16 items-center px-1 sm:px-3">
+          <div className="max-w-xl md:max-w-2xl mx-auto grid grid-cols-5 h-16 items-center px-1">
             {/* Tab 1: Cursos */}
             <button
               onClick={() => onNavigate('HOME')}
@@ -396,7 +411,7 @@ const Navbar: React.FC<NavbarProps> = ({
               <svg xmlns="http://www.w3.org/2000/svg" className={`h-5 w-5 transition-transform ${isCursosActive ? 'scale-110' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={isCursosActive ? 2.5 : 2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
               </svg>
-              <span className="text-[10px] sm:text-[11px] mt-0.5 leading-none font-bold">Cursos</span>
+              <span className="text-[10px] mt-0.5 leading-none font-bold">Cursos</span>
             </button>
 
             {/* Tab 2: Mazos Personalizados */}
@@ -411,25 +426,25 @@ const Navbar: React.FC<NavbarProps> = ({
               <svg xmlns="http://www.w3.org/2000/svg" className={`h-5 w-5 transition-transform ${isDecksActive ? 'scale-110' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={isDecksActive ? 2.5 : 2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
               </svg>
-              <span className="text-[10px] sm:text-[11px] mt-0.5 leading-none font-bold">Mazos</span>
+              <span className="text-[10px] mt-0.5 leading-none font-bold">Mazos</span>
             </button>
 
             {/* Tab 3: Simulacro (Featured Center Action) */}
             <button
               onClick={() => onNavigate('EXAM_SETUP')}
-              className="flex flex-col items-center justify-center -mt-3 min-h-[48px]"
+              className="flex flex-col items-center justify-center -mt-2 min-h-[48px]"
             >
-              <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shadow-lg transition-all ${
+              <div className={`w-11 h-11 rounded-2xl flex items-center justify-center shadow-lg transition-all ${
                 isExamActive 
                   ? 'bg-gradient-to-tr from-indigo-600 to-purple-600 text-white shadow-indigo-300 dark:shadow-none scale-105 ring-2 ring-indigo-400' 
                   : 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-200 dark:shadow-none'
               }`}>
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
               </div>
-              <span className={`text-[10px] sm:text-[11px] mt-1 font-black ${isExamActive ? 'text-indigo-600 dark:text-indigo-400' : 'text-gray-500 dark:text-gray-400'}`}>
-                Simulacro
+              <span className={`text-[10px] mt-1 font-black ${isExamActive ? 'text-indigo-600 dark:text-indigo-400' : 'text-gray-500 dark:text-gray-400'}`}>
+                Examen
               </span>
             </button>
 
@@ -445,7 +460,7 @@ const Navbar: React.FC<NavbarProps> = ({
               <svg xmlns="http://www.w3.org/2000/svg" className={`h-5 w-5 transition-transform ${isFlashcardsActive ? 'scale-110' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={isFlashcardsActive ? 2.5 : 2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
               </svg>
-              <span className="text-[10px] sm:text-[11px] mt-0.5 leading-none font-bold">Cards</span>
+              <span className="text-[10px] mt-0.5 leading-none font-bold">Cards</span>
             </button>
 
             {/* Tab 5: Progreso / Stats */}
@@ -460,7 +475,7 @@ const Navbar: React.FC<NavbarProps> = ({
               <svg xmlns="http://www.w3.org/2000/svg" className={`h-5 w-5 transition-transform ${isStatsActive ? 'scale-110' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={isStatsActive ? 2.5 : 2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
               </svg>
-              <span className="text-[10px] sm:text-[11px] mt-0.5 leading-none font-bold">Progreso</span>
+              <span className="text-[10px] mt-0.5 leading-none font-bold">Progreso</span>
             </button>
           </div>
         </div>
@@ -536,6 +551,34 @@ const Navbar: React.FC<NavbarProps> = ({
 
             {/* Actions List */}
             <div className="space-y-2">
+              {/* My Profile shortcut */}
+              <button
+                onClick={() => {
+                  setShowMobileMenu(false);
+                  onNavigate('PROFILE');
+                }}
+                className="w-full p-4 rounded-2xl bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-black text-sm hover:opacity-95 active:scale-[0.98] transition-all flex items-center justify-between shadow-md"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center font-black text-xs overflow-hidden shrink-0">
+                    {userProfile?.avatarUrl ? (
+                      <img src={userProfile.avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
+                    ) : (
+                      userProfile?.name?.charAt(0).toUpperCase() || 'P'
+                    )}
+                  </div>
+                  <div className="text-left">
+                    <div className="leading-tight">{userProfile?.name || 'Mi Perfil de Postulante'}</div>
+                    <div className="text-[10px] text-indigo-200 font-semibold">
+                      Área: {userProfile?.targetArea || 'Biomédicas'} • Configurar
+                    </div>
+                  </div>
+                </div>
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 opacity-90" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
+                </svg>
+              </button>
+
               {/* Admin Panel */}
               <button
                 onClick={() => {
