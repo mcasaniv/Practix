@@ -5,6 +5,7 @@ import { AREA_EXAM_CONFIGS } from '../constants';
 import { formatQuestionText, parseHTMLTags, getQuestionWeek, getQuestionProcess, getProcessBadgeStyle, getProcessShortName } from '../utils';
 import { PrintExamModal } from '../components/PrintExamModal';
 import { QuizizzGame } from '../components/QuizizzGame';
+import { EditResolutionModal } from '../components/EditResolutionModal';
 
 interface MegaQuizViewProps {
   questions: Question[];
@@ -22,6 +23,8 @@ interface MegaQuizViewProps {
   isReviewMode?: boolean;
   onSaveExamResult?: (exam: SavedExam) => void;
   userProfile?: UserProfile;
+  onUpdateQuestion?: (updatedQuestion: Question) => void;
+  onToast?: (message: string) => void;
 }
 
 const MegaQuizView: React.FC<MegaQuizViewProps> = ({ 
@@ -39,7 +42,9 @@ const MegaQuizView: React.FC<MegaQuizViewProps> = ({
   retakeExam,
   isReviewMode = false,
   onSaveExamResult,
-  userProfile
+  userProfile,
+  onUpdateQuestion,
+  onToast
 }) => {
   const [step, setStep] = useState<'WELCOME' | 'QUIZ' | 'FINISHED'>(
     isReviewMode ? 'FINISHED' : 'WELCOME'
@@ -47,10 +52,21 @@ const MegaQuizView: React.FC<MegaQuizViewProps> = ({
   const [answers, setAnswers] = useState<Record<string, number>>(() => retakeExam?.userAnswers || {});
   const [resolutionIndex, setResolutionIndex] = useState(0); // For sequential view after exam
   const [showPrintModal, setShowPrintModal] = useState(false);
+  const [editingQuestion, setEditingQuestion] = useState<Question | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const currentExamIdRef = useRef<string>(retakeExam ? retakeExam.id : crypto.randomUUID());
   
   const [questionSource, setQuestionSource] = useState<'ALL' | 'PRACTICED'>('ALL');
+
+  const handleSaveResolution = (updatedQ: Question) => {
+    setActiveQuestions(prev => prev.map(item => item.question.id === updatedQ.id ? { ...item, question: updatedQ } : item));
+    if (onUpdateQuestion) {
+      onUpdateQuestion(updatedQ);
+    }
+    if (onToast) {
+      onToast("Resolución actualizada exitosamente.");
+    }
+  };
 
   useEffect(() => {
     if (retakeExam?.area && (retakeExam.area === 'Biomédicas' || retakeExam.area === 'Ingenierías' || retakeExam.area === 'Sociales')) {
@@ -1076,15 +1092,44 @@ const MegaQuizView: React.FC<MegaQuizViewProps> = ({
                     </div>
 
                     {/* Explanation box */}
-                    <div className="mt-8 bg-indigo-50/40 dark:bg-indigo-900/20 p-6 rounded-2xl border border-indigo-100 dark:border-indigo-900/30">
-                      <p className="text-indigo-900 dark:text-indigo-200 font-black mb-1.5 uppercase tracking-widest text-xs flex items-center gap-1.5">
-                        <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                        <span>Explicación & Fundamento:</span>
-                      </p>
+                    <div className="mt-8 bg-indigo-50/40 dark:bg-indigo-900/20 p-6 rounded-2xl border border-indigo-100 dark:border-indigo-900/30 space-y-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-indigo-100/80 dark:border-indigo-900/40 pb-2.5">
+                        <p className="text-indigo-900 dark:text-indigo-200 font-black uppercase tracking-widest text-xs flex items-center gap-1.5">
+                          <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          <span>Explicación & Fundamento:</span>
+                        </p>
+                        {onUpdateQuestion && (
+                          <button
+                            type="button"
+                            onClick={() => setEditingQuestion(q)}
+                            className="p-1.5 sm:p-2 rounded-xl bg-white dark:bg-slate-800 hover:bg-indigo-50 dark:hover:bg-slate-700 text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 transition-all border border-indigo-200 dark:border-slate-700 shadow-2xs active:scale-95 cursor-pointer ml-auto flex items-center justify-center shrink-0"
+                            title="Editar pregunta completa (enunciado, alternativas y solución)"
+                            aria-label="Editar pregunta completa"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 text-indigo-600 dark:text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                            </svg>
+                          </button>
+                        )}
+                      </div>
                       <div className="text-gray-700 dark:text-gray-300 text-sm whitespace-pre-wrap leading-relaxed">
-                        {parseHTMLTags(q.explanation)}
+                        {q.explanation ? (
+                          parseHTMLTags(q.explanation)
+                        ) : (
+                          <span className="text-gray-400 dark:text-gray-500 italic">
+                            Sin explicación registrada. Pulsa en el lápiz para editar la pregunta.
+                          </span>
+                        )}
+                        {q.explanationImageUrl && (
+                          <img
+                            src={q.explanationImageUrl}
+                            alt="Resolución visual"
+                            className="mt-3 max-w-full h-auto rounded-xl border dark:border-slate-700 max-h-[300px] object-contain block shadow-xs"
+                            referrerPolicy="no-referrer"
+                          />
+                        )}
                       </div>
                     </div>
                   </div>
@@ -1114,6 +1159,8 @@ const MegaQuizView: React.FC<MegaQuizViewProps> = ({
           questions={selectedQuestions.map(item => item.question)}
           readingTexts={readingTexts}
           userProfile={userProfile}
+          onUpdateQuestion={handleSaveResolution}
+          onToast={onToast}
           onFinish={(score, total) => {
             handleFinalize();
           }}
@@ -1236,6 +1283,14 @@ const MegaQuizView: React.FC<MegaQuizViewProps> = ({
           onClose={() => setShowPrintModal(false)}
         />
       )}
+
+      {/* Edit Resolution Modal */}
+      <EditResolutionModal
+        question={editingQuestion}
+        isOpen={Boolean(editingQuestion)}
+        onClose={() => setEditingQuestion(null)}
+        onSave={handleSaveResolution}
+      />
     </div>
   );
 };

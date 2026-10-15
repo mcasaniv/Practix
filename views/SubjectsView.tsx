@@ -8,6 +8,7 @@ interface SubjectsViewProps {
   questions?: Question[];
   results?: Record<string, TopicResult>;
   savedExams?: SavedExam[];
+  incorrectQuestionIds?: string[];
   selectedArea?: TargetArea;
   onSelectSubject: (subject: string) => void;
   academicStructure?: CourseStructure[];
@@ -17,6 +18,7 @@ const SubjectsView: React.FC<SubjectsViewProps> = ({
   courseName, 
   questions = [],
   savedExams = [],
+  incorrectQuestionIds = [],
   selectedArea = 'Biomédicas',
   onSelectSubject,
   academicStructure = ACADEMIC_STRUCTURE
@@ -68,6 +70,8 @@ const SubjectsView: React.FC<SubjectsViewProps> = ({
           const areaQuestionsCount = subjectQuestions.filter(q => matchesQuestionArea(q, currentArea)).length;
           const isSavedExamsSubject = subject === 'Exámenes Rendidos' || subject === 'Exámenes Simulacros';
           const isOfficialExamsSubject = subject === 'Simulacros Oficiales';
+          const incorrectSet = new Set(incorrectQuestionIds);
+          const mistakesCount = subjectQuestions.filter(q => incorrectSet.has(q.id)).length;
           
           return (
             <div 
@@ -76,9 +80,16 @@ const SubjectsView: React.FC<SubjectsViewProps> = ({
               className="bg-white dark:bg-[#060a22] border border-gray-100 dark:border-indigo-950/80 hover:border-indigo-200 hover:dark:border-indigo-800/80 rounded-2xl p-4 sm:p-5 shadow-sm hover:shadow-md active:scale-[0.98] cursor-pointer group transition-all flex items-center justify-between min-h-[58px]"
             >
               <div className="min-w-0 pr-3">
-                <h3 className="text-base sm:text-lg font-black text-gray-800 dark:text-gray-100 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors truncate">
-                  {subject}
-                </h3>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-base sm:text-lg font-black text-gray-800 dark:text-gray-100 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors truncate">
+                    {subject}
+                  </h3>
+                  {mistakesCount > 0 && (
+                    <span className="px-1.5 py-0.5 rounded-md text-[9px] font-black bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-900/60 shrink-0">
+                      {mistakesCount} {mistakesCount === 1 ? 'por reforzar' : 'por reforzar'}
+                    </span>
+                  )}
+                </div>
                 <span className="text-[11px] font-bold text-gray-400 dark:text-indigo-300/80">
                   {isSavedExamsSubject
                     ? (savedExams.length > 0 

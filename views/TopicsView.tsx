@@ -14,6 +14,10 @@ interface TopicsViewProps {
   savedExams?: SavedExam[];
   onSelectTopic: (topic: string, mode?: 'CLASSIC' | 'QUIZZIZ', process?: string, areaFilter?: 'Biomédicas' | 'Ingenierías' | 'Sociales' | 'Todas') => void;
   onStartMixedQuiz: (questions: Question[], mode?: 'CLASSIC' | 'QUIZZIZ') => void;
+  onStartMistakesQuiz?: (questions: Question[], mode?: 'CLASSIC' | 'QUIZZIZ') => void;
+  incorrectQuestionIds?: string[];
+  onClearSubjectMistakes?: (subjectName: string) => void;
+  onAddSampleMistakes?: (questionIds: string[]) => void;
   onDeleteTopic: (topic: string) => void;
   onMoveTopic: (topic: string, direction: 'UP' | 'DOWN') => void;
   onRetakeExam?: (exam: SavedExam) => void;
@@ -27,14 +31,18 @@ interface TopicsViewProps {
 
 const TopicsView: React.FC<TopicsViewProps> = ({ 
   subjectName, 
-  courseName,
+  courseName, 
   questions, 
   allDatabaseQuestions = [],
   readingTexts = [],
   results, 
   savedExams = [],
+  incorrectQuestionIds = [],
   onSelectTopic, 
   onStartMixedQuiz,
+  onStartMistakesQuiz,
+  onClearSubjectMistakes,
+  onAddSampleMistakes,
   onDeleteTopic,
   onMoveTopic,
   onRetakeExam,
@@ -108,6 +116,67 @@ const TopicsView: React.FC<TopicsViewProps> = ({
       return true;
     });
   }, [questions, selectedProcess, activeAreaFilter]);
+
+  // Preguntas en las que el usuario se ha equivocado dentro de esta materia
+  const mistakeQuestions = useMemo(() => {
+    const incorrectSet = new Set(incorrectQuestionIds || []);
+    // Also include any questions missed in savedExams for this subject
+    if (savedExams && savedExams.length > 0) {
+      savedExams.forEach(exam => {
+        if (exam.userAnswers) {
+          Object.entries(exam.userAnswers).forEach(([qId, ans]) => {
+            const q = questions.find(item => item.id === qId) || allDatabaseQuestions.find(item => item.id === qId);
+            if (q && (q.subject === subjectName || q.targetSubject === subjectName) && ans !== q.correctIndex) {
+              incorrectSet.add(qId);
+            }
+          });
+        }
+      });
+    }
+
+    // Pool of questions for this subject
+    const pool = (allDatabaseQuestions && allDatabaseQuestions.length > 0)
+      ? allDatabaseQuestions.filter(q => q.subject === subjectName || q.targetSubject === subjectName)
+      : questions;
+
+    return pool.filter(q => incorrectSet.has(q.id));
+  }, [incorrectQuestionIds, savedExams, questions, allDatabaseQuestions, subjectName]);
+
+  const [mistakesCountLimit, setMistakesCountLimit] = useState<number>(() => Math.max(1, mistakeQuestions.length));
+
+  useEffect(() => {
+    if (mistakeQuestions.length > 0) {
+      setMistakesCountLimit(mistakeQuestions.length);
+    }
+  }, [mistakeQuestions.length]);
+
+  const handleStartMistakes = (mode: 'CLASSIC' | 'QUIZZIZ' = 'CLASSIC') => {
+    if (mistakeQuestions.length === 0) return;
+    const count = mistakesCountLimit > 0 ? Math.min(mistakesCountLimit, mistakeQuestions.length) : mistakeQuestions.length;
+    const shuffled = [...mistakeQuestions].sort(() => 0.5 - Math.random());
+    const selected = shuffled.slice(0, count);
+    if (onStartMistakesQuiz) {
+      onStartMistakesQuiz(selected, mode);
+    } else {
+      onStartMixedQuiz(selected, mode);
+    }
+  };
+
+  const handleClearMistakes = () => {
+    if (window.confirm(`¿Deseas limpiar el registro de errores para ${subjectName}? Las preguntas volverán a considerarse aprobadas.`)) {
+      if (onClearSubjectMistakes) {
+        onClearSubjectMistakes(subjectName);
+      }
+    }
+  };
+
+  const handleAddSampleMistake = () => {
+    if (questions.length === 0) return;
+    const sampleIds = questions.slice(0, 3).map(q => q.id);
+    if (onAddSampleMistakes) {
+      onAddSampleMistakes(sampleIds);
+    }
+  };
 
   const handleStartMixed = (mode: 'CLASSIC' | 'QUIZZIZ' = 'CLASSIC') => {
     if (filteredQuestions.length === 0) return;
@@ -805,6 +874,127 @@ const TopicsView: React.FC<TopicsViewProps> = ({
               })}
             </div>
           )}
+        </div>
+      )}
+
+      {/* Banco de Errores - Opción para practicar preguntas en las que se ha equivocado */}
+      {questions.length > 0 && (
+        <div className="bg-gradient-to-r from-emerald-50/90 via-teal-50/50 to-indigo-50/30 dark:from-[#051a14]/70 dark:via-[#04201a]/50 dark:to-[#020b38]/50 border border-emerald-200/90 dark:border-emerald-800/70 rounded-2xl p-4 sm:p-6 shadow-sm">
+          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 sm:gap-6">
+            <div className="space-y-1.5 max-w-xl">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="p-1.5 bg-emerald-600 text-white rounded-lg text-xs font-black flex items-center gap-1 shadow-sm">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <span>BANCO DE ERRORES</span>
+                </span>
+                <h3 className="text-lg sm:text-xl font-black text-gray-900 dark:text-gray-100">
+                  Repaso y Oportunidad de Mejora en {subjectName}
+                </h3>
+                {mistakeQuestions.length > 0 ? (
+                  <span className="px-2.5 py-0.5 rounded-full text-xs font-black bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                    <span>{mistakeQuestions.length} {mistakeQuestions.length === 1 ? 'pregunta por reforzar' : 'preguntas por reforzar'}</span>
+                  </span>
+                ) : (
+                  <span className="px-2.5 py-0.5 rounded-full text-xs font-black bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 flex items-center gap-1">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                    </svg>
+                    <span>0 fallos • ¡Al día!</span>
+                  </span>
+                )}
+              </div>
+
+              <p className="text-gray-600 dark:text-gray-300 text-xs sm:text-sm leading-relaxed">
+                {mistakeQuestions.length > 0 ? (
+                  <>
+                    Refuerza y domina las preguntas en las que te has equivocado en <strong>{subjectName}</strong>. Al responderlas correctamente se descontarán automáticamente de tu banco.
+                  </>
+                ) : (
+                  <>
+                    No tienes preguntas pendientes con error en <strong>{subjectName}</strong>. Cada vez que falles una pregunta en cualquier práctica o simulacro de esta materia, se acumulará aquí como oportunidad de repaso.
+                  </>
+                )}
+              </p>
+
+              {mistakeQuestions.length > 0 && onClearSubjectMistakes && (
+                <button
+                  type="button"
+                  onClick={handleClearMistakes}
+                  className="text-[11px] font-bold text-emerald-700 dark:text-emerald-400 hover:underline inline-flex items-center gap-1 pt-1"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                  <span>Reiniciar registro de errores de esta materia</span>
+                </button>
+              )}
+            </div>
+
+            {/* Acciones */}
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 w-full md:w-auto shrink-0">
+              {mistakeQuestions.length > 0 ? (
+                <>
+                  {mistakeQuestions.length > 5 && (
+                    <div className="flex items-center sm:flex-col justify-between sm:justify-center gap-2 sm:gap-0">
+                      <label className="text-[10px] font-black text-emerald-800 dark:text-emerald-300 sm:mb-1 uppercase tracking-wider">
+                        Cantidad
+                      </label>
+                      <input 
+                        type="number" 
+                        min="1" 
+                        max={mistakeQuestions.length}
+                        value={mistakesCountLimit}
+                        onChange={(e) => setMistakesCountLimit(parseInt(e.target.value) || 1)}
+                        className="w-20 px-2.5 py-1.5 rounded-xl border border-emerald-300 dark:border-emerald-800/80 bg-white dark:bg-[#020b38] text-gray-800 dark:text-gray-100 font-bold focus:ring-2 focus:ring-emerald-500 outline-none text-center text-xs min-h-[38px]"
+                      />
+                    </div>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => handleStartMistakes('CLASSIC')}
+                    className="flex-1 sm:flex-initial bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white px-5 py-2.5 rounded-xl text-xs font-black transition-all shadow-md shadow-emerald-600/20 flex items-center justify-center gap-2 min-h-[44px]"
+                    title={`Practicar todas las ${mistakeQuestions.length} preguntas en modo clásico`}
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <span>Practicar Todas ({mistakeQuestions.length})</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleStartMistakes('QUIZZIZ')}
+                    className="flex-1 sm:flex-initial bg-gradient-to-r from-emerald-600 to-indigo-600 hover:from-emerald-500 hover:to-indigo-500 active:scale-95 text-white px-4 py-2.5 rounded-xl text-xs font-black transition-all shadow-md flex items-center justify-center gap-2 min-h-[44px]"
+                    title={`Jugar las ${mistakeQuestions.length} preguntas en modo Practix`}
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <span>Jugar Practix</span>
+                  </button>
+                </>
+              ) : (
+                onAddSampleMistakes && questions.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleAddSampleMistake}
+                    className="bg-white dark:bg-slate-800 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/80 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 min-h-[40px] shadow-sm active:scale-95"
+                    title="Añadir preguntas de prueba para probar la función"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                    </svg>
+                    <span>Probar banco con preguntas de prueba</span>
+                  </button>
+                )
+              )}
+            </div>
+          </div>
         </div>
       )}
 

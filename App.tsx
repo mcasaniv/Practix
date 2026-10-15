@@ -3,6 +3,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Question, AppDatabase, ViewType, NavigationState, TopicResult, ReadingText, Flashcard, SavedExam, UserProfile, CustomDeck } from './types';
 import { ACADEMIC_STRUCTURE, DB_STORAGE_KEY } from './constants';
 import { getQuestionProcess, parseAndNormalizeImport, matchesQuestionArea } from './utils';
+import { saveAppDatabase, loadAppDatabase } from './utils/dbStorage';
 import Navbar from './components/Navbar';
 import HomeView from './views/HomeView';
 import SubjectsView from './views/SubjectsView';
@@ -147,30 +148,85 @@ const sanitizeDatabase = (data: AppDatabase): AppDatabase => {
     });
   }
 
+  let sanitizedIncorrect: string[] = [];
+  if (Array.isArray(data.incorrectQuestionIds)) {
+    sanitizedIncorrect = Array.from(new Set(data.incorrectQuestionIds.filter(Boolean)));
+  } else if (Array.isArray(data.savedExams)) {
+    const seeded = new Set<string>();
+    data.savedExams.forEach(exam => {
+      if (exam.userAnswers) {
+        Object.entries(exam.userAnswers).forEach(([qId, userAns]) => {
+          const q = sanitizedQuestions.find(item => item.id === qId);
+          if (q && userAns !== q.correctIndex) {
+            seeded.add(qId);
+          }
+        });
+      }
+    });
+    sanitizedIncorrect = Array.from(seeded);
+  }
+
   return {
     ...data,
     questions: sanitizedQuestions,
     readingTexts: sanitizedReadingTexts,
     flashcards: sanitizedFlashcards,
     results: migratedResults,
-    customDecks: sanitizedCustomDecks
+    customDecks: sanitizedCustomDecks,
+    incorrectQuestionIds: sanitizedIncorrect
   };
 };
 
 const App: React.FC = () => {
   const [dbState, setDbState] = useState<AppDatabase>(() => {
-    const saved = localStorage.getItem(DB_STORAGE_KEY);
-    const initial = saved ? JSON.parse(saved) : { questions: [], readingTexts: [], flashcards: [], savedExams: [], customDecks: [] };
+    let initial: any = null;
+    try {
+      const saved = localStorage.getItem(DB_STORAGE_KEY);
+      initial = saved ? JSON.parse(saved) : null;
+    } catch (e) {
+      console.warn('Could not read from localStorage on startup:', e);
+    }
+    if (!initial) {
+      initial = { questions: [], readingTexts: [], flashcards: [], savedExams: [], customDecks: [] };
+    }
     if (!initial.results) initial.results = {};
     if (!initial.readingTexts) initial.readingTexts = [];
     if (!initial.flashcards) initial.flashcards = [];
     if (!initial.courseCovers) initial.courseCovers = {};
     if (!initial.savedExams) initial.savedExams = [];
     if (!initial.customDecks) initial.customDecks = [];
+    if (!initial.incorrectQuestionIds) initial.incorrectQuestionIds = [];
     if (initial.totalPracticed === undefined) initial.totalPracticed = 0;
     if (initial.totalFlashcardsPracticed === undefined) initial.totalFlashcardsPracticed = 0;
     return sanitizeDatabase(initial);
   });
+
+  // Asynchronously hydrate from IndexedDB to safely load large datasets exceeding 5MB
+  useEffect(() => {
+    let isMounted = true;
+    loadAppDatabase().then((idbDb) => {
+      if (!isMounted || !idbDb) return;
+      setDbState((current) => {
+        const idbQuestionsCount = idbDb.questions?.length || 0;
+        const currentQuestionsCount = current.questions?.length || 0;
+        const idbResultsCount = Object.keys(idbDb.results || {}).length;
+        const currentResultsCount = Object.keys(current.results || {}).length;
+
+        // If IndexedDB has more data or newer questions, hydrate it smoothly
+        if (idbQuestionsCount >= currentQuestionsCount || idbResultsCount > currentResultsCount) {
+          return sanitizeDatabase({
+            ...current,
+            ...idbDb,
+            results: { ...(current.results || {}), ...(idbDb.results || {}) }
+          });
+        }
+        return current;
+      });
+    }).catch(err => {
+      console.warn('Error loading from IndexedDB:', err);
+    });
+    return () => { isMounted = false; };
+  }, []);
 
   const setDb = useCallback((value: AppDatabase | ((prev: AppDatabase) => AppDatabase)) => {
     setDbState(prev => {
@@ -186,18 +242,28 @@ const App: React.FC = () => {
   });
 
   const [isDark, setIsDark] = useState(() => {
-    const saved = localStorage.getItem('theme');
-    return saved ? saved === 'dark' : true;
+    try {
+      const saved = localStorage.getItem('theme');
+      return saved ? saved === 'dark' : true;
+    } catch {
+      return true;
+    }
   });
 
   const [selectedArea, setSelectedArea] = useState<'Biomédicas' | 'Ingenierías' | 'Sociales'>(() => {
-    const saved = localStorage.getItem('selected_area');
-    return (saved as 'Biomédicas' | 'Ingenierías' | 'Sociales') || 'Biomédicas';
+    try {
+      const saved = localStorage.getItem('selected_area');
+      return (saved as 'Biomédicas' | 'Ingenierías' | 'Sociales') || 'Biomédicas';
+    } catch {
+      return 'Biomédicas';
+    }
   });
 
   const handleSetSelectedArea = useCallback((area: 'Biomédicas' | 'Ingenierías' | 'Sociales') => {
     setSelectedArea(area);
-    localStorage.setItem('selected_area', area);
+    try {
+      localStorage.setItem('selected_area', area);
+    } catch {}
   }, []);
 
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -208,17 +274,21 @@ const App: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    if (isDark) {
-      document.documentElement.classList.add('dark');
-      localStorage.setItem('theme', 'dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-      localStorage.setItem('theme', 'light');
-    }
+    try {
+      if (isDark) {
+        document.documentElement.classList.add('dark');
+        localStorage.setItem('theme', 'dark');
+      } else {
+        document.documentElement.classList.remove('dark');
+        localStorage.setItem('theme', 'light');
+      }
+    } catch {}
   }, [isDark]);
 
   useEffect(() => {
-    localStorage.setItem(DB_STORAGE_KEY, JSON.stringify(db));
+    saveAppDatabase(db).catch(err => {
+      console.warn('saveAppDatabase error:', err);
+    });
   }, [db]);
 
   const handleNavigate = useCallback((view: ViewType, params?: Partial<NavigationState>) => {
@@ -435,7 +505,15 @@ const App: React.FC = () => {
     });
   }, [db.questions, handleNavigate, showToast]);
 
-  const handleFinishQuiz = useCallback((subject: string, topic: string, score: number, total: number, mode: 'CLASSIC' | 'QUIZZIZ' = 'CLASSIC') => {
+  const handleFinishQuiz = useCallback((
+    subject: string, 
+    topic: string, 
+    score: number, 
+    total: number, 
+    mode: 'CLASSIC' | 'QUIZZIZ' = 'CLASSIC',
+    wrongQuestionIds?: string[],
+    correctQuestionIds?: string[]
+  ) => {
     setDb(prev => {
       let updatedCustomDecks = prev.customDecks;
       if (nav.selectedDeckId && prev.customDecks) {
@@ -477,10 +555,20 @@ const App: React.FC = () => {
         history: [...(prevResult?.history || []), newHistoryItem]
       };
 
+      // Update question mistakes bank
+      const nextIncorrect = new Set(prev.incorrectQuestionIds || []);
+      if (wrongQuestionIds && wrongQuestionIds.length > 0) {
+        wrongQuestionIds.forEach(id => nextIncorrect.add(id));
+      }
+      if (correctQuestionIds && correctQuestionIds.length > 0) {
+        correctQuestionIds.forEach(id => nextIncorrect.delete(id));
+      }
+
       return {
         ...prev,
         totalPracticed: (prev.totalPracticed || 0) + total,
         customDecks: updatedCustomDecks,
+        incorrectQuestionIds: Array.from(nextIncorrect),
         results: {
           ...prev.results,
           [key]: newResult
@@ -498,12 +586,62 @@ const App: React.FC = () => {
       } else {
         existing.unshift(savedExam);
       }
+
+      const nextIncorrect = new Set(prev.incorrectQuestionIds || []);
+      if (savedExam.userAnswers) {
+        prev.questions.forEach(q => {
+          if (savedExam.userAnswers![q.id] !== undefined) {
+            if (savedExam.userAnswers![q.id] === q.correctIndex) {
+              nextIncorrect.delete(q.id);
+            } else {
+              nextIncorrect.add(q.id);
+            }
+          }
+        });
+      }
+
       return {
         ...prev,
-        savedExams: existing
+        savedExams: existing,
+        incorrectQuestionIds: Array.from(nextIncorrect)
       };
     });
-  }, [setDb]);
+  }, []);
+
+  const handleClearSubjectMistakes = useCallback((subject: string) => {
+    setDb(prev => {
+      const subjectQIds = new Set(
+        prev.questions
+          .filter(q => q.subject === subject || q.targetSubject === subject)
+          .map(q => q.id)
+      );
+      return {
+        ...prev,
+        incorrectQuestionIds: (prev.incorrectQuestionIds || []).filter(id => !subjectQIds.has(id))
+      };
+    });
+    showToast(`Banco de errores de ${subject} reiniciado con éxito.`);
+  }, [showToast]);
+
+  const handleAddSampleMistakes = useCallback((questionIds: string[]) => {
+    setDb(prev => {
+      const nextIncorrect = new Set(prev.incorrectQuestionIds || []);
+      questionIds.forEach(id => nextIncorrect.add(id));
+      return {
+        ...prev,
+        incorrectQuestionIds: Array.from(nextIncorrect)
+      };
+    });
+    showToast(`Se agregaron ${questionIds.length} preguntas al banco de errores para practicar.`);
+  }, [showToast]);
+
+  const handleStartMistakesQuiz = useCallback((questions: Question[], mode: 'CLASSIC' | 'QUIZZIZ' = 'CLASSIC') => {
+    handleNavigate('MIXED_QUIZ', {
+      selectedTopic: 'Preguntas Erróneas',
+      mixedQuestions: questions,
+      quizMode: mode
+    });
+  }, [handleNavigate]);
 
   const handleDeleteSavedExam = useCallback((examId: string) => {
     setDb(prev => ({
@@ -679,6 +817,7 @@ const App: React.FC = () => {
             questions={db.questions}
             results={db.results || {}}
             savedExams={db.savedExams || []}
+            incorrectQuestionIds={db.incorrectQuestionIds || []}
             selectedArea={selectedArea}
             onSelectSubject={(subject) => handleNavigate('TOPICS', { selectedCourse: nav.selectedCourse, selectedSubject: subject })} 
           />
@@ -694,8 +833,12 @@ const App: React.FC = () => {
             readingTexts={db.readingTexts || []}
             results={db.results || {}}
             savedExams={db.savedExams || []}
+            incorrectQuestionIds={db.incorrectQuestionIds || []}
             onSelectTopic={(topic, mode, process, areaFilter) => handleNavigate('QUIZ', { selectedTopic: topic, quizMode: mode, selectedProcess: process, selectedAreaFilter: areaFilter })}
             onStartMixedQuiz={(questions, mode) => handleNavigate('MIXED_QUIZ', { mixedQuestions: questions, quizMode: mode })}
+            onStartMistakesQuiz={handleStartMistakesQuiz}
+            onClearSubjectMistakes={handleClearSubjectMistakes}
+            onAddSampleMistakes={handleAddSampleMistakes}
             onDeleteTopic={(topic) => deleteTopic(topic, nav.selectedSubject!)}
             onMoveTopic={(topic, dir) => moveTopic(topic, nav.selectedSubject!, dir)}
             onRetakeExam={(exam) => handleNavigate('MEGA_QUIZ', { retakeExam: exam, examMode: exam.mode, isReviewMode: false })}
@@ -730,6 +873,8 @@ const App: React.FC = () => {
             initialMode={nav.quizMode || 'CLASSIC'}
             userProfile={db.userProfile}
             onFinish={handleFinishQuiz}
+            onUpdateQuestion={updateQuestion}
+            onToast={showToast}
             onBack={handleBack}
           />
         );
@@ -737,14 +882,16 @@ const App: React.FC = () => {
       case 'MIXED_QUIZ':
         return (
           <QuizView 
-            topicName="Examen Mixto"
-            subjectName={nav.selectedSubject!}
+            topicName={nav.selectedTopic || "Examen Mixto"}
+            subjectName={nav.selectedSubject || "Práctica"}
             questions={nav.mixedQuestions || []}
             readingTexts={db.readingTexts || []}
             results={db.results || {}}
             initialMode={nav.quizMode || 'CLASSIC'}
             userProfile={db.userProfile}
             onFinish={handleFinishQuiz}
+            onUpdateQuestion={updateQuestion}
+            onToast={showToast}
             onBack={handleBack}
           />
         );
@@ -764,6 +911,8 @@ const App: React.FC = () => {
             isReviewMode={nav.isReviewMode}
             onSaveExamResult={handleSaveExamResult}
             userProfile={db.userProfile}
+            onUpdateQuestion={updateQuestion}
+            onToast={showToast}
             onFinishMega={(total) => setDb(prev => ({ ...prev, totalPracticed: (prev.totalPracticed || 0) + total }))}
             onBack={handleBack}
           />

@@ -122,6 +122,7 @@ export interface AppDatabase {
   savedExams?: SavedExam[];
   userProfile?: UserProfile;
   customDecks?: CustomDeck[];
+  incorrectQuestionIds?: string[];
 }
 
 export type ViewType = 'HOME' | 'SUBJECTS' | 'TOPICS' | 'QUIZ' | 'ADMIN' | 'MEGA_QUIZ' | 'MIXED_QUIZ' | 'EXAM_SETUP' | 'FLASHCARDS_HOME' | 'FLASHCARDS_SUBJECTS' | 'FLASHCARDS_PLAY' | 'STATS' | 'CUSTOM_DECKS' | 'PROFILE';
@@ -135,6 +136,7 @@ export interface NavigationState {
   selectedTopic?: string;
   selectedDeckId?: string;
   mixedQuestions?: Question[];
+  isMistakesPractice?: boolean;
   examMode?: ExamMode;
   selectedExamSubjects?: string[];
   selectedExamWeeks?: number[];

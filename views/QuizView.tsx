@@ -3,6 +3,7 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Question, ReadingText, UserProfile, TopicResult } from '../types';
 import { formatQuestionText, parseHTMLTags } from '../utils';
 import { QuizizzGame } from '../components/QuizizzGame';
+import { EditResolutionModal } from '../components/EditResolutionModal';
 
 interface QuizViewProps {
   topicName: string;
@@ -10,10 +11,20 @@ interface QuizViewProps {
   questions: Question[];
   readingTexts: ReadingText[];
   results?: Record<string, TopicResult>;
-  onFinish: (subject: string, topic: string, score: number, total: number, mode?: 'CLASSIC' | 'QUIZZIZ') => void;
+  onFinish: (
+    subject: string, 
+    topic: string, 
+    score: number, 
+    total: number, 
+    mode?: 'CLASSIC' | 'QUIZZIZ',
+    wrongQuestionIds?: string[],
+    correctQuestionIds?: string[]
+  ) => void;
   onBack: () => void;
   initialMode?: 'CLASSIC' | 'QUIZZIZ';
   userProfile?: UserProfile;
+  onUpdateQuestion?: (updatedQuestion: Question) => void;
+  onToast?: (message: string) => void;
 }
 
 const QuizView: React.FC<QuizViewProps> = ({ 
@@ -25,19 +36,37 @@ const QuizView: React.FC<QuizViewProps> = ({
   onFinish, 
   onBack,
   initialMode = 'CLASSIC',
-  userProfile
+  userProfile,
+  onUpdateQuestion,
+  onToast
 }) => {
   const [practiceMode, setPracticeMode] = useState<'CLASSIC' | 'QUIZZIZ'>(initialMode);
   const [answers, setAnswers] = useState<Record<string, number>>({});
   const [isFinished, setIsFinished] = useState(false);
+  const [currentQuestions, setCurrentQuestions] = useState<Question[]>(questions);
+  const [editingQuestion, setEditingQuestion] = useState<Question | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setCurrentQuestions(questions);
+  }, [questions]);
 
   const currentTopicResult = results[`${subjectName}|${topicName}`];
   const previousTimes = currentTopicResult?.timesPracticed ?? (currentTopicResult ? 1 : 0);
 
+  const handleSaveEditedQuestion = (updatedQuestion: Question) => {
+    setCurrentQuestions(prev => prev.map(q => q.id === updatedQuestion.id ? updatedQuestion : q));
+    if (onUpdateQuestion) {
+      onUpdateQuestion(updatedQuestion);
+    }
+    if (onToast) {
+      onToast("Resolución de la pregunta actualizada correctamente.");
+    }
+  };
+
   const groupedQuestions = useMemo(() => {
     const groups: { text?: ReadingText, questions: Question[] }[] = [];
-    const safeQuestions = (questions || []).filter(q => Boolean(q && q.id));
+    const safeQuestions = (currentQuestions || []).filter(q => Boolean(q && q.id));
     const textIds = Array.from(new Set(safeQuestions.map(q => q.readingTextId)));
 
     textIds.forEach(id => {
@@ -47,18 +76,24 @@ const QuizView: React.FC<QuizViewProps> = ({
     });
 
     return groups;
-  }, [questions, readingTexts]);
+  }, [currentQuestions, readingTexts]);
 
   if (practiceMode === 'QUIZZIZ') {
     return (
       <QuizizzGame
         title={`${subjectName} - ${topicName}`}
-        subtitle="Práctica interactiva estilo Practix con tiempo, rachas y comodines"
-        questions={questions}
+        subtitle={
+          topicName.toLowerCase().includes('error') || topicName.toLowerCase().includes('fallo')
+            ? "Repaso interactivo de preguntas falladas: ¡Supéralas y elimínalas de tu banco de errores!"
+            : "Práctica interactiva estilo Practix con tiempo, rachas y comodines"
+        }
+        questions={currentQuestions}
         readingTexts={readingTexts}
         userProfile={userProfile}
-        onFinish={(score, total) => {
-          onFinish(subjectName, topicName, score, total, 'QUIZZIZ');
+        onUpdateQuestion={handleSaveEditedQuestion}
+        onToast={onToast}
+        onFinish={(score, total, wrongIds, correctIds) => {
+          onFinish(subjectName, topicName, score, total, 'QUIZZIZ', wrongIds, correctIds);
         }}
         onBack={onBack}
       />
@@ -72,7 +107,7 @@ const QuizView: React.FC<QuizViewProps> = ({
 
   const calculateScore = () => {
     let score = 0;
-    (questions || []).forEach(q => {
+    (currentQuestions || []).forEach(q => {
       if (q && q.id && answers[q.id] === q.correctIndex) score++;
     });
     return score;
@@ -81,7 +116,19 @@ const QuizView: React.FC<QuizViewProps> = ({
   const handleGrade = () => {
     const score = calculateScore();
     setIsFinished(true);
-    onFinish(subjectName, topicName, score, questions.length, 'CLASSIC');
+
+    const wrongIds: string[] = [];
+    const correctIds: string[] = [];
+    (currentQuestions || []).forEach(q => {
+      if (!q || !q.id) return;
+      if (answers[q.id] === q.correctIndex) {
+        correctIds.push(q.id);
+      } else {
+        wrongIds.push(q.id);
+      }
+    });
+
+    onFinish(subjectName, topicName, score, currentQuestions.length, 'CLASSIC', wrongIds, correctIds);
   };
 
   const scoreValue = calculateScore();
@@ -138,16 +185,28 @@ const QuizView: React.FC<QuizViewProps> = ({
         <div>
           <div className="flex flex-wrap items-center gap-2 mb-1">
             <h2 className="text-xl sm:text-2xl font-black text-gray-800 dark:text-gray-100">{topicName}</h2>
-            {previousTimes > 0 && (
+            {(topicName.toLowerCase().includes('error') || topicName.toLowerCase().includes('fallo')) ? (
+              <span className="bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 text-xs font-black px-2.5 py-0.5 rounded-full flex items-center gap-1 border border-emerald-300 dark:border-emerald-800">
+                <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span>Banco de Errores</span>
+              </span>
+            ) : previousTimes > 0 ? (
               <span className="bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 text-xs font-black px-2.5 py-0.5 rounded-full flex items-center gap-1">
                 <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5 inline" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                 </svg>
                 <span>{previousTimes} {previousTimes === 1 ? 'intento' : 'intentos'}</span>
               </span>
-            )}
+            ) : null}
           </div>
-          <p className="text-gray-400 dark:text-gray-500 text-xs sm:text-sm">Contesta todas las preguntas para ver tus resultados.</p>
+          <p className="text-gray-400 dark:text-gray-500 text-xs sm:text-sm">
+            {(topicName.toLowerCase().includes('error') || topicName.toLowerCase().includes('fallo'))
+              ? "Preguntas en las que te has equivocado previamente. ¡Al responderlas bien se limpiarán de tu banco!"
+              : "Contesta todas las preguntas para ver tus resultados."
+            }
+          </p>
         </div>
         {!isFinished ? (
           <button 
@@ -191,25 +250,32 @@ const QuizView: React.FC<QuizViewProps> = ({
                       {globalIdx}
                     </span>
                     <div className="flex-grow pt-0.5 sm:pt-1">
-                      {(q.targetSubject || q.area || q.weight) && (
-                        <div className="flex items-center gap-1.5 flex-wrap mb-2">
-                          {q.targetSubject && (
-                            <span className="bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 text-[10px] font-black uppercase px-2.5 py-0.5 rounded-md border border-emerald-200 dark:border-emerald-800">
-                              {q.targetSubject}
-                            </span>
-                          )}
-                          {q.area && (
-                            <span className="bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300 text-[10px] font-black uppercase px-2.5 py-0.5 rounded-md border border-purple-200 dark:border-purple-800">
-                              {q.area}
-                            </span>
-                          )}
-                          {q.weight && (
-                            <span className="bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 text-[10px] font-black uppercase px-2.5 py-0.5 rounded-md border border-indigo-200 dark:border-indigo-800 font-mono">
-                              {q.weight.toFixed(3)} pts
-                            </span>
-                          )}
-                        </div>
-                      )}
+                      {/* Metadatos de la pregunta: Tema, Materia, Área, Puntaje */}
+                      <div className="flex items-center gap-1.5 flex-wrap mb-2.5">
+                        {q.topic && (
+                          <span className="inline-flex items-center gap-1 bg-emerald-50 dark:bg-emerald-950/70 text-emerald-800 dark:text-emerald-300 text-[11px] font-black px-2.5 py-0.5 rounded-lg border border-emerald-200/90 dark:border-emerald-800/80 shadow-xs">
+                            <svg xmlns="http://www.w3.org/2000/svg" className="w-3 h-3 text-emerald-600 dark:text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+                            </svg>
+                            <span>Tema: {q.topic}</span>
+                          </span>
+                        )}
+                        {q.targetSubject && (
+                          <span className="bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 text-[10px] font-black uppercase px-2.5 py-0.5 rounded-md border border-indigo-200 dark:border-indigo-800">
+                            {q.targetSubject}
+                          </span>
+                        )}
+                        {q.area && (
+                          <span className="bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300 text-[10px] font-black uppercase px-2.5 py-0.5 rounded-md border border-purple-200 dark:border-purple-800">
+                            {q.area}
+                          </span>
+                        )}
+                        {q.weight && (
+                          <span className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-[10px] font-black uppercase px-2.5 py-0.5 rounded-md border border-slate-200 dark:border-slate-700 font-mono">
+                            {q.weight.toFixed(3)} pts
+                          </span>
+                        )}
+                      </div>
                       <div className="text-base sm:text-lg font-medium text-gray-800 dark:text-gray-200 leading-relaxed whitespace-pre-wrap">
                         {renderTextWithMarkdown(q.questionText)}
                       </div>
@@ -275,12 +341,49 @@ const QuizView: React.FC<QuizViewProps> = ({
                   </div>
 
                   {isFinished && (
-                    <div className="mt-4 sm:mt-6 ml-0 md:ml-14 bg-indigo-50/50 dark:bg-indigo-900/20 p-4 sm:p-5 rounded-xl border border-indigo-100 dark:border-indigo-900/50">
-                      <p className="text-indigo-800 dark:text-indigo-200 mb-2 font-bold flex items-center gap-1 text-sm">Respuesta correcta: <span>{parseHTMLTags(q.options[q.correctIndex])}</span></p>
-                      <div className="text-gray-600 dark:text-gray-400 text-xs sm:text-sm italic leading-relaxed whitespace-pre-wrap">
-                        {parseHTMLTags(q.explanation)}
+                    <div className="mt-4 sm:mt-6 ml-0 md:ml-14 bg-indigo-50/50 dark:bg-indigo-900/20 p-4 sm:p-5 rounded-2xl border border-indigo-100 dark:border-indigo-900/50 space-y-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-indigo-100/80 dark:border-indigo-900/40 pb-2.5">
+                        <p className="text-indigo-900 dark:text-indigo-200 font-bold flex items-center gap-1.5 text-xs sm:text-sm">
+                          <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0"></span>
+                          <span>Respuesta correcta:</span>
+                          <span className="font-extrabold text-emerald-700 dark:text-emerald-300">
+                            {parseHTMLTags(q.options[q.correctIndex])}
+                          </span>
+                        </p>
+
+                        {onUpdateQuestion && (
+                          <button
+                            type="button"
+                            onClick={() => setEditingQuestion(q)}
+                            className="p-1.5 sm:p-2 rounded-xl bg-white dark:bg-slate-800 hover:bg-indigo-50 dark:hover:bg-slate-700 text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 transition-all border border-indigo-200 dark:border-slate-700 shadow-2xs hover:shadow-xs active:scale-95 cursor-pointer ml-auto shrink-0 flex items-center justify-center"
+                            title="Editar pregunta completa (enunciado, alternativas y solución)"
+                            aria-label="Editar pregunta completa"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 text-indigo-600 dark:text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                            </svg>
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="text-gray-700 dark:text-gray-300 text-xs sm:text-sm leading-relaxed whitespace-pre-wrap">
+                        {q.explanation ? (
+                          parseHTMLTags(q.explanation)
+                        ) : (
+                          <span className="text-gray-400 dark:text-gray-500 italic flex items-center gap-1.5">
+                            <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            Sin explicación registrada. Pulsa en el lápiz para editar la pregunta.
+                          </span>
+                        )}
                         {q.explanationImageUrl && (
-                          <img src={q.explanationImageUrl} alt="Resolución" className="mt-3 max-w-full h-auto rounded-xl border dark:border-slate-700 max-h-[300px] object-contain block" referrerPolicy="no-referrer" />
+                          <img 
+                            src={q.explanationImageUrl} 
+                            alt="Resolución visual" 
+                            className="mt-3 max-w-full h-auto rounded-xl border dark:border-slate-700 max-h-[300px] object-contain block shadow-xs" 
+                            referrerPolicy="no-referrer" 
+                          />
                         )}
                       </div>
                     </div>
@@ -302,6 +405,14 @@ const QuizView: React.FC<QuizViewProps> = ({
           </div>
         )}
       </div>
+
+      {/* Edit Resolution Modal */}
+      <EditResolutionModal
+        question={editingQuestion}
+        isOpen={Boolean(editingQuestion)}
+        onClose={() => setEditingQuestion(null)}
+        onSave={handleSaveEditedQuestion}
+      />
     </div>
   );
 };

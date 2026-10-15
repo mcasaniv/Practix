@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { UserProfile, TargetArea, CourseStructure } from '../types';
 import { getAreaBadgeStyle } from '../utils';
 import { ACADEMIC_STRUCTURE } from '../constants';
+import { compressImageFile } from '../utils/dbStorage';
 
 interface ProfileViewProps {
   userProfile?: UserProfile;
@@ -49,22 +50,22 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
 
   const coursesList = academicStructure && academicStructure.length > 0 ? academicStructure : ACADEMIC_STRUCTURE;
 
-  const handleImageFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.size > 2 * 1024 * 1024) {
-      if (onToast) onToast('La imagen debe pesar menos de 2MB.');
+    if (file.size > 8 * 1024 * 1024) {
+      if (onToast) onToast('La imagen no debe superar los 8MB.');
       return;
     }
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const result = event.target?.result as string;
-      if (result) {
-        setAvatarUrl(result);
-        if (onToast) onToast('¡Foto cargada exitosamente!');
+    try {
+      const compressed = await compressImageFile(file, 400, 400, 0.82);
+      if (compressed) {
+        setAvatarUrl(compressed);
+        if (onToast) onToast('¡Foto cargada y optimizada exitosamente!');
       }
-    };
-    reader.readAsDataURL(file);
+    } catch {
+      if (onToast) onToast('No se pudo procesar la imagen seleccionada.');
+    }
     e.target.value = '';
   };
 
@@ -75,29 +76,29 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
     }));
   };
 
-  const handleCoverFileUpload = (courseName: string, e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleCoverFileUpload = async (courseName: string, e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.size > 2 * 1024 * 1024) {
-      if (onToast) onToast('La imagen de portada debe pesar menos de 2MB.');
+    if (file.size > 8 * 1024 * 1024) {
+      if (onToast) onToast('La imagen no debe superar los 8MB.');
       return;
     }
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const result = event.target?.result as string;
-      if (result) {
+    try {
+      const compressed = await compressImageFile(file, 800, 500, 0.82);
+      if (compressed) {
         const updated = {
           ...tempCovers,
-          [courseName]: result
+          [courseName]: compressed
         };
         setTempCovers(updated);
         if (onSaveCourseCovers) {
           onSaveCourseCovers(updated);
         }
-        if (onToast) onToast(`¡Portada de ${courseName} actualizada!`);
+        if (onToast) onToast(`¡Portada de ${courseName} guardada y optimizada!`);
       }
-    };
-    reader.readAsDataURL(file);
+    } catch {
+      if (onToast) onToast('No se pudo procesar la portada seleccionada.');
+    }
     e.target.value = '';
   };
 

@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { CustomDeck, Question, ReadingText, TopicResult, CourseStructure } from '../types';
 import { CUSTOM_DECK_COLORS, CUSTOM_DECK_ICONS, ACADEMIC_STRUCTURE } from '../constants';
 import { formatQuestionText, parseHTMLTags, getQuestionProcess, getProcessBadgeStyle, getProcessShortName } from '../utils';
+import { compressImageFile } from '../utils/dbStorage';
 import { PrintExamModal } from '../components/PrintExamModal';
 
 interface CustomDecksViewProps {
@@ -108,21 +109,20 @@ export const CustomDecksView: React.FC<CustomDecksViewProps> = ({
     return Array.from(set);
   }, [questions]);
 
-  const handleCoverFileUpload = (setter: (url: string) => void, e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleCoverFileUpload = async (setter: (url: string) => void, e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     if (!file.type.startsWith('image/')) {
-      alert("Por favor selecciona una imagen válida (JPG, PNG, WebP).");
       return;
     }
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const dataUrl = event.target?.result as string;
+    try {
+      const dataUrl = await compressImageFile(file, 800, 500, 0.82);
       if (dataUrl) {
         setter(dataUrl);
       }
-    };
-    reader.readAsDataURL(file);
+    } catch (err) {
+      console.warn('Could not compress deck cover image:', err);
+    }
     e.target.value = '';
   };
 
