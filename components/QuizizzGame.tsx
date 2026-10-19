@@ -416,7 +416,7 @@ export const QuizizzGame: React.FC<QuizizzGameProps> = ({
   }, [correctCount, safeQuestions]);
 
   return (
-    <div className="max-w-4xl mx-auto min-h-[85vh] flex flex-col justify-between" ref={containerRef}>
+    <div className="dark practix-dark max-w-4xl mx-auto min-h-[85vh] flex flex-col justify-between" ref={containerRef}>
       {/* Top Header */}
       <div className="flex items-center justify-between mb-4 bg-slate-900 text-white p-4 md:px-6 rounded-2xl shadow-xl border border-slate-800">
         <button

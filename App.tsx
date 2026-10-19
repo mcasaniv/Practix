@@ -237,8 +237,16 @@ const App: React.FC = () => {
 
   const db = dbState;
 
-  const [nav, setNav] = useState<NavigationState>({
-    view: 'HOME'
+  const [nav, setNav] = useState<NavigationState>(() => {
+    let savedProcess: string | undefined = undefined;
+    try {
+      const p = localStorage.getItem('practix_selected_process') || localStorage.getItem('practix_last_selected_process');
+      if (p && p !== '__TODOS__') savedProcess = p;
+    } catch {}
+    return {
+      view: 'HOME',
+      selectedProcess: savedProcess
+    };
   });
 
   const [isDark, setIsDark] = useState(() => {
@@ -848,6 +856,8 @@ const App: React.FC = () => {
             onSaveQuestions={saveQuestions}
             selectedArea={selectedArea}
             onToast={showToast}
+            initialProcess={nav.selectedProcess}
+            onSelectProcessChange={(proc) => setNav(prev => ({ ...prev, selectedProcess: proc }))}
           />
         );
       case 'QUIZ': {

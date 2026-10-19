@@ -33,14 +33,23 @@ export function renderLatexToString(mathStr: string, isBlock: boolean = false): 
 }
 
 /**
- * Parses basic HTML tags (<b>, <i>, <u>, <strong>, <em>) and Markdown bold/italic.
+ * Parses basic HTML tags (<b>, <i>, <u>, <strong>, <em>, <ins>) and LaTeX \underline{...}.
+ * Ensures underlined words in exam questions and statements are prominently visible in Practix mode and all themes.
  */
 function parseBasicFormatting(plainText: string, keyPrefix: string | number): React.ReactNode[] {
   if (!plainText) return [];
 
+  // Normalize LaTeX \underline{...} and \underbar{...} to <u>...</u>
+  let normalized = plainText
+    .replace(/\\(?:underline|underbar)\{([^}]+)\}/g, '<u>$1</u>')
+    .replace(/<ins(?:\s+[^>]*)?>/gi, '<u>')
+    .replace(/<\/ins>/gi, '</u>')
+    .replace(/<span[^>]*style="[^"]*text-decoration:\s*underline[^"]*"[^>]*>([\s\S]*?)<\/span>/gi, '<u>$1</u>')
+    .replace(/<span[^>]*class="[^"]*underline[^"]*"[^>]*>([\s\S]*?)<\/span>/gi, '<u>$1</u>');
+
   // Split by supported HTML tags: <b>, </b>, <i>, </i>, <u>, </u>, <strong>, </strong>, <em>, </em>
-  const tagRegex = /(<\/?(?:b|i|u|strong|em)>)/gi;
-  const parts = plainText.split(tagRegex);
+  const tagRegex = /(<\/?(?:b|i|u|strong|em)(?:\s+[^>]*)?>)/gi;
+  const parts = normalized.split(tagRegex);
   const elements: React.ReactNode[] = [];
 
   let bold = false;
@@ -48,33 +57,46 @@ function parseBasicFormatting(plainText: string, keyPrefix: string | number): Re
   let underline = false;
 
   parts.forEach((part, i) => {
-    const lower = part.toLowerCase();
-    if (lower === '<b>' || lower === '<strong>') {
-      bold = true;
-    } else if (lower === '</b>' || lower === '</strong>') {
-      bold = false;
-    } else if (lower === '<i>' || lower === '<em>') {
-      italic = true;
-    } else if (lower === '</i>' || lower === '</em>') {
-      italic = false;
-    } else if (lower === '<u>') {
-      underline = true;
-    } else if (lower === '</u>') {
-      underline = false;
-    } else if (part) {
-      let className = '';
-      if (bold) className += ' font-bold';
-      if (italic) className += ' italic';
-      if (underline) className += ' underline';
+    const isClose = /^<\//i.test(part);
+    const tagMatch = part.match(/^<\/?([a-z]+)/i);
+    const tagName = tagMatch ? tagMatch[1].toLowerCase() : '';
 
-      if (className) {
+    if (tagName === 'b' || tagName === 'strong') {
+      bold = !isClose;
+    } else if (tagName === 'i' || tagName === 'em') {
+      italic = !isClose;
+    } else if (tagName === 'u') {
+      underline = !isClose;
+    } else if (part) {
+      if (underline) {
+        // High visibility underline for exam questions, specially designed for Practix mode and dark/light backgrounds
+        let className = 'practix-underlined-text underline decoration-[3.5px] underline-offset-[5px] decoration-amber-400 dark:decoration-amber-300 font-extrabold decoration-skip-ink-none';
+        if (bold) className += ' font-black';
+        if (italic) className += ' italic';
+
         elements.push(
-          <span key={`${keyPrefix}-fmt-${i}`} className={className.trim()}>
+          <span
+            key={`${keyPrefix}-fmt-${i}`}
+            className={className.trim()}
+            title="Palabra subrayada"
+          >
             {part}
           </span>
         );
       } else {
-        elements.push(<React.Fragment key={`${keyPrefix}-fmt-${i}`}>{part}</React.Fragment>);
+        let className = '';
+        if (bold) className += ' font-bold';
+        if (italic) className += ' italic';
+
+        if (className) {
+          elements.push(
+            <span key={`${keyPrefix}-fmt-${i}`} className={className.trim()}>
+              {part}
+            </span>
+          );
+        } else {
+          elements.push(<React.Fragment key={`${keyPrefix}-fmt-${i}`}>{part}</React.Fragment>);
+        }
       }
     }
   });

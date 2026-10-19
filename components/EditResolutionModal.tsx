@@ -19,8 +19,9 @@ const LATEX_SHORTCUTS = [
   { label: 'π', snippet: '$\\pi$' },
   { label: 'α', snippet: '$\\alpha$' },
   { label: 'θ', snippet: '$\\theta$' },
-  { label: 'Δ', snippet: '$\\Delta$' },
   { label: 'Negrita', snippet: '<b>texto</b>' },
+  { label: 'Subrayado', snippet: '<u>texto</u>' },
+  { label: 'Itálica', snippet: '<i>texto</i>' },
 ];
 
 export const EditQuestionModal: React.FC<EditQuestionModalProps> = ({
