@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Question, ReadingText, TopicResult, SavedExam } from '../types';
-import { getQuestionProcess, getProcessBadgeStyle, getProcessShortName, getAvailableProcesses, getQuestionArea, getQuestionAreas, matchesQuestionArea, getAreaBadgeStyle } from '../utils';
+import { getQuestionProcess, getQuestionWeek, getProcessBadgeStyle, getProcessShortName, getAvailableProcesses, getQuestionArea, getQuestionAreas, matchesQuestionArea, getAreaBadgeStyle } from '../utils';
 import { PrintExamModal } from '../components/PrintExamModal';
 import { UploadExamQuestionsModal } from '../components/UploadExamQuestionsModal';
 
@@ -13,7 +13,7 @@ interface TopicsViewProps {
   results: Record<string, TopicResult>;
   savedExams?: SavedExam[];
   onSelectTopic: (topic: string, mode?: 'CLASSIC' | 'QUIZZIZ', process?: string, areaFilter?: 'Biomédicas' | 'Ingenierías' | 'Sociales' | 'Todas') => void;
-  onStartMixedQuiz: (questions: Question[], mode?: 'CLASSIC' | 'QUIZZIZ') => void;
+  onStartMixedQuiz: (questions: Question[], mode?: 'CLASSIC' | 'QUIZZIZ', customTitle?: string) => void;
   onStartMistakesQuiz?: (questions: Question[], mode?: 'CLASSIC' | 'QUIZZIZ') => void;
   incorrectQuestionIds?: string[];
   onClearSubjectMistakes?: (subjectName: string) => void;
@@ -115,12 +115,86 @@ const TopicsView: React.FC<TopicsViewProps> = ({
 
   const [activeAreaFilter, setActiveAreaFilter] = useState<'Biomédicas' | 'Ingenierías' | 'Sociales' | 'Todas'>(selectedArea || 'Biomédicas');
   const [mixedCount, setMixedCount] = useState<number>(Math.min(10, questions.length));
+  
+  // Modo de distribución del examen mixto: 'PER_TOPIC' (1 o más por tema), 'PER_WEEK' (1 o más por semana), o 'TOTAL' (aleatorio general)
+  const [mixedDistMode, setMixedDistMode] = useState<'PER_TOPIC' | 'PER_WEEK' | 'TOTAL'>(() => {
+    try {
+      const saved = localStorage.getItem('practix_mixed_dist_mode');
+      if (saved === 'PER_TOPIC' || saved === 'PER_WEEK' || saved === 'TOTAL') return saved;
+    } catch {}
+    return 'PER_TOPIC';
+  });
+
+  const [perTopicCount, setPerTopicCount] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem('practix_mixed_per_topic');
+      if (saved) {
+        const n = parseInt(saved, 10);
+        if (!isNaN(n) && n >= 1) return n;
+      }
+    } catch {}
+    return 1;
+  });
+
+  const [perWeekCount, setPerWeekCount] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem('practix_mixed_per_week');
+      if (saved) {
+        const n = parseInt(saved, 10);
+        if (!isNaN(n) && n >= 1) return n;
+      }
+    } catch {}
+    return 1;
+  });
+
+  const handleSelectDistMode = (mode: 'PER_TOPIC' | 'PER_WEEK' | 'TOTAL') => {
+    setMixedDistMode(mode);
+    try {
+      localStorage.setItem('practix_mixed_dist_mode', mode);
+    } catch {}
+  };
+
+  const handleUpdatePerTopicCount = (count: number) => {
+    const val = Math.max(1, count);
+    setPerTopicCount(val);
+    try {
+      localStorage.setItem('practix_mixed_per_topic', val.toString());
+    } catch {}
+  };
+
+  const handleUpdatePerWeekCount = (count: number) => {
+    const val = Math.max(1, count);
+    setPerWeekCount(val);
+    try {
+      localStorage.setItem('practix_mixed_per_week', val.toString());
+    } catch {}
+  };
+
   const [topicToDelete, setTopicToDelete] = useState<string | null>(null);
   const [examToDelete, setExamToDelete] = useState<string | null>(null);
   const [examToPrint, setExamToPrint] = useState<SavedExam | null>(null);
   const [groupByWeeks, setGroupByWeeks] = useState<boolean>(true);
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [uploadModalInitialTopic, setUploadModalInitialTopic] = useState('');
+  
+  // Estado para desplegar u ocultar de manera discreta los filtros, banco de errores y examen mixto
+  const [isToolsExpanded, setIsToolsExpanded] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('practix_subject_tools_expanded') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  const toggleToolsExpanded = () => {
+    setIsToolsExpanded(prev => {
+      const next = !prev;
+      try {
+        localStorage.setItem('practix_subject_tools_expanded', String(next));
+      } catch {}
+      return next;
+    });
+  };
 
   // Sincronizar filtro cuando cambia el área del usuario
   useEffect(() => {
@@ -246,13 +320,6 @@ const TopicsView: React.FC<TopicsViewProps> = ({
     }
   };
 
-  const handleStartMixed = (mode: 'CLASSIC' | 'QUIZZIZ' = 'CLASSIC') => {
-    if (filteredQuestions.length === 0) return;
-    const count = Math.min(Math.max(1, mixedCount), filteredQuestions.length);
-    const shuffled = [...filteredQuestions].sort(() => 0.5 - Math.random());
-    onStartMixedQuiz(shuffled.slice(0, count), mode);
-  };
-
   const topics = useMemo(() => {
     const grouped = filteredQuestions.reduce((acc, q) => {
       const proc = getQuestionProcess(q);
@@ -304,6 +371,124 @@ const TopicsView: React.FC<TopicsViewProps> = ({
       return numA - numB;
     });
   }, [topics]);
+
+  // Semanas disponibles en esta materia
+  const availableWeeks = useMemo(() => {
+    const weeksSet = new Set<number>();
+    filteredQuestions.forEach(q => {
+      const w = getQuestionWeek(q) ?? (topics.find(t => t.name === q.topic)?.week);
+      if (typeof w === 'number' && !isNaN(w) && w > 0) {
+        weeksSet.add(w);
+      }
+    });
+    return Array.from(weeksSet).sort((a, b) => a - b);
+  }, [filteredQuestions, topics]);
+
+  // Preguntas que se seleccionarán para el examen mixto según el modo activo
+  const calculatedMixedQuestions = useMemo(() => {
+    if (filteredQuestions.length === 0) return [];
+
+    if (mixedDistMode === 'TOTAL') {
+      const count = Math.min(Math.max(1, mixedCount), filteredQuestions.length);
+      return filteredQuestions.slice(0, count);
+    }
+
+    if (mixedDistMode === 'PER_TOPIC') {
+      const result: Question[] = [];
+      topics.forEach(t => {
+        const topicQuestions = filteredQuestions.filter(q => q.topic === t.name);
+        if (topicQuestions.length > 0) {
+          const toTake = Math.min(perTopicCount, topicQuestions.length);
+          result.push(...topicQuestions.slice(0, toTake));
+        }
+      });
+      return result;
+    }
+
+    if (mixedDistMode === 'PER_WEEK') {
+      const result: Question[] = [];
+      const weekGroups = new Map<string, Question[]>();
+      filteredQuestions.forEach(q => {
+        const w = getQuestionWeek(q) ?? (topics.find(t => t.name === q.topic)?.week);
+        const key = w !== undefined && w !== null ? `Semana ${w}` : 'Sin Semana';
+        if (!weekGroups.has(key)) weekGroups.set(key, []);
+        weekGroups.get(key)!.push(q);
+      });
+
+      const sortedEntries = Array.from(weekGroups.entries()).sort(([a], [b]) => {
+        if (a === 'Sin Semana') return 1;
+        if (b === 'Sin Semana') return -1;
+        const numA = parseInt(a.replace('Semana ', ''), 10) || 0;
+        const numB = parseInt(b.replace('Semana ', ''), 10) || 0;
+        return numA - numB;
+      });
+
+      sortedEntries.forEach(([, qList]) => {
+        if (qList.length > 0) {
+          const toTake = Math.min(perWeekCount, qList.length);
+          result.push(...qList.slice(0, toTake));
+        }
+      });
+      return result;
+    }
+
+    return [];
+  }, [filteredQuestions, mixedDistMode, mixedCount, perTopicCount, perWeekCount, topics]);
+
+  const handleStartMixed = (mode: 'CLASSIC' | 'QUIZZIZ' = 'CLASSIC') => {
+    if (filteredQuestions.length === 0) {
+      if (onToast) onToast('No hay preguntas disponibles con los filtros actuales.');
+      return;
+    }
+
+    let selected: Question[] = [];
+    let customTitle = `Examen Mixto`;
+
+    if (mixedDistMode === 'TOTAL') {
+      const count = Math.min(Math.max(1, mixedCount), filteredQuestions.length);
+      const shuffled = [...filteredQuestions].sort(() => 0.5 - Math.random());
+      selected = shuffled.slice(0, count);
+      customTitle = `Examen Mixto (${selected.length} preguntas)`;
+    } else if (mixedDistMode === 'PER_TOPIC') {
+      const collected: Question[] = [];
+      topics.forEach(t => {
+        const topicQuestions = filteredQuestions.filter(q => q.topic === t.name);
+        if (topicQuestions.length > 0) {
+          const shuffled = [...topicQuestions].sort(() => 0.5 - Math.random());
+          const toTake = Math.min(perTopicCount, shuffled.length);
+          collected.push(...shuffled.slice(0, toTake));
+        }
+      });
+      selected = collected.sort(() => 0.5 - Math.random());
+      customTitle = `Examen Mixto (${perTopicCount} ${perTopicCount === 1 ? 'pregunta' : 'preguntas'} por tema)`;
+    } else if (mixedDistMode === 'PER_WEEK') {
+      const collected: Question[] = [];
+      const weekGroups = new Map<string, Question[]>();
+      filteredQuestions.forEach(q => {
+        const w = getQuestionWeek(q) ?? (topics.find(t => t.name === q.topic)?.week);
+        const key = w !== undefined && w !== null ? `Semana ${w}` : 'Sin Semana';
+        if (!weekGroups.has(key)) weekGroups.set(key, []);
+        weekGroups.get(key)!.push(q);
+      });
+
+      weekGroups.forEach((qList) => {
+        if (qList.length > 0) {
+          const shuffled = [...qList].sort(() => 0.5 - Math.random());
+          const toTake = Math.min(perWeekCount, shuffled.length);
+          collected.push(...qList.slice(0, toTake));
+        }
+      });
+      selected = collected.sort(() => 0.5 - Math.random());
+      customTitle = `Examen Mixto (${perWeekCount} ${perWeekCount === 1 ? 'pregunta' : 'preguntas'} por semana)`;
+    }
+
+    if (selected.length === 0) {
+      if (onToast) onToast('No se encontraron preguntas para este modo de distribución.');
+      return;
+    }
+
+    onStartMixedQuiz(selected, mode, customTitle);
+  };
 
   const getTopicColorClasses = (topicName: string) => {
     const result = results[`${subjectName}|${topicName}`];
@@ -619,115 +804,529 @@ const TopicsView: React.FC<TopicsViewProps> = ({
         </div>
       </div>
 
-      {/* Selector de Área de Postulación y Práctica Semanal (Discreto y Compacto) */}
+      {/* Panel Discreto y Desplegable: Filtros (Área y Proceso), Banco de Errores y Examen Mixto */}
       {!((subjectName === 'Exámenes Rendidos' || subjectName === 'Exámenes Simulacros') && questions.length === 0) && (
-        <div className="bg-white/80 dark:bg-[#020b38]/80 border border-gray-200/70 dark:border-indigo-900/40 rounded-xl px-3 py-1.5 sm:px-4 sm:py-2 shadow-2xs flex flex-wrap items-center justify-between gap-1.5">
-          <div className="flex items-center gap-1.5 shrink-0">
-            <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 shrink-0"></span>
-            <span className="text-[11px] font-black uppercase text-gray-700 dark:text-indigo-200 tracking-wider">
-              Área:
-            </span>
-            {selectedArea && (
-              <span className="text-[10px] text-gray-400 dark:text-indigo-300/70 hidden md:inline">
-                ({selectedArea})
+        <div className="bg-white/90 dark:bg-[#020b38]/90 border border-gray-200/80 dark:border-indigo-900/50 rounded-2xl p-2.5 sm:p-3 shadow-2xs transition-all">
+          {/* Barra Resumen Compacta (Siempre visible de forma discreta) */}
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="text-[11px] font-black uppercase text-gray-500 dark:text-indigo-300 tracking-wider flex items-center gap-1 mr-0.5">
+                <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+                </svg>
+                <span>Ajustes:</span>
               </span>
-            )}
+
+              {/* Chip de Área Activa */}
+              {(() => {
+                const b = getAreaBadgeStyle(activeAreaFilter);
+                return (
+                  <button
+                    type="button"
+                    onClick={toggleToolsExpanded}
+                    className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold border transition-all cursor-pointer ${b.bg} ${b.text} ${b.border} hover:opacity-90`}
+                    title="Clic para desplegar y cambiar filtro de área"
+                  >
+                    <span className="text-xs">{b.icon}</span>
+                    <span>{activeAreaFilter === 'Todas' ? 'Todas las áreas' : activeAreaFilter}</span>
+                  </button>
+                );
+              })()}
+
+              {/* Chip de Proceso Activo */}
+              {(() => {
+                const isAll = !effectiveProcess;
+                const pStyle = effectiveProcess ? getProcessBadgeStyle(effectiveProcess) : null;
+                return (
+                  <button
+                    type="button"
+                    onClick={toggleToolsExpanded}
+                    className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold border transition-all cursor-pointer ${
+                      isAll 
+                        ? 'bg-gray-100/90 dark:bg-slate-800 text-gray-700 dark:text-gray-200 border-gray-200 dark:border-slate-700' 
+                        : `${pStyle?.bg} ${pStyle?.text} ${pStyle?.border}`
+                    } hover:opacity-90`}
+                    title="Clic para desplegar y cambiar filtro de proceso"
+                  >
+                    <span>🏛️</span>
+                    <span>{effectiveProcess ? getProcessShortName(effectiveProcess) : 'Todos'}</span>
+                  </button>
+                );
+              })()}
+
+              {/* Chip Banco de Errores */}
+              {questions.length > 0 && (
+                mistakeQuestions.length > 0 ? (
+                  <button
+                    type="button"
+                    onClick={toggleToolsExpanded}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-black bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-200/80 dark:border-rose-900/60 cursor-pointer hover:bg-rose-100 dark:hover:bg-rose-900/40 transition-all"
+                    title="Clic para desplegar banco de errores"
+                  >
+                    <span>⚠️</span>
+                    <span>{mistakeQuestions.length} errores</span>
+                  </button>
+                ) : (
+                  <span 
+                    className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-bold bg-emerald-50/80 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-900/40 hidden md:inline-flex"
+                    title="No tienes errores pendientes en esta materia"
+                  >
+                    <span>✓ 0 fallos</span>
+                  </span>
+                )
+              )}
+
+              {/* Chip Examen Mixto */}
+              {questions.length > 0 && (
+                <button
+                  type="button"
+                  onClick={toggleToolsExpanded}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 border border-indigo-200/60 dark:border-indigo-800/50 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 transition-all cursor-pointer hidden sm:inline-flex"
+                  title="Clic para configurar Examen Mixto"
+                >
+                  <span>⚡</span>
+                  <span>Mixto ({calculatedMixedQuestions.length})</span>
+                </button>
+              )}
+            </div>
+
+            {/* Acciones Rápidas y Botón Desplegar */}
+            <div className="flex items-center gap-1.5 shrink-0 ml-auto sm:ml-0">
+              {/* Acceso rápido a repasar errores si hay pendientes */}
+              {questions.length > 0 && mistakeQuestions.length > 0 && !isToolsExpanded && (
+                <button
+                  type="button"
+                  onClick={() => handleStartMistakes('CLASSIC')}
+                  className="px-2.5 py-1 rounded-lg text-xs font-black bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white transition-all shadow-2xs flex items-center gap-1 cursor-pointer"
+                  title="Repasar directamente las preguntas falladas en modo clásico"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <span>Repasar ({mistakeQuestions.length})</span>
+                </button>
+              )}
+
+              {/* Botón Principal de Desplegar/Colapsar */}
+              <button
+                type="button"
+                onClick={toggleToolsExpanded}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs ${
+                  isToolsExpanded 
+                    ? 'bg-indigo-600 text-white shadow-xs' 
+                    : 'bg-indigo-50/90 dark:bg-indigo-950/70 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 border border-indigo-200/80 dark:border-indigo-800/60'
+                }`}
+                title={isToolsExpanded ? 'Ocultar panel desplegable' : 'Desplegar filtros, banco de errores y examen mixto'}
+              >
+                <span>{isToolsExpanded ? 'Ocultar Opciones' : 'Desplegar Herramientas'}</span>
+                <svg 
+                  xmlns="http://www.w3.org/2000/svg" 
+                  className={`w-3.5 h-3.5 transition-transform duration-200 ${isToolsExpanded ? 'rotate-180' : ''}`} 
+                  fill="none" 
+                  viewBox="0 0 24 24" 
+                  stroke="currentColor"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+            </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-1">
-            {(['Biomédicas', 'Ingenierías', 'Sociales', 'Todas'] as const).map(areaKey => {
-              const badge = getAreaBadgeStyle(areaKey);
-              const isSelected = activeAreaFilter === areaKey;
-              const isUserArea = selectedArea === areaKey;
-              const count = areaKey === 'Todas' ? questions.length : areaStats[areaKey] || 0;
-
-              return (
-                <button
-                  key={areaKey}
-                  type="button"
-                  onClick={() => setActiveAreaFilter(areaKey)}
-                  className={`py-0.5 px-2 sm:px-2.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1 cursor-pointer min-h-[28px] ${
-                    isSelected
-                      ? `${badge.bg} ${badge.text} ${badge.border} border font-black shadow-2xs`
-                      : 'bg-gray-100/60 dark:bg-[#030d42]/60 text-gray-600 dark:text-indigo-300 hover:bg-gray-100 dark:hover:bg-indigo-950/40 border border-transparent'
-                  }`}
-                  title={`Filtrar prácticas por ${areaKey}`}
-                >
-                  <span className="text-xs">{badge.icon}</span>
-                  <span>{areaKey === 'Todas' ? 'Todas' : areaKey}</span>
-                  <span className={`text-[10px] px-1 py-0.2 rounded-md ${isSelected ? 'bg-black/10 dark:bg-white/20' : 'bg-gray-200/70 dark:bg-indigo-950 text-gray-600 dark:text-indigo-300'}`}>
-                    {count}
-                  </span>
-                  {isUserArea && isSelected && (
-                    <span className="text-[9px] font-black uppercase text-indigo-600 dark:text-indigo-300 hidden lg:inline">
-                      ★
+          {/* Panel Desplegable con Controles Completos */}
+          {isToolsExpanded && (
+            <div className="pt-3 mt-3 border-t border-gray-200/70 dark:border-indigo-900/40 space-y-3.5 animate-fadeIn">
+              {/* Sección 1: Filtros de Área y Proceso */}
+              <div className="bg-gray-50/80 dark:bg-slate-900/60 rounded-xl p-3 border border-gray-200/60 dark:border-indigo-900/30 space-y-2.5">
+                {/* Área Filter Row */}
+                <div className="flex flex-wrap items-center justify-between gap-1.5">
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 shrink-0"></span>
+                    <span className="text-[11px] font-black uppercase text-gray-700 dark:text-indigo-200 tracking-wider">
+                      Área de Postulación:
                     </span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
+                    {selectedArea && (
+                      <span className="text-[10px] text-gray-400 dark:text-indigo-300/70 hidden sm:inline">
+                        (Tu área: {selectedArea})
+                      </span>
+                    )}
+                  </div>
 
-      {/* Selector de Proceso de Admisión (Discreto, Compacto y con Memoria de Elección) */}
-      {!((subjectName === 'Exámenes Rendidos' || subjectName === 'Exámenes Simulacros') && filteredQuestions.length === 0) && (
-        <div className="bg-white/80 dark:bg-[#020b38]/80 border border-gray-200/70 dark:border-indigo-900/40 rounded-xl px-3 py-1.5 sm:px-4 sm:py-2 shadow-2xs flex flex-wrap items-center justify-between gap-1.5">
-          <div className="flex items-center gap-1.5 shrink-0">
-            <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-            </svg>
-            <span className="text-[11px] font-black uppercase text-gray-700 dark:text-indigo-200 tracking-wider">
-              Proceso:
-            </span>
-          </div>
+                  <div className="flex flex-wrap items-center gap-1">
+                    {(['Biomédicas', 'Ingenierías', 'Sociales', 'Todas'] as const).map(areaKey => {
+                      const badge = getAreaBadgeStyle(areaKey);
+                      const isSelected = activeAreaFilter === areaKey;
+                      const isUserArea = selectedArea === areaKey;
+                      const count = areaKey === 'Todas' ? questions.length : areaStats[areaKey] || 0;
 
-          <div className="flex flex-wrap items-center gap-1">
-            <button
-              type="button"
-              onClick={() => handleSelectProcess('')}
-              className={`py-0.5 px-2 sm:px-2.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1 cursor-pointer min-h-[28px] ${
-                effectiveProcess === ''
-                  ? 'bg-indigo-600 text-white shadow-2xs font-black'
-                  : 'bg-gray-100/60 dark:bg-[#030d42]/60 text-gray-600 dark:text-indigo-300 hover:bg-gray-100 dark:hover:bg-indigo-950/40 border border-transparent'
-              }`}
-            >
-              <span>Todos</span>
-              <span className={`text-[10px] px-1 py-0.2 rounded-md ${effectiveProcess === '' ? 'bg-white/20 text-white' : 'bg-gray-200/70 dark:bg-indigo-950 text-gray-600 dark:text-indigo-300'}`}>
-                {questions.length}
-              </span>
-            </button>
+                      return (
+                        <button
+                          key={areaKey}
+                          type="button"
+                          onClick={() => setActiveAreaFilter(areaKey)}
+                          className={`py-0.5 px-2 sm:px-2.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1 cursor-pointer min-h-[28px] ${
+                            isSelected
+                              ? `${badge.bg} ${badge.text} ${badge.border} border font-black shadow-2xs`
+                              : 'bg-white/80 dark:bg-[#030d42]/80 text-gray-600 dark:text-indigo-300 hover:bg-gray-100 dark:hover:bg-indigo-950/40 border border-gray-200/50 dark:border-indigo-900/40'
+                          }`}
+                          title={`Filtrar prácticas por ${areaKey}`}
+                        >
+                          <span className="text-xs">{badge.icon}</span>
+                          <span>{areaKey === 'Todas' ? 'Todas' : areaKey}</span>
+                          <span className={`text-[10px] px-1 py-0.2 rounded-md ${isSelected ? 'bg-black/10 dark:bg-white/20' : 'bg-gray-200/70 dark:bg-indigo-950 text-gray-600 dark:text-indigo-300'}`}>
+                            {count}
+                          </span>
+                          {isUserArea && isSelected && (
+                            <span className="text-[9px] font-black uppercase text-indigo-600 dark:text-indigo-300 hidden lg:inline">
+                              ★
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
 
-            {availableProcesses.map(proc => {
-              const isSelected = effectiveProcess === proc;
-              const style = getProcessBadgeStyle(proc);
-              const count = processStats[proc] || 0;
-              const shortName = getProcessShortName(proc);
+                {/* Proceso Filter Row */}
+                <div className="flex flex-wrap items-center justify-between gap-1.5 pt-2 border-t border-gray-200/50 dark:border-indigo-900/30">
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                    </svg>
+                    <span className="text-[11px] font-black uppercase text-gray-700 dark:text-indigo-200 tracking-wider">
+                      Proceso de Admisión:
+                    </span>
+                  </div>
 
-              return (
+                  <div className="flex flex-wrap items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => handleSelectProcess('')}
+                      className={`py-0.5 px-2 sm:px-2.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1 cursor-pointer min-h-[28px] ${
+                        effectiveProcess === ''
+                          ? 'bg-indigo-600 text-white shadow-2xs font-black'
+                          : 'bg-white/80 dark:bg-[#030d42]/80 text-gray-600 dark:text-indigo-300 hover:bg-gray-100 dark:hover:bg-indigo-950/40 border border-gray-200/50 dark:border-indigo-900/40'
+                      }`}
+                    >
+                      <span>Todos</span>
+                      <span className={`text-[10px] px-1 py-0.2 rounded-md ${effectiveProcess === '' ? 'bg-white/20 text-white' : 'bg-gray-200/70 dark:bg-indigo-950 text-gray-600 dark:text-indigo-300'}`}>
+                        {questions.length}
+                      </span>
+                    </button>
+
+                    {availableProcesses.map(proc => {
+                      const isSelected = effectiveProcess === proc;
+                      const style = getProcessBadgeStyle(proc);
+                      const count = processStats[proc] || 0;
+                      const shortName = getProcessShortName(proc);
+
+                      return (
+                        <button
+                          key={proc}
+                          type="button"
+                          onClick={() => handleSelectProcess(isSelected ? '' : proc)}
+                          className={`py-0.5 px-2 sm:px-2.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1 cursor-pointer min-h-[28px] ${
+                            isSelected
+                              ? `${style.bg} ${style.text} ${style.border} border font-black shadow-2xs`
+                              : 'bg-white/80 dark:bg-[#030d42]/80 text-gray-600 dark:text-indigo-300 hover:bg-gray-100 dark:hover:bg-indigo-950/40 border border-gray-200/50 dark:border-indigo-900/40'
+                          }`}
+                          title={`Filtrar por proceso ${proc} (Se recordará en tus prácticas)`}
+                        >
+                          <span>{shortName}</span>
+                          <span className={`text-[10px] px-1 py-0.2 rounded-md ${
+                            isSelected 
+                              ? 'bg-black/10 dark:bg-white/20 text-current' 
+                              : 'bg-gray-200/70 dark:bg-indigo-950 text-gray-600 dark:text-indigo-300'
+                          }`}>
+                            {count}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              {/* Sección 2: Banco de Errores */}
+              {questions.length > 0 && (
+                mistakeQuestions.length === 0 ? (
+                  <div className="bg-emerald-50/40 dark:bg-[#031510]/40 border border-emerald-200/50 dark:border-emerald-900/40 rounded-xl px-3 py-2 flex flex-wrap items-center justify-between gap-2 shadow-2xs">
+                    <div className="flex items-center gap-2 text-xs">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0"></span>
+                      <span className="font-bold text-[11px] uppercase tracking-wider text-emerald-900 dark:text-emerald-200">
+                        Banco de Errores:
+                      </span>
+                      <span className="text-[11px] text-emerald-700/85 dark:text-emerald-400/85">
+                        0 fallos pendientes • ¡Estás al día en {subjectName}!
+                      </span>
+                    </div>
+                    {onAddSampleMistakes && (
+                      <button
+                        type="button"
+                        onClick={handleAddSampleMistake}
+                        className="text-[10px] text-emerald-700 dark:text-emerald-400 hover:underline font-bold py-0.5 px-2 cursor-pointer"
+                        title="Añadir preguntas de prueba para probar la función"
+                      >
+                        + Probar banco
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <div className="bg-emerald-50/60 dark:bg-[#041c14]/50 border border-emerald-200/80 dark:border-emerald-800/60 rounded-xl px-3 sm:px-4 py-2 sm:py-2.5 flex flex-col md:flex-row items-start md:items-center justify-between gap-2.5 shadow-2xs">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="px-2 py-0.5 bg-emerald-600 text-white rounded-md text-[10px] font-black uppercase tracking-wider flex items-center gap-1 shadow-2xs">
+                          <svg xmlns="http://www.w3.org/2000/svg" className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          <span>Banco de Errores</span>
+                        </span>
+                        <span className="text-xs font-black text-gray-800 dark:text-gray-100">
+                          {mistakeQuestions.length} {mistakeQuestions.length === 1 ? 'pregunta por reforzar' : 'preguntas por reforzar'}
+                        </span>
+                        {onClearSubjectMistakes && (
+                          <button
+                            type="button"
+                            onClick={handleClearMistakes}
+                            className="text-[10px] text-emerald-700 dark:text-emerald-400 hover:underline font-bold cursor-pointer"
+                            title="Reiniciar registro de errores"
+                          >
+                            • Reiniciar
+                          </button>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-gray-500 dark:text-emerald-300/80 mt-0.5 truncate">
+                        Refuerza tus preguntas falladas de {subjectName}; al acertarlas saldrán de este banco.
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 w-full md:w-auto shrink-0 justify-end flex-wrap sm:flex-nowrap">
+                      {mistakeQuestions.length > 5 && (
+                        <div className="flex items-center gap-1">
+                          <span className="text-[10px] font-bold text-emerald-800 dark:text-emerald-300 uppercase">Cant:</span>
+                          <input 
+                            type="number" 
+                            min="1" 
+                            max={mistakeQuestions.length}
+                            value={mistakesCountLimit}
+                            onChange={(e) => setMistakesCountLimit(parseInt(e.target.value) || 1)}
+                            className="w-14 px-1.5 py-1 rounded-lg border border-emerald-300 dark:border-emerald-800/80 bg-white dark:bg-[#020b38] text-gray-800 dark:text-gray-100 font-bold focus:ring-1 focus:ring-emerald-500 outline-none text-center text-xs"
+                            title="Cantidad de preguntas"
+                          />
+                        </div>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => handleStartMistakes('CLASSIC')}
+                        className="bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-1 cursor-pointer"
+                        title="Practicar todas en modo clásico"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <span>Repasar ({mistakeQuestions.length})</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleStartMistakes('QUIZZIZ')}
+                        className="bg-gradient-to-r from-emerald-600 to-indigo-600 hover:from-emerald-500 hover:to-indigo-500 active:scale-95 text-white px-3 py-1.5 rounded-lg text-xs font-black transition-all shadow-xs flex items-center justify-center gap-1 cursor-pointer"
+                        title="Jugar en modo Practix"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <span>Jugar Practix</span>
+                      </button>
+                    </div>
+                  </div>
+                )
+              )}
+
+              {/* Sección 3: Examen Mixto */}
+              {questions.length > 0 && (
+                <div className="bg-indigo-50/70 dark:bg-indigo-950/25 border border-indigo-100/90 dark:border-indigo-800/40 rounded-xl px-3 sm:px-4 py-2.5 space-y-2.5 shadow-2xs">
+                  {/* Top row: Title, badge and summary description */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="flex items-center gap-1.5 text-xs sm:text-sm font-black text-indigo-900 dark:text-indigo-100">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 text-indigo-600 dark:text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
+                        </svg>
+                        <span>Examen Mixto</span>
+                      </span>
+                      {renderPracticeBadge("Examen Mixto")}
+                      <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200/80 dark:border-indigo-800/50">
+                        {calculatedMixedQuestions.length} {calculatedMixedQuestions.length === 1 ? 'pregunta' : 'preguntas'} listas
+                      </span>
+                    </div>
+                    <p className="text-indigo-700/70 dark:text-indigo-300/70 text-[11px]">
+                      {mixedDistMode === 'PER_TOPIC' && `${perTopicCount} de cada uno de los ${topics.length} temas`}
+                      {mixedDistMode === 'PER_WEEK' && `${perWeekCount} de cada una de las ${availableWeeks.length || 'todas las'} semanas`}
+                      {mixedDistMode === 'TOTAL' && `Aleatorio global entre todos los temas`}
+                    </p>
+                  </div>
+
+                  {/* Controls row: Selector de modo, control de cantidad y botones de inicio */}
+                  <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-2.5 pt-1.5 border-t border-indigo-100/60 dark:border-indigo-900/30">
+                    {/* Mode Segmented Selector */}
+                    <div className="flex items-center gap-1 bg-white/70 dark:bg-slate-900/60 p-0.5 rounded-lg border border-indigo-100 dark:border-indigo-900/40 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => handleSelectDistMode('PER_TOPIC')}
+                        className={`px-2.5 py-1 text-[11px] font-black rounded-md transition-all flex items-center gap-1 cursor-pointer ${
+                          mixedDistMode === 'PER_TOPIC'
+                            ? 'bg-indigo-600 text-white shadow-xs'
+                            : 'text-gray-600 dark:text-gray-300 hover:text-indigo-600 dark:hover:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-slate-800/60'
+                        }`}
+                        title="Genera un examen con 1 o más preguntas de cada tema para un repaso equilibrado"
+                      >
+                        <span>1+ por Tema</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleSelectDistMode('PER_WEEK')}
+                        className={`px-2.5 py-1 text-[11px] font-black rounded-md transition-all flex items-center gap-1 cursor-pointer ${
+                          mixedDistMode === 'PER_WEEK'
+                            ? 'bg-indigo-600 text-white shadow-xs'
+                            : 'text-gray-600 dark:text-gray-300 hover:text-indigo-600 dark:hover:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-slate-800/60'
+                        }`}
+                        title="Genera un examen con 1 o más preguntas de cada semana"
+                      >
+                        <span>1+ por Semana</span>
+                        {availableWeeks.length > 0 && (
+                          <span className={`text-[9px] px-1 rounded ${mixedDistMode === 'PER_WEEK' ? 'bg-indigo-800/70 text-indigo-100' : 'bg-gray-200 dark:bg-slate-800 text-gray-700 dark:text-gray-300'}`}>
+                            {availableWeeks.length}
+                          </span>
+                        )}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleSelectDistMode('TOTAL')}
+                        className={`px-2.5 py-1 text-[11px] font-black rounded-md transition-all flex items-center gap-1 cursor-pointer ${
+                          mixedDistMode === 'TOTAL'
+                            ? 'bg-indigo-600 text-white shadow-xs'
+                            : 'text-gray-600 dark:text-gray-300 hover:text-indigo-600 dark:hover:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-slate-800/60'
+                        }`}
+                        title="Selecciona una cantidad fija aleatoria de todas las preguntas"
+                      >
+                        <span>Aleatorio Total</span>
+                      </button>
+                    </div>
+
+                    {/* Stepper / Count Input depending on mode */}
+                    <div className="flex items-center gap-2 justify-between md:justify-end flex-wrap sm:flex-nowrap">
+                      {mixedDistMode === 'PER_TOPIC' && (
+                        <div className="flex items-center gap-1.5 bg-white/80 dark:bg-slate-900/60 px-2 py-0.5 rounded-lg border border-indigo-100 dark:border-indigo-900/40">
+                          <span className="text-[10px] font-black text-indigo-800 dark:text-indigo-300 uppercase">Por Tema:</span>
+                          <div className="flex items-center">
+                            <button
+                              type="button"
+                              onClick={() => handleUpdatePerTopicCount(perTopicCount - 1)}
+                              disabled={perTopicCount <= 1}
+                              className="w-5 h-5 rounded flex items-center justify-center text-xs font-black text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 disabled:opacity-30 disabled:cursor-not-allowed"
+                            >
+                              -
+                            </button>
+                            <span className="w-7 text-center text-xs font-black text-indigo-950 dark:text-indigo-100 font-mono">
+                              {perTopicCount}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => handleUpdatePerTopicCount(perTopicCount + 1)}
+                              className="w-5 h-5 rounded flex items-center justify-center text-xs font-black text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/60"
+                            >
+                              +
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {mixedDistMode === 'PER_WEEK' && (
+                        <div className="flex items-center gap-1.5 bg-white/80 dark:bg-slate-900/60 px-2 py-0.5 rounded-lg border border-indigo-100 dark:border-indigo-900/40">
+                          <span className="text-[10px] font-black text-indigo-800 dark:text-indigo-300 uppercase">Por Semana:</span>
+                          <div className="flex items-center">
+                            <button
+                              type="button"
+                              onClick={() => handleUpdatePerWeekCount(perWeekCount - 1)}
+                              disabled={perWeekCount <= 1}
+                              className="w-5 h-5 rounded flex items-center justify-center text-xs font-black text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 disabled:opacity-30 disabled:cursor-not-allowed"
+                            >
+                              -
+                            </button>
+                            <span className="w-7 text-center text-xs font-black text-indigo-950 dark:text-indigo-100 font-mono">
+                              {perWeekCount}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => handleUpdatePerWeekCount(perWeekCount + 1)}
+                              className="w-5 h-5 rounded flex items-center justify-center text-xs font-black text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/60"
+                            >
+                              +
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {mixedDistMode === 'TOTAL' && (
+                        <div className="flex items-center gap-1.5 bg-white/80 dark:bg-slate-900/60 px-2 py-0.5 rounded-lg border border-indigo-100 dark:border-indigo-900/40">
+                          <span className="text-[10px] font-black text-indigo-800 dark:text-indigo-300 uppercase">Total:</span>
+                          <input 
+                            type="number" 
+                            min="1" 
+                            max={filteredQuestions.length}
+                            value={mixedCount}
+                            onChange={(e) => setMixedCount(parseInt(e.target.value) || 1)}
+                            className="w-14 px-1 py-0.5 rounded border border-indigo-200 dark:border-indigo-800/80 bg-white dark:bg-[#020b38] text-gray-800 dark:text-gray-100 font-bold focus:ring-1 focus:ring-indigo-500 outline-none text-center text-xs"
+                          />
+                        </div>
+                      )}
+
+                      {/* Start buttons */}
+                      <div className="flex items-center gap-1.5">
+                        <button 
+                          onClick={() => handleStartMixed('CLASSIC')}
+                          className="bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-1 cursor-pointer"
+                          title="Examen Mixto en formato clásico"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          <span>Clásico</span>
+                        </button>
+                        <button 
+                          onClick={() => handleStartMixed('QUIZZIZ')}
+                          className="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 active:scale-95 text-white px-3 py-1.5 rounded-lg text-xs font-black transition-all shadow-xs flex items-center justify-center gap-1 cursor-pointer"
+                          title="Modo Juego Practix con tiempo y comodines"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          <span>Jugar Practix</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Botón para colapsar en el pie del panel */}
+              <div className="flex justify-center pt-1">
                 <button
-                  key={proc}
                   type="button"
-                  onClick={() => handleSelectProcess(isSelected ? '' : proc)}
-                  className={`py-0.5 px-2 sm:px-2.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1 cursor-pointer min-h-[28px] ${
-                    isSelected
-                      ? `${style.bg} ${style.text} ${style.border} border font-black shadow-2xs`
-                      : 'bg-gray-100/60 dark:bg-[#030d42]/60 text-gray-600 dark:text-indigo-300 hover:bg-gray-100 dark:hover:bg-indigo-950/40 border border-transparent'
-                  }`}
-                  title={`Filtrar por proceso ${proc} (Se recordará en tus prácticas)`}
+                  onClick={toggleToolsExpanded}
+                  className="text-xs font-bold text-gray-500 dark:text-indigo-300/80 hover:text-indigo-600 dark:hover:text-indigo-200 transition-colors py-1 px-3 rounded-lg flex items-center gap-1 cursor-pointer"
                 >
-                  <span>{shortName}</span>
-                  <span className={`text-[10px] px-1 py-0.2 rounded-md ${
-                    isSelected 
-                      ? 'bg-black/10 dark:bg-white/20 text-current' 
-                      : 'bg-gray-200/70 dark:bg-indigo-950 text-gray-600 dark:text-indigo-300'
-                  }`}>
-                    {count}
-                  </span>
+                  <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 15l7-7 7 7" />
+                  </svg>
+                  <span>Ocultar herramientas y volver a los temas</span>
                 </button>
-              );
-            })}
-          </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -914,150 +1513,6 @@ const TopicsView: React.FC<TopicsViewProps> = ({
         </div>
       )}
 
-      {/* Banco de Errores - Opción discreta y compacta para practicar preguntas en las que se ha equivocado */}
-      {questions.length > 0 && (
-        mistakeQuestions.length === 0 ? (
-          <div className="bg-emerald-50/40 dark:bg-[#031510]/40 border border-emerald-200/50 dark:border-emerald-900/40 rounded-xl px-3 py-2 flex flex-wrap items-center justify-between gap-2 shadow-2xs">
-            <div className="flex items-center gap-2 text-xs">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0"></span>
-              <span className="font-bold text-[11px] uppercase tracking-wider text-emerald-900 dark:text-emerald-200">
-                Banco de Errores:
-              </span>
-              <span className="text-[11px] text-emerald-700/85 dark:text-emerald-400/85">
-                0 fallos pendientes • ¡Estás al día en {subjectName}!
-              </span>
-            </div>
-            {onAddSampleMistakes && (
-              <button
-                type="button"
-                onClick={handleAddSampleMistake}
-                className="text-[10px] text-emerald-700 dark:text-emerald-400 hover:underline font-bold py-0.5 px-2 cursor-pointer"
-                title="Añadir preguntas de prueba para probar la función"
-              >
-                + Probar banco
-              </button>
-            )}
-          </div>
-        ) : (
-          <div className="bg-emerald-50/60 dark:bg-[#041c14]/50 border border-emerald-200/80 dark:border-emerald-800/60 rounded-xl px-3 sm:px-4 py-2 sm:py-2.5 flex flex-col md:flex-row items-start md:items-center justify-between gap-2.5 shadow-2xs">
-            <div className="min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="px-2 py-0.5 bg-emerald-600 text-white rounded-md text-[10px] font-black uppercase tracking-wider flex items-center gap-1 shadow-2xs">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  <span>Banco de Errores</span>
-                </span>
-                <span className="text-xs font-black text-gray-800 dark:text-gray-100">
-                  {mistakeQuestions.length} {mistakeQuestions.length === 1 ? 'pregunta por reforzar' : 'preguntas por reforzar'}
-                </span>
-                {onClearSubjectMistakes && (
-                  <button
-                    type="button"
-                    onClick={handleClearMistakes}
-                    className="text-[10px] text-emerald-700 dark:text-emerald-400 hover:underline font-bold cursor-pointer"
-                    title="Reiniciar registro de errores"
-                  >
-                    • Reiniciar
-                  </button>
-                )}
-              </div>
-              <p className="text-[11px] text-gray-500 dark:text-emerald-300/80 mt-0.5 truncate">
-                Refuerza tus preguntas falladas de {subjectName}; al acertarlas saldrán de este banco.
-              </p>
-            </div>
-
-            <div className="flex items-center gap-1.5 w-full md:w-auto shrink-0 justify-end flex-wrap sm:flex-nowrap">
-              {mistakeQuestions.length > 5 && (
-                <div className="flex items-center gap-1">
-                  <span className="text-[10px] font-bold text-emerald-800 dark:text-emerald-300 uppercase">Cant:</span>
-                  <input 
-                    type="number" 
-                    min="1" 
-                    max={mistakeQuestions.length}
-                    value={mistakesCountLimit}
-                    onChange={(e) => setMistakesCountLimit(parseInt(e.target.value) || 1)}
-                    className="w-14 px-1.5 py-1 rounded-lg border border-emerald-300 dark:border-emerald-800/80 bg-white dark:bg-[#020b38] text-gray-800 dark:text-gray-100 font-bold focus:ring-1 focus:ring-emerald-500 outline-none text-center text-xs"
-                    title="Cantidad de preguntas"
-                  />
-                </div>
-              )}
-              <button
-                type="button"
-                onClick={() => handleStartMistakes('CLASSIC')}
-                className="bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-1 cursor-pointer"
-                title={`Practicar todas en modo clásico`}
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                <span>Repasar ({mistakeQuestions.length})</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => handleStartMistakes('QUIZZIZ')}
-                className="bg-gradient-to-r from-emerald-600 to-indigo-600 hover:from-emerald-500 hover:to-indigo-500 active:scale-95 text-white px-3 py-1.5 rounded-lg text-xs font-black transition-all shadow-xs flex items-center justify-center gap-1 cursor-pointer"
-                title={`Jugar en modo Practix`}
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                <span>Jugar Practix</span>
-              </button>
-            </div>
-          </div>
-        )
-      )}
-
-      {/* Examen Mixto Section */}
-      {questions.length > 0 && (
-        <div className="bg-indigo-50/70 dark:bg-indigo-950/25 border border-indigo-100/90 dark:border-indigo-800/40 rounded-xl px-3 sm:px-4 py-2 sm:py-2.5 flex flex-col md:flex-row items-start md:items-center justify-between gap-2.5 shadow-2xs">
-          <div>
-            <div className="flex flex-wrap items-center gap-2">
-              <h3 className="text-xs sm:text-sm font-black text-indigo-900 dark:text-indigo-100">Examen Mixto</h3>
-              {renderPracticeBadge("Examen Mixto")}
-            </div>
-            <p className="text-indigo-700/70 dark:text-indigo-300/70 text-[11px] mt-0.5">
-              Genera un examen aleatorio combinando preguntas de todos los temas de {subjectName}.
-            </p>
-          </div>
-          <div className="flex items-center gap-2 w-full md:w-auto shrink-0 justify-end flex-wrap sm:flex-nowrap">
-            <div className="flex items-center gap-1">
-              <span className="text-[10px] font-bold text-indigo-800 dark:text-indigo-300 uppercase">Cant:</span>
-              <input 
-                type="number" 
-                min="1" 
-                max={questions.length}
-                value={mixedCount}
-                onChange={(e) => setMixedCount(parseInt(e.target.value) || 1)}
-                className="w-16 px-1.5 py-1 rounded-lg border border-indigo-200 dark:border-indigo-800/80 bg-white dark:bg-[#020b38] text-gray-800 dark:text-gray-100 font-bold focus:ring-1 focus:ring-indigo-500 outline-none text-center text-xs"
-              />
-            </div>
-            <button 
-              onClick={() => handleStartMixed('CLASSIC')}
-              className="bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-1 cursor-pointer"
-              title="Examen Mixto Clásico"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              <span>Clásico</span>
-            </button>
-            <button 
-              onClick={() => handleStartMixed('QUIZZIZ')}
-              className="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 active:scale-95 text-white px-3 py-1.5 rounded-lg text-xs font-black transition-all shadow-xs flex items-center justify-center gap-1 cursor-pointer"
-              title="Modo Juego Practix con tiempo y comodines"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              <span>Jugar Practix</span>
-            </button>
-          </div>
-        </div>
-      )}
 
       {/* Topic List */}
       {topics.length === 0 ? (

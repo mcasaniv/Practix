@@ -394,11 +394,11 @@ export const StatsView: React.FC<StatsViewProps> = ({
               id="stats-process-dropdown"
               value={selectedProcess}
               onChange={(e) => setSelectedProcess(e.target.value)}
-              className="w-full sm:w-56 bg-white dark:bg-[#020b38] border border-gray-200 dark:border-indigo-800/80 text-gray-800 dark:text-indigo-100 text-xs font-bold rounded-xl py-2 px-3 outline-none focus:ring-2 focus:ring-indigo-500 transition-all cursor-pointer shadow-sm"
+              className="w-full sm:w-56 bg-white dark:bg-slate-900 border border-gray-200 dark:border-indigo-800/80 text-gray-800 dark:text-gray-100 text-xs font-bold rounded-xl py-2 px-3 outline-none focus:ring-2 focus:ring-indigo-500 transition-all cursor-pointer shadow-sm"
             >
-              <option value="" className="bg-white dark:bg-[#020b38] text-gray-800 dark:text-gray-100">Todos los procesos ({questions.length} preg.)</option>
+              <option value="" className="bg-white dark:bg-slate-900 text-gray-900 dark:text-gray-100">Todos los procesos ({questions.length} preg.)</option>
               {processSummary.map(proc => (
-                <option key={proc.name} value={proc.name} className="bg-white dark:bg-[#020b38] text-gray-800 dark:text-gray-100">
+                <option key={proc.name} value={proc.name} className="bg-white dark:bg-slate-900 text-gray-900 dark:text-gray-100">
                   {proc.name} ({proc.questionCount} preg.)
                 </option>
               ))}

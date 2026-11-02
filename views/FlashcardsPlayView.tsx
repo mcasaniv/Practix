@@ -328,6 +328,23 @@ const FlashcardsPlayView: React.FC<FlashcardsPlayViewProps> = ({
     );
   }
 
+  // Dynamic font sizing based on card text length to prevent text from overflowing the card
+  const getBackFontSize = (text: string) => {
+    const len = text ? text.length : 0;
+    if (len > 350) return 'text-xs sm:text-sm leading-relaxed';
+    if (len > 200) return 'text-sm sm:text-base leading-relaxed';
+    if (len > 90) return 'text-base sm:text-lg leading-relaxed';
+    return 'text-lg sm:text-xl md:text-2xl leading-relaxed';
+  };
+
+  const getFrontFontSize = (text: string) => {
+    const len = text ? text.length : 0;
+    if (len > 350) return 'text-xs sm:text-sm leading-snug';
+    if (len > 200) return 'text-sm sm:text-base leading-normal';
+    if (len > 90) return 'text-base sm:text-lg leading-relaxed';
+    return 'text-xl sm:text-2xl md:text-3xl leading-relaxed';
+  };
+
   return (
     <div className="max-w-3xl mx-auto px-4 py-2 animate-fade-in">
       {/* Header controls */}
@@ -377,7 +394,7 @@ const FlashcardsPlayView: React.FC<FlashcardsPlayViewProps> = ({
       </div>
 
       {/* Dynamic 3D Flashcard container */}
-      <div className="perspective-1000 w-full max-w-xl mx-auto h-[350px] mb-8 relative">
+      <div className="perspective-1000 w-full max-w-xl mx-auto min-h-[350px] h-[370px] sm:h-[400px] mb-8 relative">
         <div 
           ref={cardRef}
           onClick={() => {
@@ -389,8 +406,8 @@ const FlashcardsPlayView: React.FC<FlashcardsPlayViewProps> = ({
           }`}
         >
           {/* FRONT FACE (Backface hidden) */}
-          <div className="absolute inset-0 bg-white dark:bg-slate-900 border-2 border-indigo-100 dark:border-indigo-950 rounded-3xl p-8 shadow-lg flex flex-col justify-between backface-hidden">
-            <div className="flex justify-between items-center">
+          <div className="absolute inset-0 bg-white dark:bg-slate-900 border-2 border-indigo-100 dark:border-indigo-950 rounded-3xl p-6 sm:p-8 shadow-lg flex flex-col justify-between backface-hidden overflow-hidden">
+            <div className="flex justify-between items-center shrink-0">
               <span className="text-[9px] uppercase font-black text-indigo-400 tracking-widest bg-indigo-50 dark:bg-indigo-950/50 px-2.5 py-1 rounded">
                 Pregunta / Recto
               </span>
@@ -401,13 +418,13 @@ const FlashcardsPlayView: React.FC<FlashcardsPlayViewProps> = ({
               )}
             </div>
 
-            <div className="flex-grow flex items-center justify-center py-4 text-center">
-              <div className="text-xl md:text-2xl font-bold text-gray-800 dark:text-gray-100 leading-relaxed whitespace-pre-wrap selection:bg-indigo-100">
+            <div className="flex-grow min-h-0 flex items-center justify-center py-2 px-1 text-center my-auto overflow-y-auto overscroll-contain max-h-[250px] [scrollbar-width:thin] [scrollbar-color:rgba(99,102,241,0.3)_transparent]">
+              <div className={`w-full max-w-full font-bold text-gray-800 dark:text-gray-100 break-words whitespace-pre-wrap selection:bg-indigo-100 ${getFrontFontSize(activeCard?.front || '')}`}>
                 {formatQuestionText(activeCard?.front || '')}
               </div>
             </div>
 
-            <div className="text-center text-xs text-indigo-400/80 dark:text-indigo-500/80 font-medium animate-pulse flex items-center justify-center gap-1.5">
+            <div className="text-center text-xs text-indigo-400/80 dark:text-indigo-500/80 font-medium animate-pulse flex items-center justify-center gap-1.5 shrink-0">
               <span>Click o tecla Espacio para voltear</span>
               <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5 inline" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -416,8 +433,8 @@ const FlashcardsPlayView: React.FC<FlashcardsPlayViewProps> = ({
           </div>
 
           {/* BACK FACE (Rotated 180 and Backface hidden) */}
-          <div className="absolute inset-0 bg-gradient-to-b from-indigo-50/20 to-indigo-100/5 dark:from-indigo-950/10 dark:to-indigo-950/30 border-2 border-dashed border-indigo-400 dark:border-indigo-800 rounded-3xl p-8 shadow-lg flex flex-col justify-between backface-hidden rotate-y-180">
-            <div className="flex justify-between items-center">
+          <div className="absolute inset-0 bg-gradient-to-b from-indigo-50/20 to-indigo-100/5 dark:from-indigo-950/10 dark:to-indigo-950/30 border-2 border-dashed border-indigo-400 dark:border-indigo-800 rounded-3xl p-6 sm:p-8 shadow-lg flex flex-col justify-between backface-hidden rotate-y-180 overflow-hidden">
+            <div className="flex justify-between items-center shrink-0">
               <span className="text-[9px] uppercase font-black text-amber-500 tracking-widest bg-amber-50 dark:bg-amber-950/50 px-2.5 py-1 rounded">
                 Respuesta / Verso
               </span>
@@ -434,13 +451,13 @@ const FlashcardsPlayView: React.FC<FlashcardsPlayViewProps> = ({
               </span>
             </div>
 
-            <div className="flex-grow flex items-center justify-center py-4 text-center">
-              <div className="text-lg md:text-xl font-semibold text-indigo-950 dark:text-slate-100 leading-relaxed whitespace-pre-wrap">
+            <div className="flex-grow min-h-0 flex items-center justify-center py-2 px-1 text-center my-auto overflow-y-auto overscroll-contain max-h-[250px] [scrollbar-width:thin] [scrollbar-color:rgba(99,102,241,0.3)_transparent]">
+              <div className={`w-full max-w-full font-semibold text-indigo-950 dark:text-slate-100 break-words whitespace-pre-wrap select-text ${getBackFontSize(activeCard?.back || '')}`}>
                 {formatQuestionText(activeCard?.back || '')}
               </div>
             </div>
 
-            <div className="text-center text-xs text-amber-500/80 font-medium">
+            <div className="text-center text-xs text-amber-500/80 font-medium shrink-0">
               ¿Cuál fue la dificultad de esta tarjeta?
             </div>
           </div>

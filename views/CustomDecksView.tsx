@@ -531,9 +531,9 @@ export const CustomDecksView: React.FC<CustomDecksViewProps> = ({
                   className="w-full bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl p-2.5 text-xs font-bold outline-none dark:text-gray-100 focus:ring-2 focus:ring-purple-500 cursor-pointer"
                 >
                   {coursesList.map(c => (
-                    <option key={c.name} value={c.name}>{c.name} ({c.subjects.slice(0, 2).join(', ')})</option>
+                    <option key={c.name} value={c.name} className="bg-white dark:bg-slate-800 text-gray-900 dark:text-gray-100">{c.name} ({c.subjects.slice(0, 2).join(', ')})</option>
                   ))}
-                  <option value="General / Multi-materia">General / Multi-materia</option>
+                  <option value="General / Multi-materia" className="bg-white dark:bg-slate-800 text-gray-900 dark:text-gray-100">General / Multi-materia</option>
                 </select>
               </div>
 
@@ -872,8 +872,8 @@ export const CustomDecksView: React.FC<CustomDecksViewProps> = ({
                       onChange={(e) => setBankCourseFilter(e.target.value)}
                       className="bg-gray-50 dark:bg-slate-800 border dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none dark:text-gray-200 font-medium"
                     >
-                      <option value="">Todos los cursos</option>
-                      {ACADEMIC_STRUCTURE.map(c => <option key={c.name} value={c.name}>{c.name}</option>)}
+                      <option value="" className="bg-white dark:bg-slate-800 text-gray-900 dark:text-gray-100">Todos los cursos</option>
+                      {ACADEMIC_STRUCTURE.map(c => <option key={c.name} value={c.name} className="bg-white dark:bg-slate-800 text-gray-900 dark:text-gray-100">{c.name}</option>)}
                     </select>
 
                     <select
@@ -881,8 +881,8 @@ export const CustomDecksView: React.FC<CustomDecksViewProps> = ({
                       onChange={(e) => setBankProcessFilter(e.target.value)}
                       className="bg-gray-50 dark:bg-slate-800 border dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none dark:text-gray-200 font-medium"
                     >
-                      <option value="">Todos los procesos</option>
-                      {allBankProcesses.map(p => <option key={p} value={p}>{p}</option>)}
+                      <option value="" className="bg-white dark:bg-slate-800 text-gray-900 dark:text-gray-100">Todos los procesos</option>
+                      {allBankProcesses.map(p => <option key={p} value={p} className="bg-white dark:bg-slate-800 text-gray-900 dark:text-gray-100">{p}</option>)}
                     </select>
                   </div>
 

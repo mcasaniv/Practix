@@ -41,11 +41,13 @@ function parseBasicFormatting(plainText: string, keyPrefix: string | number): Re
 
   // Normalize LaTeX \underline{...} and \underbar{...} to <u>...</u>
   let normalized = plainText
-    .replace(/\\(?:underline|underbar)\{([^}]+)\}/g, '<u>$1</u>')
+    .replace(/\\(?:underline|underbar)\s*\{([^}]+)\}/gi, '<u>$1</u>')
+    .replace(/\[u\]([\s\S]*?)\[\/u\]/gi, '<u>$1</u>')
     .replace(/<ins(?:\s+[^>]*)?>/gi, '<u>')
     .replace(/<\/ins>/gi, '</u>')
-    .replace(/<span[^>]*style="[^"]*text-decoration:\s*underline[^"]*"[^>]*>([\s\S]*?)<\/span>/gi, '<u>$1</u>')
-    .replace(/<span[^>]*class="[^"]*underline[^"]*"[^>]*>([\s\S]*?)<\/span>/gi, '<u>$1</u>');
+    .replace(/<span[^>]*style="[^"]*text-decoration\s*:\s*underline[^"]*"[^>]*>([\s\S]*?)<\/span>/gi, '<u>$1</u>')
+    .replace(/<span[^>]*class="[^"]*underline[^"]*"[^>]*>([\s\S]*?)<\/span>/gi, '<u>$1</u>')
+    .replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
 
   // Split by supported HTML tags: <b>, </b>, <i>, </i>, <u>, </u>, <strong>, </strong>, <em>, </em>
   const tagRegex = /(<\/?(?:b|i|u|strong|em)(?:\s+[^>]*)?>)/gi;
@@ -70,18 +72,18 @@ function parseBasicFormatting(plainText: string, keyPrefix: string | number): Re
     } else if (part) {
       if (underline) {
         // High visibility underline for exam questions, specially designed for Practix mode and dark/light backgrounds
-        let className = 'practix-underlined-text underline decoration-[3.5px] underline-offset-[5px] decoration-amber-400 dark:decoration-amber-300 font-extrabold decoration-skip-ink-none';
+        let className = 'practix-underlined-text font-extrabold';
         if (bold) className += ' font-black';
         if (italic) className += ' italic';
 
         elements.push(
-          <span
+          <u
             key={`${keyPrefix}-fmt-${i}`}
             className={className.trim()}
             title="Palabra subrayada"
           >
             {part}
-          </span>
+          </u>
         );
       } else {
         let className = '';

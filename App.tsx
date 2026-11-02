@@ -299,6 +299,25 @@ const App: React.FC = () => {
     });
   }, [db]);
 
+  // Scroll to top immediately whenever view or subview navigation changes
+  useEffect(() => {
+    try {
+      window.scrollTo({ top: 0, left: 0, behavior: 'instant' as ScrollBehavior });
+      if (document.documentElement) document.documentElement.scrollTop = 0;
+      if (document.body) document.body.scrollTop = 0;
+    } catch {
+      window.scrollTo(0, 0);
+    }
+  }, [
+    nav.view,
+    nav.selectedCourse,
+    nav.selectedSubject,
+    nav.selectedTopic,
+    nav.selectedFlashcardTopic,
+    nav.examMode,
+    nav.deckId
+  ]);
+
   const handleNavigate = useCallback((view: ViewType, params?: Partial<NavigationState>) => {
     setNav(prev => ({ ...prev, view, ...params }));
   }, []);
@@ -843,7 +862,7 @@ const App: React.FC = () => {
             savedExams={db.savedExams || []}
             incorrectQuestionIds={db.incorrectQuestionIds || []}
             onSelectTopic={(topic, mode, process, areaFilter) => handleNavigate('QUIZ', { selectedTopic: topic, quizMode: mode, selectedProcess: process, selectedAreaFilter: areaFilter })}
-            onStartMixedQuiz={(questions, mode) => handleNavigate('MIXED_QUIZ', { mixedQuestions: questions, quizMode: mode })}
+            onStartMixedQuiz={(questions, mode, customTitle) => handleNavigate('MIXED_QUIZ', { selectedTopic: customTitle || 'Examen Mixto', mixedQuestions: questions, quizMode: mode })}
             onStartMistakesQuiz={handleStartMistakesQuiz}
             onClearSubjectMistakes={handleClearSubjectMistakes}
             onAddSampleMistakes={handleAddSampleMistakes}
@@ -1038,7 +1057,7 @@ const App: React.FC = () => {
   const showNavbar = nav.view !== 'FLASHCARDS_PLAY' && nav.view !== 'QUIZ' && nav.view !== 'MEGA_QUIZ' && nav.view !== 'MIXED_QUIZ';
 
   return (
-    <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-slate-950 transition-colors duration-300 w-full overflow-x-clip">
+    <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 transition-colors duration-300 w-full overflow-x-clip">
       {showNavbar && (
         <Navbar 
           onNavigate={handleNavigate} 
