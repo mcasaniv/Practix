@@ -1,6 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import { ACADEMIC_STRUCTURE } from '../constants';
 import { Flashcard, CourseStructure } from '../types';
+import { ImageOcclusionModal } from '../components/ImageOcclusionModal';
+import { FlashcardTopicCard } from '../components/FlashcardTopicCard';
 
 interface FlashcardsHomeViewProps {
   flashcards: Flashcard[];
@@ -11,6 +13,8 @@ interface FlashcardsHomeViewProps {
   onClearCourse?: () => void;
   academicStructure?: CourseStructure[];
   onMoveTopic?: (topicName: string, subjectName: string, courseName: string, direction: 'UP' | 'DOWN') => void;
+  onSaveFlashcardsBatch?: (cards: Flashcard[]) => void;
+  onToast?: (msg: string) => void;
 }
 
 const FlashcardsHomeView: React.FC<FlashcardsHomeViewProps> = ({ 
@@ -21,10 +25,14 @@ const FlashcardsHomeView: React.FC<FlashcardsHomeViewProps> = ({
   onSelectCourse,
   onClearCourse,
   academicStructure = ACADEMIC_STRUCTURE,
-  onMoveTopic
+  onMoveTopic,
+  onSaveFlashcardsBatch,
+  onToast
 }) => {
   const [selectedCourseName, setSelectedCourseName] = useState<string | null>(initialCourseName || null);
   const [selectedSubjectName, setSelectedSubjectName] = useState<string | null>(null);
+  const [showOcclusionModal, setShowOcclusionModal] = useState<boolean>(false);
+  const [presetTopicName, setPresetTopicName] = useState<string>('');
 
   const handleSelectCourse = (courseName: string) => {
     setSelectedCourseName(courseName);
@@ -75,7 +83,7 @@ const FlashcardsHomeView: React.FC<FlashcardsHomeViewProps> = ({
       f => f.course === selectedCourseName && f.subject === selectedSubjectName
     );
 
-    const groups: Record<string, { name: string; isDefault: boolean; count: number; easy: number; medium: number; rated: number; order: number }> = {};
+    const groups: Record<string, { name: string; isDefault: boolean; count: number; easy: number; medium: number; rated: number; order: number; imageCount: number }> = {};
 
     subjectCards.forEach(card => {
       const tName = card.topic ? card.topic.trim() : 'General / Sin Tema';
@@ -89,13 +97,15 @@ const FlashcardsHomeView: React.FC<FlashcardsHomeViewProps> = ({
           easy: 0,
           medium: 0,
           rated: 0,
-          order: card.order ?? 999
+          order: card.order ?? 999,
+          imageCount: 0
         };
       }
       groups[tName].count++;
       if (card.difficulty === 'EASY') groups[tName].easy++;
       if (card.difficulty === 'MEDIUM') groups[tName].medium++;
       if (card.difficulty) groups[tName].rated++;
+      if (card.type === 'IMAGE_OCCLUSION' || card.imageUrl) groups[tName].imageCount++;
     });
 
     return Object.values(groups).map(g => {
@@ -119,12 +129,24 @@ const FlashcardsHomeView: React.FC<FlashcardsHomeViewProps> = ({
           <span className="bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 text-xs font-black px-4 py-1.5 rounded-full uppercase tracking-wider mb-2.5 inline-block">
             Módulo de Autoaprendizaje
           </span>
-          <h2 className="text-2xl sm:text-3xl md:text-4xl font-black text-gray-800 dark:text-gray-100 mb-2 tracking-tight">
+          <h2 className="text-2xl sm:text-3xl md:text-4xl font-black text-gray-800 dark:text-white mb-2 tracking-tight">
             Estudio con Flashcards
           </h2>
-          <p className="text-gray-500 dark:text-gray-400 text-xs sm:text-sm">
+          <p className="text-gray-500 dark:text-white/80 text-xs sm:text-sm">
             Memoriza de forma efectiva usando el algoritmo de repetición espaciada. Selecciona un curso para comenzar a repasar.
           </p>
+
+          <div className="flex flex-wrap items-center justify-center gap-3 mt-4">
+            <button
+              onClick={() => setShowOcclusionModal(true)}
+              className="px-5 py-3 bg-gradient-to-r from-indigo-600 via-indigo-700 to-purple-700 hover:from-indigo-500 hover:to-purple-600 text-white font-black text-xs sm:text-sm uppercase tracking-wider rounded-2xl shadow-lg transition-all active:scale-95 flex items-center gap-2.5 border border-indigo-400/30 min-h-[44px]"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5 text-indigo-200" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+              <span>Subir Imagen con Oclusión (Tapar partes)</span>
+            </button>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3.5 sm:gap-5">
@@ -135,14 +157,14 @@ const FlashcardsHomeView: React.FC<FlashcardsHomeViewProps> = ({
               <div 
                 key={course.name}
                 onClick={() => handleSelectCourse(course.name)}
-                className="group cursor-pointer bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-800 p-4 sm:p-5 hover:shadow-xl active:scale-[0.98] transition-all overflow-hidden relative"
+                className="group cursor-pointer bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-800 p-4 sm:p-5 hover:shadow-xl hover:dark:border-slate-700 active:scale-[0.98] transition-all overflow-hidden relative"
               >
                 {mastery !== null && (
-                  <div className="absolute top-3.5 right-3.5 text-[10px] uppercase font-black tracking-wider px-2 py-0.5 rounded-full flex items-center gap-1.5 bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-900/50 shadow-sm">
+                  <div className="absolute top-3.5 right-3.5 text-[10px] uppercase font-black tracking-wider px-2 py-0.5 rounded-full flex items-center gap-1.5 bg-indigo-50 dark:bg-slate-800 text-indigo-700 dark:text-white border border-indigo-100 dark:border-slate-700 shadow-sm">
                     <span className={`w-2 h-2 rounded-full ring-2 ring-white dark:ring-slate-900 ${
                       mastery >= 80 ? 'bg-emerald-500' : mastery >= 50 ? 'bg-amber-500' : 'bg-rose-500'
                     }`}></span>
-                    <span>{mastery}%</span>
+                    <span className="dark:text-white">{mastery}%</span>
                   </div>
                 )}
 
@@ -154,18 +176,18 @@ const FlashcardsHomeView: React.FC<FlashcardsHomeViewProps> = ({
                     referrerPolicy="no-referrer"
                   />
                 </div>
-                <h3 className="text-lg font-black text-gray-800 dark:text-gray-100 mb-1 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+                <h3 className="text-lg font-black text-gray-800 dark:text-white mb-1 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
                   {course.name}
                 </h3>
-                <p className="text-gray-400 dark:text-gray-500 text-xs font-medium">
+                <p className="text-gray-400 dark:text-white/80 text-xs font-semibold">
                   {course.subjects.length} Materias
                 </p>
                 
                 <div className="mt-3.5 pt-3 border-t border-gray-50 dark:border-slate-800 flex items-center justify-between">
                   <span className={`text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-full ${
                     count > 0 
-                      ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400' 
-                      : 'bg-gray-100 dark:bg-slate-800 text-gray-400'
+                      ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-white border border-emerald-200/50 dark:border-emerald-800/60' 
+                      : 'bg-gray-100 dark:bg-slate-800 text-gray-400 dark:text-white/60'
                   }`}>
                     {count === 1 ? '1 Tarjeta' : `${count} Tarjetas`}
                   </span>
@@ -180,6 +202,22 @@ const FlashcardsHomeView: React.FC<FlashcardsHomeViewProps> = ({
             );
           })}
         </div>
+
+        <ImageOcclusionModal
+          isOpen={showOcclusionModal}
+          onClose={() => {
+            setShowOcclusionModal(false);
+            setPresetTopicName('');
+          }}
+          initialCourseName={selectedCourseName}
+          initialSubjectName={selectedSubjectName}
+          initialTopicName={presetTopicName}
+          academicStructure={academicStructure}
+          onSaveFlashcards={(newCards) => {
+            if (onSaveFlashcardsBatch) onSaveFlashcardsBatch(newCards);
+          }}
+          onToast={onToast}
+        />
       </div>
     );
   }
@@ -200,13 +238,25 @@ const FlashcardsHomeView: React.FC<FlashcardsHomeViewProps> = ({
           Volver a Materias
         </button>
 
-        <div>
-          <p className="text-xs font-bold text-indigo-500 dark:text-indigo-400 uppercase tracking-widest leading-none mb-1">
-            {selectedCourseName} • {selectedSubjectName}
-          </p>
-          <h2 className="text-2xl sm:text-3xl font-black text-gray-800 dark:text-gray-100">
-            Temas de Flashcards
-          </h2>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <p className="text-xs font-bold text-indigo-500 dark:text-indigo-400 uppercase tracking-widest leading-none mb-1">
+              {selectedCourseName} • {selectedSubjectName}
+            </p>
+            <h2 className="text-2xl sm:text-3xl font-black text-gray-800 dark:text-white">
+              Temas de Flashcards
+            </h2>
+          </div>
+
+          <button
+            onClick={() => setShowOcclusionModal(true)}
+            className="self-start sm:self-auto px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs uppercase tracking-wider rounded-xl shadow-md transition-all active:scale-95 flex items-center gap-2 shrink-0 min-h-[42px]"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+            <span>+ Imagen con Oclusión</span>
+          </button>
         </div>
 
         {/* Big CTA to start studying all subject flashcards */}
@@ -229,125 +279,74 @@ const FlashcardsHomeView: React.FC<FlashcardsHomeViewProps> = ({
         )}
 
         {topicsData.length === 0 ? (
-          <div className="text-center py-10 bg-white dark:bg-slate-900 rounded-2xl border border-gray-100 dark:border-slate-800 p-6 max-w-md mx-auto">
-            <div className="w-12 h-12 mx-auto mb-3 text-gray-300 dark:text-gray-600 flex items-center justify-center">
+          <div className="text-center py-10 bg-white dark:bg-slate-900 rounded-2xl border border-gray-100 dark:border-slate-800 p-6 max-w-md mx-auto shadow-sm">
+            <div className="w-12 h-12 mx-auto mb-3 text-gray-300 dark:text-slate-600 flex items-center justify-center">
               <svg xmlns="http://www.w3.org/2000/svg" className="w-10 h-10" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
               </svg>
             </div>
-            <h4 className="text-base font-bold text-gray-700 dark:text-gray-300 mb-2">Sin Tarjetas en esta Materia</h4>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mb-5">
-              Pronto se agregarán flashcards para {selectedSubjectName}. Puedes subir tus propias tarjetas desde Administración.
+            <h4 className="text-base font-bold text-gray-800 dark:text-white mb-2">Sin Tarjetas en esta Materia</h4>
+            <p className="text-xs text-gray-500 dark:text-white/80 mb-5">
+              Pronto se agregarán flashcards para {selectedSubjectName}. Puedes subir tus propias tarjetas o imágenes con oclusión.
             </p>
-            <button 
-              onClick={onGoToAdmin}
-              className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs uppercase transition-all min-h-[44px]"
-            >
-              Ir a Administración
-            </button>
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              <button 
+                onClick={() => setShowOcclusionModal(true)}
+                className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs uppercase transition-all min-h-[44px]"
+              >
+                + Subir Imagen con Oclusión
+              </button>
+              <button 
+                onClick={onGoToAdmin}
+                className="px-5 py-2.5 bg-gray-100 dark:bg-slate-800 hover:bg-gray-200 dark:hover:bg-slate-700 text-gray-700 dark:text-white border border-gray-200 dark:border-slate-700 font-bold rounded-xl text-xs uppercase transition-all min-h-[44px]"
+              >
+                Ir a Administración
+              </button>
+            </div>
           </div>
         ) : (
           <div className="flex flex-col gap-3 sm:gap-4">
-            {topicsData.map((topic) => {
-              const mastery = topic.percent;
+            {topicsData.map((topic, index) => {
               const nonDefaultTopics = topicsData.filter(t => !t.isDefault);
               const nonDefaultIndex = nonDefaultTopics.findIndex(t => t.name === topic.name);
               const nonDefaultCount = nonDefaultTopics.length;
 
-              let cardBgBorder = "bg-white dark:bg-slate-900 border-gray-100 dark:border-slate-800 hover:border-indigo-200 dark:hover:border-indigo-900/60";
-              if (mastery !== null) {
-                if (mastery >= 80) cardBgBorder = "bg-emerald-50/20 dark:bg-emerald-950/5 border-emerald-100/70 dark:border-emerald-900/50 hover:border-emerald-300";
-                else if (mastery >= 50) cardBgBorder = "bg-amber-50/15 dark:bg-amber-950/5 border-amber-100/70 dark:border-amber-900/50 hover:border-amber-300";
-                else cardBgBorder = "bg-rose-50/15 dark:bg-rose-950/5 border-rose-100/70 dark:border-rose-900/50 hover:border-rose-300";
-              }
-
               return (
-                <div 
+                <FlashcardTopicCard
                   key={topic.name}
-                  onClick={() => onStartPlay(selectedCourseName!, selectedSubjectName!, topic.isDefault ? undefined : topic.name)}
-                  className={`rounded-2xl p-4 sm:p-5 shadow-sm hover:shadow-md active:scale-[0.99] cursor-pointer group transition-all flex flex-col sm:flex-row sm:items-center justify-between border gap-3 sm:gap-4 ${cardBgBorder}`}
-                >
-                  <div className="flex items-start sm:items-center gap-3.5 flex-grow min-w-0">
-                    <div className="bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-400 w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center font-black text-base sm:text-lg shrink-0 shadow-inner">
-                      {topic.isDefault ? (
-                        <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5 text-amber-500 fill-amber-400" viewBox="0 0 24 24">
-                          <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
-                        </svg>
-                      ) : (
-                        <span>{nonDefaultIndex === -1 ? '?' : (nonDefaultIndex + 1)}</span>
-                      )}
-                    </div>
-                    <div className="flex-grow min-w-0">
-                      <div className="flex flex-wrap items-center gap-2 mb-0.5">
-                        <h4 className="text-base sm:text-lg font-black text-gray-800 dark:text-gray-100 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors break-words">
-                          {topic.name}
-                        </h4>
-                        
-                        {mastery !== null ? (
-                          <span className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded border flex items-center gap-1 ${
-                            mastery >= 80 
-                              ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-200/40'
-                              : mastery >= 50
-                                ? 'bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-200/40'
-                                : 'bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-200/40'
-                          }`}>
-                            <span>{mastery}% dominio</span>
-                          </span>
-                        ) : (
-                          <span className="text-[10px] font-bold text-indigo-500 dark:text-indigo-400 bg-indigo-50/50 dark:bg-indigo-950/30 px-1.5 py-0.5 rounded border border-indigo-100/40">
-                            Nuevo
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-xs text-gray-400 dark:text-gray-500 font-medium">
-                        {topic.count} {topic.count === 1 ? 'tarjeta disponible' : 'tarjetas disponibles'}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2.5 justify-between sm:justify-end shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-gray-100 dark:border-slate-800" onClick={(e) => e.stopPropagation()}>
-                    {onMoveTopic && !topic.isDefault && (
-                      <div className="flex border dark:border-slate-800 rounded-xl overflow-hidden bg-gray-50/60 dark:bg-slate-800/60 shrink-0">
-                        <button 
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onMoveTopic(topic.name, selectedSubjectName!, selectedCourseName!, 'UP');
-                          }}
-                          disabled={nonDefaultIndex === 0}
-                          className="p-2 min-h-[40px] min-w-[36px] flex items-center justify-center hover:bg-gray-200 dark:hover:bg-slate-700 disabled:opacity-30 transition-colors text-gray-500"
-                          title="Mover Arriba"
-                        >
-                          ▲
-                        </button>
-                        <button 
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onMoveTopic(topic.name, selectedSubjectName!, selectedCourseName!, 'DOWN');
-                          }}
-                          disabled={nonDefaultIndex === nonDefaultCount - 1}
-                          className="p-2 min-h-[40px] min-w-[36px] flex items-center justify-center border-l dark:border-slate-700 hover:bg-gray-200 dark:hover:bg-slate-700 disabled:opacity-30 transition-colors text-gray-500"
-                          title="Mover Abajo"
-                        >
-                          ▼
-                        </button>
-                      </div>
-                    )}
-
-                    <button
-                      onClick={() => onStartPlay(selectedCourseName!, selectedSubjectName!, topic.isDefault ? undefined : topic.name)}
-                      className="flex-1 sm:flex-initial bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 active:scale-95 shadow-sm min-h-[44px]"
-                    >
-                      <span>Estudiar</span>
-                      <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M14 5l7 7m0 0l-7 7m7-7H3" />
-                      </svg>
-                    </button>
-                  </div>
-                </div>
+                  topic={topic}
+                  index={index}
+                  nonDefaultIndex={nonDefaultIndex}
+                  nonDefaultCount={nonDefaultCount}
+                  selectedCourseName={selectedCourseName!}
+                  selectedSubjectName={selectedSubjectName!}
+                  onStartPlay={onStartPlay}
+                  onMoveTopic={onMoveTopic}
+                  onUploadOcclusionForTopic={(topicName) => {
+                    setPresetTopicName(topicName);
+                    setShowOcclusionModal(true);
+                  }}
+                />
               );
             })}
           </div>
         )}
+
+        <ImageOcclusionModal
+          isOpen={showOcclusionModal}
+          onClose={() => {
+            setShowOcclusionModal(false);
+            setPresetTopicName('');
+          }}
+          initialCourseName={selectedCourseName}
+          initialSubjectName={selectedSubjectName}
+          initialTopicName={presetTopicName}
+          academicStructure={academicStructure}
+          onSaveFlashcards={(newCards) => {
+            if (onSaveFlashcardsBatch) onSaveFlashcardsBatch(newCards);
+          }}
+          onToast={onToast}
+        />
       </div>
     );
   }
@@ -365,23 +364,35 @@ const FlashcardsHomeView: React.FC<FlashcardsHomeViewProps> = ({
         Volver a Cursos
       </button>
 
-      <div className="flex items-center gap-3.5 sm:gap-4">
-        <div className={`w-12 h-12 sm:w-14 sm:h-14 rounded-2xl overflow-hidden shadow-md ${selectedCourse?.color.split(' ')[0]} dark:opacity-90 shrink-0`}>
-          <img 
-            src={selectedCourse?.icon} 
-            alt={selectedCourseName} 
-            className="w-full h-full object-cover"
-            referrerPolicy="no-referrer"
-          />
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex items-center gap-3.5 sm:gap-4">
+          <div className={`w-12 h-12 sm:w-14 sm:h-14 rounded-2xl overflow-hidden shadow-md ${selectedCourse?.color.split(' ')[0]} dark:opacity-90 shrink-0`}>
+            <img 
+              src={selectedCourse?.icon} 
+              alt={selectedCourseName} 
+              className="w-full h-full object-cover"
+              referrerPolicy="no-referrer"
+            />
+          </div>
+          <div className="min-w-0">
+            <h2 className="text-2xl sm:text-3xl font-black text-gray-800 dark:text-white truncate">
+              Materias de {selectedCourseName}
+            </h2>
+            <p className="text-xs font-bold text-indigo-500 dark:text-indigo-400 uppercase tracking-widest mt-0.5">
+              Estudio con Tarjetas de Memoria
+            </p>
+          </div>
         </div>
-        <div className="min-w-0">
-          <h2 className="text-2xl sm:text-3xl font-black text-gray-800 dark:text-gray-100 truncate">
-            Materias de {selectedCourseName}
-          </h2>
-          <p className="text-xs font-bold text-indigo-500 dark:text-indigo-400 uppercase tracking-widest mt-0.5">
-            Estudio con Tarjetas de Memoria
-          </p>
-        </div>
+
+        <button
+          onClick={() => setShowOcclusionModal(true)}
+          className="self-start sm:self-auto px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs uppercase tracking-wider rounded-xl shadow-md transition-all active:scale-95 flex items-center gap-2 shrink-0 min-h-[42px]"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+          </svg>
+          <span>+ Imagen con Oclusión</span>
+        </button>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-5">
@@ -389,11 +400,11 @@ const FlashcardsHomeView: React.FC<FlashcardsHomeViewProps> = ({
           const count = getSubjectCardCount(subject);
           const mastery = getSubjectMastery(subject);
           
-          let cardBgBorder = "bg-white dark:bg-slate-900 border-gray-100 dark:border-slate-800";
+          let cardBgBorder = "bg-white dark:bg-slate-900 border-gray-100 dark:border-slate-800 hover:border-indigo-200 dark:hover:border-slate-700";
           if (mastery !== null) {
-            if (mastery >= 80) cardBgBorder = "bg-emerald-50/30 dark:bg-emerald-950/5 border-emerald-200 dark:border-emerald-900/55";
-            else if (mastery >= 50) cardBgBorder = "bg-amber-50/20 dark:bg-amber-950/5 border-amber-200 dark:border-amber-900/55";
-            else cardBgBorder = "bg-rose-50/20 dark:bg-rose-950/5 border-rose-200 dark:border-rose-900/55";
+            if (mastery >= 80) cardBgBorder = "bg-white dark:bg-slate-900 border-emerald-300 dark:border-emerald-700/80 hover:border-emerald-400";
+            else if (mastery >= 50) cardBgBorder = "bg-white dark:bg-slate-900 border-amber-300 dark:border-amber-700/80 hover:border-amber-400";
+            else cardBgBorder = "bg-white dark:bg-slate-900 border-rose-300 dark:border-rose-700/80 hover:border-rose-400";
           }
 
           return (
@@ -403,19 +414,19 @@ const FlashcardsHomeView: React.FC<FlashcardsHomeViewProps> = ({
               className={`border rounded-2xl p-4 sm:p-5 shadow-sm hover:shadow-md active:scale-[0.98] cursor-pointer group transition-all ${cardBgBorder}`}
             >
               <div className="flex items-center justify-between mb-3">
-                <h3 className="text-lg sm:text-xl font-bold text-gray-800 dark:text-gray-100 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 truncate">
+                <h3 className="text-lg sm:text-xl font-bold text-gray-800 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 truncate">
                   {subject}
                 </h3>
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-300 dark:text-gray-600 group-hover:text-indigo-400 dark:group-hover:text-indigo-500 group-hover:translate-x-1 transition-all shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-300 dark:text-slate-500 group-hover:text-indigo-400 dark:group-hover:text-indigo-300 group-hover:translate-x-1 transition-all shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                 </svg>
               </div>
 
-              <div className="flex items-center justify-between mt-4 border-t border-gray-100 dark:border-slate-800/40 pt-3 gap-2">
+              <div className="flex items-center justify-between mt-4 border-t border-gray-100 dark:border-slate-800 pt-3 gap-2">
                 <span className={`text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-full ${
                   count > 0 
-                    ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-300' 
-                    : 'bg-gray-100 dark:bg-slate-800 text-gray-400'
+                    ? 'bg-indigo-50 dark:bg-slate-800 text-indigo-700 dark:text-white border border-indigo-200/50 dark:border-slate-700' 
+                    : 'bg-gray-100 dark:bg-slate-800 text-gray-500 dark:text-white/60'
                 }`}>
                   {count === 1 ? '1 tarjeta' : `${count} tarjetas`}
                 </span>
@@ -423,12 +434,12 @@ const FlashcardsHomeView: React.FC<FlashcardsHomeViewProps> = ({
                 {mastery !== null && (
                   <span className={`text-[10px] font-black uppercase tracking-tighter px-2.5 py-1 rounded-full border flex items-center gap-1.5 ${
                     mastery >= 80 
-                      ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-200/50'
+                      ? 'bg-emerald-100/80 dark:bg-emerald-950/70 text-emerald-800 dark:text-white border-emerald-300/80 dark:border-emerald-700/70'
                       : mastery >= 50
-                        ? 'bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-200/50'
-                        : 'bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-200/50'
+                        ? 'bg-amber-100/80 dark:bg-amber-950/70 text-amber-800 dark:text-white border-amber-300/80 dark:border-amber-700/70'
+                        : 'bg-rose-100/80 dark:bg-rose-950/70 text-rose-800 dark:text-white border-rose-300/80 dark:border-rose-700/70'
                   }`}>
-                    <span>{mastery}%</span>
+                    <span className="dark:text-white">{mastery}%</span>
                   </span>
                 )}
               </div>
@@ -456,6 +467,22 @@ const FlashcardsHomeView: React.FC<FlashcardsHomeViewProps> = ({
           </button>
         </div>
       )}
+
+      <ImageOcclusionModal
+        isOpen={showOcclusionModal}
+        onClose={() => {
+          setShowOcclusionModal(false);
+          setPresetTopicName('');
+        }}
+        initialCourseName={selectedCourseName}
+        initialSubjectName={selectedSubjectName}
+        initialTopicName={presetTopicName}
+        academicStructure={academicStructure}
+        onSaveFlashcards={(newCards) => {
+          if (onSaveFlashcardsBatch) onSaveFlashcardsBatch(newCards);
+        }}
+        onToast={onToast}
+      />
     </div>
   );
 };

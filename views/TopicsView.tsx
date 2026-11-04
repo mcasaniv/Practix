@@ -490,28 +490,35 @@ const TopicsView: React.FC<TopicsViewProps> = ({
     onStartMixedQuiz(selected, mode, customTitle);
   };
 
-  const getTopicColorClasses = (topicName: string) => {
+  const getTopicColorClasses = (topicName: string, globalIndex?: number) => {
     const result = results[`${subjectName}|${topicName}`];
     const timesPracticed = result?.timesPracticed ?? (result && result.total > 0 ? 1 : 0);
     const isPracticed = timesPracticed > 0 && result && result.total > 0;
 
-    // Color gris si todavía no está practicado
+    let darkBg = "dark:bg-slate-900";
+    if (globalIndex === 0) {
+      darkBg = "dark:bg-[#001228]";
+    } else if (globalIndex === 2) {
+      darkBg = "dark:bg-[#000307]";
+    }
+
+    // Color estándar consistente con el resto de componentes
     if (!isPracticed) {
-      return "bg-gray-100/85 dark:bg-[#0f1424] border-gray-300/80 dark:border-slate-800 text-gray-700 dark:text-gray-300";
+      return `bg-white ${darkBg} border-gray-200 dark:border-slate-800 text-gray-800 dark:text-white hover:border-indigo-300 dark:hover:border-slate-700`;
     }
 
     const { score, total } = result;
 
     // Verde: Puntaje perfecto
     if (score === total) {
-      return "bg-emerald-50/70 dark:bg-emerald-950/30 border-emerald-300 dark:border-emerald-800 shadow-sm";
+      return `bg-white ${darkBg} border-emerald-300 dark:border-emerald-700/80 shadow-sm text-gray-800 dark:text-white hover:border-emerald-400`;
     }
     // Rojo: Inferior al 50% de aciertos
     if (score < total / 2) {
-      return "bg-rose-50/70 dark:bg-rose-950/30 border-rose-300 dark:border-rose-800 shadow-sm";
+      return `bg-white ${darkBg} border-rose-300 dark:border-rose-700/80 shadow-sm text-gray-800 dark:text-white hover:border-rose-400`;
     }
     // Amarillo / Ámbar: Aprobado (>= 50% y < 100%)
-    return "bg-amber-50/70 dark:bg-amber-950/30 border-amber-300 dark:border-amber-800 shadow-sm";
+    return `bg-white ${darkBg} border-amber-300 dark:border-amber-700/80 shadow-sm text-gray-800 dark:text-white hover:border-amber-400`;
   };
 
   const renderPracticeBadge = (topicName: string) => {
@@ -520,7 +527,7 @@ const TopicsView: React.FC<TopicsViewProps> = ({
 
     if (timesPracticed === 0 || !res || res.total === 0) {
       return (
-        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-gray-200/90 text-gray-600 dark:bg-slate-800 dark:text-gray-300 border border-gray-300 dark:border-slate-700">
+        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-gray-100 text-gray-600 dark:bg-slate-800 dark:text-white border border-gray-200 dark:border-slate-700">
           <span className="w-1.5 h-1.5 rounded-full bg-gray-400"></span>
           Sin practicar
         </span>
@@ -528,27 +535,27 @@ const TopicsView: React.FC<TopicsViewProps> = ({
     }
 
     const { score, total } = res;
-    let scoreBadgeStyle = "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border-amber-300 dark:border-amber-800";
+    let scoreBadgeStyle = "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-white border-amber-300 dark:border-amber-700";
 
     if (score === total && total > 0) {
-      scoreBadgeStyle = "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800";
+      scoreBadgeStyle = "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-white border-emerald-300 dark:border-emerald-700";
     } else if (score < total / 2) {
-      scoreBadgeStyle = "bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 border-rose-300 dark:border-rose-800";
+      scoreBadgeStyle = "bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-white border-rose-300 dark:border-rose-700";
     }
 
     return (
       <div className="flex flex-wrap items-center gap-1.5">
         {/* Contador de prácticas */}
-        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-black bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
-          <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-black bg-indigo-50 text-indigo-700 dark:bg-slate-800 dark:text-white border border-indigo-200 dark:border-slate-700">
+          <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5 text-indigo-500 dark:text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 10V3L4 14h7v7l9-11h-7z" />
           </svg>
-          <span>{timesPracticed} {timesPracticed === 1 ? 'práctica' : 'prácticas'}</span>
+          <span className="dark:text-white">{timesPracticed} {timesPracticed === 1 ? 'práctica' : 'prácticas'}</span>
         </span>
 
         {/* Fracción de aciertos */}
         <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-black border ${scoreBadgeStyle}`}>
-          <span>{score}/{total}</span>
+          <span className="dark:text-white">{score}/{total}</span>
         </span>
       </div>
     );
@@ -574,17 +581,17 @@ const TopicsView: React.FC<TopicsViewProps> = ({
     return (
       <div 
         key={topic.name}
-        className={`rounded-2xl border p-4 sm:p-5 flex flex-col md:flex-row items-start md:items-center gap-3.5 sm:gap-4 md:gap-6 hover:shadow-md transition-all ${getTopicColorClasses(topic.name)}`}
+        className={`rounded-2xl border p-4 sm:p-5 flex flex-col md:flex-row items-start md:items-center gap-3.5 sm:gap-4 md:gap-6 hover:shadow-md transition-all ${getTopicColorClasses(topic.name, globalIndex)}`}
       >
         {/* Left Section: Topic Number + Topic Title + Badges */}
         <div className="flex items-start gap-3 w-full md:w-auto flex-grow min-w-0">
-          <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center font-black text-base sm:text-lg shrink-0 border bg-indigo-50 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 border-indigo-100 dark:border-indigo-800">
+          <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center font-black text-base sm:text-lg shrink-0 border bg-indigo-50 dark:bg-slate-800 text-indigo-700 dark:text-white border-indigo-100 dark:border-slate-700">
             {topic.order === 999 ? '?' : topic.order}
           </div>
 
           <div className="flex-grow min-w-0 space-y-2">
             <div className="flex flex-wrap items-center gap-2">
-              <h4 className="text-base sm:text-lg font-black text-gray-800 dark:text-gray-100 break-words">{topic.name}</h4>
+              <h4 className="text-base sm:text-lg font-black text-gray-800 dark:text-white break-words">{topic.name}</h4>
               {renderPracticeBadge(topic.name)}
               {topic.processesList && topic.processesList.length > 0 && (
                 <div className="flex items-center gap-1 flex-wrap">
@@ -593,7 +600,7 @@ const TopicsView: React.FC<TopicsViewProps> = ({
                     return (
                       <span 
                         key={proc}
-                        className={`text-[10px] font-black px-2 py-0.5 rounded-md ${style.bg} ${style.text} border ${style.border}`}
+                        className={`text-[10px] font-black px-2 py-0.5 rounded-md ${style.bg} ${style.text} border ${style.border} dark:text-white`}
                         title={`Preguntas de este tema incluidas en ${proc}`}
                       >
                         {style.icon} {getProcessShortName(proc)}
@@ -608,27 +615,27 @@ const TopicsView: React.FC<TopicsViewProps> = ({
             {isOfficialExamView && (
               <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
                 {areasInTopic.map(a => (
-                  <span key={a} className="bg-purple-100 dark:bg-purple-950/80 text-purple-700 dark:text-purple-300 px-2 py-0.5 rounded-md font-black text-[10px] border border-purple-200 dark:border-purple-800/60">
+                  <span key={a} className="bg-purple-100 dark:bg-slate-800 text-purple-700 dark:text-white px-2 py-0.5 rounded-md font-black text-[10px] border border-purple-200 dark:border-slate-700">
                     Área {a}
                   </span>
                 ))}
                 {Array.from(subjectsMap.entries()).map(([subj, info]) => (
-                  <span key={subj} className="bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 px-2 py-0.5 rounded-md font-black text-[10px] border border-emerald-200 dark:border-emerald-800/60">
+                  <span key={subj} className="bg-emerald-100 dark:bg-slate-800 text-emerald-800 dark:text-white px-2 py-0.5 rounded-md font-black text-[10px] border border-emerald-200 dark:border-slate-700">
                     {subj} ({info.count}) {info.weight ? `• ${info.weight.toFixed(3)} pts` : ''}
                   </span>
                 ))}
                 {totalPoints > 0 && (
-                  <span className="bg-indigo-100 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 px-2 py-0.5 rounded-md font-mono font-black text-[10px] border border-indigo-200 dark:border-indigo-800/60">
+                  <span className="bg-indigo-100 dark:bg-slate-800 text-indigo-700 dark:text-white px-2 py-0.5 rounded-md font-mono font-black text-[10px] border border-indigo-200 dark:border-slate-700">
                     Total: {totalPoints.toFixed(2)} pts
                   </span>
                 )}
               </div>
             )}
 
-            <div className="flex flex-wrap items-center gap-2 text-xs text-gray-400 dark:text-indigo-300/80 font-medium">
-              <span>{topic.count} {topic.count === 1 ? 'pregunta' : 'preguntas'}</span>
+            <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500 dark:text-white/85 font-medium">
+              <span className="dark:text-white/85">{topic.count} {topic.count === 1 ? 'pregunta' : 'preguntas'}</span>
               {topic.week !== undefined && topic.week !== null && (
-                <span>• Semana {topic.week}</span>
+                <span className="dark:text-white/85">• Semana {topic.week}</span>
               )}
               {topic.areasList && topic.areasList.length > 0 && (
                 <div className="flex items-center gap-1 flex-wrap">
@@ -637,7 +644,7 @@ const TopicsView: React.FC<TopicsViewProps> = ({
                     return (
                       <span 
                         key={a}
-                        className={`text-[10px] font-black px-2 py-0.5 rounded-md ${badge.bg} ${badge.text} border ${badge.border}`}
+                        className={`text-[10px] font-black px-2 py-0.5 rounded-md ${badge.bg} ${badge.text} border ${badge.border} dark:text-white`}
                         title={`Práctica para el área ${a}`}
                       >
                         {badge.icon} {a === 'Todas' ? 'Común' : a}
@@ -651,7 +658,7 @@ const TopicsView: React.FC<TopicsViewProps> = ({
         </div>
 
         {/* Actions Section */}
-        <div className="flex items-center gap-2 w-full md:w-auto pt-2.5 md:pt-0 border-t md:border-t-0 border-gray-100 dark:border-indigo-900/50 justify-between md:justify-end shrink-0 flex-wrap sm:flex-nowrap">
+        <div className="flex items-center gap-2 w-full md:w-auto pt-2.5 md:pt-0 border-t md:border-t-0 border-gray-100 dark:border-slate-800 justify-between md:justify-end shrink-0 flex-wrap sm:flex-nowrap">
           {/* Botón para añadir más materias a este examen */}
           {isOfficialExamView && onSaveQuestions && (
             <button
@@ -659,7 +666,7 @@ const TopicsView: React.FC<TopicsViewProps> = ({
                 setUploadModalInitialTopic(topic.name);
                 setIsUploadModalOpen(true);
               }}
-              className="bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/80 dark:hover:bg-indigo-900 text-indigo-700 dark:text-indigo-200 border border-indigo-200 dark:border-indigo-800/80 px-3 py-2.5 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1.5 min-h-[44px] shadow-sm active:scale-95"
+              className="bg-indigo-50 hover:bg-indigo-100 dark:bg-slate-800 dark:hover:bg-slate-700 text-indigo-700 dark:text-white border border-indigo-200 dark:border-slate-700 px-3 py-2.5 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-1.5 min-h-[44px] shadow-sm active:scale-95"
               title="Añadir preguntas de otra materia a este mismo examen"
             >
               <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 text-indigo-600 dark:text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -670,11 +677,13 @@ const TopicsView: React.FC<TopicsViewProps> = ({
           )}
 
           {/* Move Up/Down */}
-          <div className="flex border border-indigo-200 dark:border-indigo-800/80 rounded-xl overflow-hidden bg-gray-50/70 dark:bg-[#030d42] shrink-0">
+          <div className={`flex border border-gray-200 dark:border-slate-700 rounded-xl overflow-hidden ${
+            globalIndex === 1 ? 'bg-gray-50 dark:bg-[#000c19]' : 'bg-gray-50 dark:bg-slate-800'
+          } shrink-0`}>
             <button 
               onClick={() => onMoveTopic(topic.name, 'UP')}
               disabled={globalIndex === 0}
-              className="p-2.5 sm:p-2 min-h-[44px] min-w-[38px] flex items-center justify-center hover:bg-indigo-100 dark:hover:bg-indigo-900 disabled:opacity-30 disabled:hover:bg-transparent transition-colors text-indigo-700 dark:text-indigo-200"
+              className="p-2.5 sm:p-2 min-h-[44px] min-w-[38px] flex items-center justify-center hover:bg-gray-100 dark:hover:bg-slate-700 disabled:opacity-30 disabled:hover:bg-transparent transition-colors text-gray-600 dark:text-white"
               title="Mover Arriba"
               aria-label="Mover arriba"
             >
@@ -685,7 +694,7 @@ const TopicsView: React.FC<TopicsViewProps> = ({
             <button 
               onClick={() => onMoveTopic(topic.name, 'DOWN')}
               disabled={globalIndex === topics.length - 1}
-              className="p-2.5 sm:p-2 min-h-[44px] min-w-[38px] flex items-center justify-center border-l border-indigo-200 dark:border-indigo-800 hover:bg-indigo-100 dark:hover:bg-indigo-900 disabled:opacity-30 disabled:hover:bg-transparent transition-colors text-indigo-700 dark:text-indigo-200"
+              className="p-2.5 sm:p-2 min-h-[44px] min-w-[38px] flex items-center justify-center border-l border-gray-200 dark:border-slate-700 hover:bg-gray-100 dark:hover:bg-slate-700 disabled:opacity-30 disabled:hover:bg-transparent transition-colors text-gray-600 dark:text-white"
               title="Mover Abajo"
               aria-label="Mover abajo"
             >
@@ -739,30 +748,30 @@ const TopicsView: React.FC<TopicsViewProps> = ({
   return (
     <div className="space-y-3.5 sm:space-y-4">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white dark:bg-[#020b38] border border-gray-100 dark:border-indigo-900/60 rounded-2xl sm:rounded-3xl p-4 sm:p-5 md:p-6 shadow-sm">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800 rounded-2xl sm:rounded-3xl p-4 sm:p-5 md:p-6 shadow-sm">
         <div>
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-indigo-600 dark:text-indigo-400 font-bold uppercase tracking-widest text-xs">Materia</span>
             {courseName && (
-              <span className="text-gray-400 dark:text-indigo-300/60 text-xs">• {courseName}</span>
+              <span className="text-gray-400 dark:text-white/80 text-xs">• {courseName}</span>
             )}
             {effectiveProcess && (
-              <span className={`text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider ${getProcessBadgeStyle(effectiveProcess).bg} ${getProcessBadgeStyle(effectiveProcess).text} border ${getProcessBadgeStyle(effectiveProcess).border}`}>
+              <span className={`text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider ${getProcessBadgeStyle(effectiveProcess).bg} ${getProcessBadgeStyle(effectiveProcess).text} border ${getProcessBadgeStyle(effectiveProcess).border} dark:text-white`}>
                 {effectiveProcess.replace(' 2027', '')}
               </span>
             )}
           </div>
-          <h2 className="text-2xl sm:text-3xl font-black text-gray-800 dark:text-gray-100 mt-1">{subjectName}</h2>
+          <h2 className="text-2xl sm:text-3xl font-black text-gray-800 dark:text-white mt-1">{subjectName}</h2>
           {subjectName === 'Exámenes Rendidos' || subjectName === 'Exámenes Simulacros' ? (
-            <p className="text-xs text-gray-400 dark:text-indigo-300/80 mt-1">
+            <p className="text-xs text-gray-400 dark:text-white/85 mt-1">
               {savedExams.length} {savedExams.length === 1 ? 'examen registrado' : 'exámenes registrados'} • Historial y resoluciones de tus simulacros
             </p>
           ) : subjectName === 'Simulacros Oficiales' ? (
-            <p className="text-xs text-gray-400 dark:text-indigo-300/80 mt-1">
+            <p className="text-xs text-gray-400 dark:text-white/85 mt-1">
               {filteredQuestions.length} preguntas de exámenes oficiales {effectiveProcess ? `en ${effectiveProcess}` : ''} distribuidas en {topics.length} mazos oficiales
             </p>
           ) : (
-            <p className="text-xs text-gray-400 dark:text-indigo-300/80 mt-1">
+            <p className="text-xs text-gray-400 dark:text-white/85 mt-1">
               {filteredQuestions.length} preguntas disponibles {effectiveProcess ? `en ${effectiveProcess}` : 'en total'} distribuidas en {topics.length} temas
             </p>
           )}
@@ -806,11 +815,11 @@ const TopicsView: React.FC<TopicsViewProps> = ({
 
       {/* Panel Discreto y Desplegable: Filtros (Área y Proceso), Banco de Errores y Examen Mixto */}
       {!((subjectName === 'Exámenes Rendidos' || subjectName === 'Exámenes Simulacros') && questions.length === 0) && (
-        <div className="bg-white/90 dark:bg-[#020b38]/90 border border-gray-200/80 dark:border-indigo-900/50 rounded-2xl p-2.5 sm:p-3 shadow-2xs transition-all">
+        <div className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-2xl p-2.5 sm:p-3 shadow-2xs transition-all">
           {/* Barra Resumen Compacta (Siempre visible de forma discreta) */}
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex items-center gap-1.5 flex-wrap">
-              <span className="text-[11px] font-black uppercase text-gray-500 dark:text-indigo-300 tracking-wider flex items-center gap-1 mr-0.5">
+              <span className="text-[11px] font-black uppercase text-gray-500 dark:text-white tracking-wider flex items-center gap-1 mr-0.5">
                 <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
                 </svg>
@@ -824,7 +833,7 @@ const TopicsView: React.FC<TopicsViewProps> = ({
                   <button
                     type="button"
                     onClick={toggleToolsExpanded}
-                    className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold border transition-all cursor-pointer ${b.bg} ${b.text} ${b.border} hover:opacity-90`}
+                    className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold border transition-all cursor-pointer ${b.bg} ${b.text} ${b.border} dark:text-white hover:opacity-90`}
                     title="Clic para desplegar y cambiar filtro de área"
                   >
                     <span className="text-xs">{b.icon}</span>
@@ -843,8 +852,8 @@ const TopicsView: React.FC<TopicsViewProps> = ({
                     onClick={toggleToolsExpanded}
                     className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold border transition-all cursor-pointer ${
                       isAll 
-                        ? 'bg-gray-100/90 dark:bg-slate-800 text-gray-700 dark:text-gray-200 border-gray-200 dark:border-slate-700' 
-                        : `${pStyle?.bg} ${pStyle?.text} ${pStyle?.border}`
+                        ? 'bg-gray-100/90 dark:bg-slate-800 text-gray-700 dark:text-white border-gray-200 dark:border-slate-700' 
+                        : `${pStyle?.bg} ${pStyle?.text} ${pStyle?.border} dark:text-white`
                     } hover:opacity-90`}
                     title="Clic para desplegar y cambiar filtro de proceso"
                   >
@@ -860,7 +869,7 @@ const TopicsView: React.FC<TopicsViewProps> = ({
                   <button
                     type="button"
                     onClick={toggleToolsExpanded}
-                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-black bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-200/80 dark:border-rose-900/60 cursor-pointer hover:bg-rose-100 dark:hover:bg-rose-900/40 transition-all"
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-black bg-rose-50 dark:bg-rose-950/80 text-rose-700 dark:text-white border border-rose-200/80 dark:border-rose-900/60 cursor-pointer hover:bg-rose-100 dark:hover:bg-rose-900/40 transition-all"
                     title="Clic para desplegar banco de errores"
                   >
                     <span>⚠️</span>
@@ -868,7 +877,7 @@ const TopicsView: React.FC<TopicsViewProps> = ({
                   </button>
                 ) : (
                   <span 
-                    className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-bold bg-emerald-50/80 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-900/40 hidden md:inline-flex"
+                    className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-bold bg-emerald-50/80 dark:bg-emerald-950/80 text-emerald-700 dark:text-white border border-emerald-200/60 dark:border-emerald-900/40 hidden md:inline-flex"
                     title="No tienes errores pendientes en esta materia"
                   >
                     <span>✓ 0 fallos</span>
@@ -881,7 +890,7 @@ const TopicsView: React.FC<TopicsViewProps> = ({
                 <button
                   type="button"
                   onClick={toggleToolsExpanded}
-                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 border border-indigo-200/60 dark:border-indigo-800/50 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 transition-all cursor-pointer hidden sm:inline-flex"
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-indigo-50 dark:bg-indigo-950/80 text-indigo-700 dark:text-white border border-indigo-200/60 dark:border-indigo-800/50 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 transition-all cursor-pointer hidden sm:inline-flex"
                   title="Clic para configurar Examen Mixto"
                 >
                   <span>⚡</span>
@@ -914,7 +923,7 @@ const TopicsView: React.FC<TopicsViewProps> = ({
                 className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs ${
                   isToolsExpanded 
                     ? 'bg-indigo-600 text-white shadow-xs' 
-                    : 'bg-indigo-50/90 dark:bg-indigo-950/70 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 border border-indigo-200/80 dark:border-indigo-800/60'
+                    : 'bg-indigo-50/90 dark:bg-slate-800 text-indigo-700 dark:text-white hover:bg-indigo-100 dark:hover:bg-slate-700 border border-indigo-200/80 dark:border-slate-700'
                 }`}
                 title={isToolsExpanded ? 'Ocultar panel desplegable' : 'Desplegar filtros, banco de errores y examen mixto'}
               >
@@ -934,18 +943,18 @@ const TopicsView: React.FC<TopicsViewProps> = ({
 
           {/* Panel Desplegable con Controles Completos */}
           {isToolsExpanded && (
-            <div className="pt-3 mt-3 border-t border-gray-200/70 dark:border-indigo-900/40 space-y-3.5 animate-fadeIn">
+            <div className="pt-3 mt-3 border-t border-gray-200/70 dark:border-slate-800 space-y-3.5 animate-fadeIn">
               {/* Sección 1: Filtros de Área y Proceso */}
-              <div className="bg-gray-50/80 dark:bg-slate-900/60 rounded-xl p-3 border border-gray-200/60 dark:border-indigo-900/30 space-y-2.5">
+              <div className="bg-gray-50/80 dark:bg-slate-800/60 rounded-xl p-3 border border-gray-200/60 dark:border-slate-700/60 space-y-2.5">
                 {/* Área Filter Row */}
                 <div className="flex flex-wrap items-center justify-between gap-1.5">
                   <div className="flex items-center gap-1.5 shrink-0">
                     <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 shrink-0"></span>
-                    <span className="text-[11px] font-black uppercase text-gray-700 dark:text-indigo-200 tracking-wider">
+                    <span className="text-[11px] font-black uppercase text-gray-700 dark:text-white tracking-wider">
                       Área de Postulación:
                     </span>
                     {selectedArea && (
-                      <span className="text-[10px] text-gray-400 dark:text-indigo-300/70 hidden sm:inline">
+                      <span className="text-[10px] text-gray-400 dark:text-white/80 hidden sm:inline">
                         (Tu área: {selectedArea})
                       </span>
                     )}
@@ -965,14 +974,14 @@ const TopicsView: React.FC<TopicsViewProps> = ({
                           onClick={() => setActiveAreaFilter(areaKey)}
                           className={`py-0.5 px-2 sm:px-2.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1 cursor-pointer min-h-[28px] ${
                             isSelected
-                              ? `${badge.bg} ${badge.text} ${badge.border} border font-black shadow-2xs`
-                              : 'bg-white/80 dark:bg-[#030d42]/80 text-gray-600 dark:text-indigo-300 hover:bg-gray-100 dark:hover:bg-indigo-950/40 border border-gray-200/50 dark:border-indigo-900/40'
+                              ? `${badge.bg} ${badge.text} ${badge.border} border font-black shadow-2xs dark:text-white`
+                              : 'bg-white dark:bg-slate-800 text-gray-600 dark:text-white hover:bg-gray-100 dark:hover:bg-slate-700 border border-gray-200/50 dark:border-slate-700'
                           }`}
                           title={`Filtrar prácticas por ${areaKey}`}
                         >
                           <span className="text-xs">{badge.icon}</span>
                           <span>{areaKey === 'Todas' ? 'Todas' : areaKey}</span>
-                          <span className={`text-[10px] px-1 py-0.2 rounded-md ${isSelected ? 'bg-black/10 dark:bg-white/20' : 'bg-gray-200/70 dark:bg-indigo-950 text-gray-600 dark:text-indigo-300'}`}>
+                          <span className={`text-[10px] px-1 py-0.2 rounded-md ${isSelected ? 'bg-black/10 dark:bg-white/20' : 'bg-gray-200/70 dark:bg-slate-700 text-gray-600 dark:text-white'}`}>
                             {count}
                           </span>
                           {isUserArea && isSelected && (
@@ -987,12 +996,12 @@ const TopicsView: React.FC<TopicsViewProps> = ({
                 </div>
 
                 {/* Proceso Filter Row */}
-                <div className="flex flex-wrap items-center justify-between gap-1.5 pt-2 border-t border-gray-200/50 dark:border-indigo-900/30">
+                <div className="flex flex-wrap items-center justify-between gap-1.5 pt-2 border-t border-gray-200/50 dark:border-slate-700/60">
                   <div className="flex items-center gap-1.5 shrink-0">
                     <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
                     </svg>
-                    <span className="text-[11px] font-black uppercase text-gray-700 dark:text-indigo-200 tracking-wider">
+                    <span className="text-[11px] font-black uppercase text-gray-700 dark:text-white tracking-wider">
                       Proceso de Admisión:
                     </span>
                   </div>
@@ -1004,11 +1013,11 @@ const TopicsView: React.FC<TopicsViewProps> = ({
                       className={`py-0.5 px-2 sm:px-2.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1 cursor-pointer min-h-[28px] ${
                         effectiveProcess === ''
                           ? 'bg-indigo-600 text-white shadow-2xs font-black'
-                          : 'bg-white/80 dark:bg-[#030d42]/80 text-gray-600 dark:text-indigo-300 hover:bg-gray-100 dark:hover:bg-indigo-950/40 border border-gray-200/50 dark:border-indigo-900/40'
+                          : 'bg-white dark:bg-slate-800 text-gray-600 dark:text-white hover:bg-gray-100 dark:hover:bg-slate-700 border border-gray-200/50 dark:border-slate-700'
                       }`}
                     >
                       <span>Todos</span>
-                      <span className={`text-[10px] px-1 py-0.2 rounded-md ${effectiveProcess === '' ? 'bg-white/20 text-white' : 'bg-gray-200/70 dark:bg-indigo-950 text-gray-600 dark:text-indigo-300'}`}>
+                      <span className={`text-[10px] px-1 py-0.2 rounded-md ${effectiveProcess === '' ? 'bg-white/20 text-white' : 'bg-gray-200/70 dark:bg-slate-700 text-gray-600 dark:text-white'}`}>
                         {questions.length}
                       </span>
                     </button>
@@ -1026,8 +1035,8 @@ const TopicsView: React.FC<TopicsViewProps> = ({
                           onClick={() => handleSelectProcess(isSelected ? '' : proc)}
                           className={`py-0.5 px-2 sm:px-2.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1 cursor-pointer min-h-[28px] ${
                             isSelected
-                              ? `${style.bg} ${style.text} ${style.border} border font-black shadow-2xs`
-                              : 'bg-white/80 dark:bg-[#030d42]/80 text-gray-600 dark:text-indigo-300 hover:bg-gray-100 dark:hover:bg-indigo-950/40 border border-gray-200/50 dark:border-indigo-900/40'
+                              ? `${style.bg} ${style.text} ${style.border} border font-black shadow-2xs dark:text-white`
+                              : 'bg-white dark:bg-slate-800 text-gray-600 dark:text-white hover:bg-gray-100 dark:hover:bg-slate-700 border border-gray-200/50 dark:border-slate-700'
                           }`}
                           title={`Filtrar por proceso ${proc} (Se recordará en tus prácticas)`}
                         >
@@ -1035,7 +1044,7 @@ const TopicsView: React.FC<TopicsViewProps> = ({
                           <span className={`text-[10px] px-1 py-0.2 rounded-md ${
                             isSelected 
                               ? 'bg-black/10 dark:bg-white/20 text-current' 
-                              : 'bg-gray-200/70 dark:bg-indigo-950 text-gray-600 dark:text-indigo-300'
+                              : 'bg-gray-200/70 dark:bg-slate-700 text-gray-600 dark:text-white'
                           }`}>
                             {count}
                           </span>
@@ -1049,13 +1058,13 @@ const TopicsView: React.FC<TopicsViewProps> = ({
               {/* Sección 2: Banco de Errores */}
               {questions.length > 0 && (
                 mistakeQuestions.length === 0 ? (
-                  <div className="bg-emerald-50/40 dark:bg-[#031510]/40 border border-emerald-200/50 dark:border-emerald-900/40 rounded-xl px-3 py-2 flex flex-wrap items-center justify-between gap-2 shadow-2xs">
+                  <div className="bg-emerald-50/40 dark:bg-slate-800/60 border border-emerald-200/50 dark:border-slate-700 rounded-xl px-3 py-2 flex flex-wrap items-center justify-between gap-2 shadow-2xs">
                     <div className="flex items-center gap-2 text-xs">
                       <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0"></span>
-                      <span className="font-bold text-[11px] uppercase tracking-wider text-emerald-900 dark:text-emerald-200">
+                      <span className="font-bold text-[11px] uppercase tracking-wider text-emerald-900 dark:text-white">
                         Banco de Errores:
                       </span>
-                      <span className="text-[11px] text-emerald-700/85 dark:text-emerald-400/85">
+                      <span className="text-[11px] text-emerald-700/85 dark:text-white/80">
                         0 fallos pendientes • ¡Estás al día en {subjectName}!
                       </span>
                     </div>
@@ -1071,7 +1080,7 @@ const TopicsView: React.FC<TopicsViewProps> = ({
                     )}
                   </div>
                 ) : (
-                  <div className="bg-emerald-50/60 dark:bg-[#041c14]/50 border border-emerald-200/80 dark:border-emerald-800/60 rounded-xl px-3 sm:px-4 py-2 sm:py-2.5 flex flex-col md:flex-row items-start md:items-center justify-between gap-2.5 shadow-2xs">
+                  <div className="bg-emerald-50/60 dark:bg-slate-800/60 border border-emerald-200/80 dark:border-slate-700 rounded-xl px-3 sm:px-4 py-2 sm:py-2.5 flex flex-col md:flex-row items-start md:items-center justify-between gap-2.5 shadow-2xs">
                     <div className="min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="px-2 py-0.5 bg-emerald-600 text-white rounded-md text-[10px] font-black uppercase tracking-wider flex items-center gap-1 shadow-2xs">
@@ -1080,7 +1089,7 @@ const TopicsView: React.FC<TopicsViewProps> = ({
                           </svg>
                           <span>Banco de Errores</span>
                         </span>
-                        <span className="text-xs font-black text-gray-800 dark:text-gray-100">
+                        <span className="text-xs font-black text-gray-800 dark:text-white">
                           {mistakeQuestions.length} {mistakeQuestions.length === 1 ? 'pregunta por reforzar' : 'preguntas por reforzar'}
                         </span>
                         {onClearSubjectMistakes && (
@@ -1094,7 +1103,7 @@ const TopicsView: React.FC<TopicsViewProps> = ({
                           </button>
                         )}
                       </div>
-                      <p className="text-[11px] text-gray-500 dark:text-emerald-300/80 mt-0.5 truncate">
+                      <p className="text-[11px] text-gray-500 dark:text-white/80 mt-0.5 truncate">
                         Refuerza tus preguntas falladas de {subjectName}; al acertarlas saldrán de este banco.
                       </p>
                     </div>
@@ -1102,14 +1111,14 @@ const TopicsView: React.FC<TopicsViewProps> = ({
                     <div className="flex items-center gap-1.5 w-full md:w-auto shrink-0 justify-end flex-wrap sm:flex-nowrap">
                       {mistakeQuestions.length > 5 && (
                         <div className="flex items-center gap-1">
-                          <span className="text-[10px] font-bold text-emerald-800 dark:text-emerald-300 uppercase">Cant:</span>
+                          <span className="text-[10px] font-bold text-emerald-800 dark:text-white uppercase">Cant:</span>
                           <input 
                             type="number" 
                             min="1" 
                             max={mistakeQuestions.length}
                             value={mistakesCountLimit}
                             onChange={(e) => setMistakesCountLimit(parseInt(e.target.value) || 1)}
-                            className="w-14 px-1.5 py-1 rounded-lg border border-emerald-300 dark:border-emerald-800/80 bg-white dark:bg-[#020b38] text-gray-800 dark:text-gray-100 font-bold focus:ring-1 focus:ring-emerald-500 outline-none text-center text-xs"
+                            className="w-14 px-1.5 py-1 rounded-lg border border-emerald-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-gray-800 dark:text-white font-bold focus:ring-1 focus:ring-emerald-500 outline-none text-center text-xs"
                             title="Cantidad de preguntas"
                           />
                         </div>
@@ -1144,22 +1153,22 @@ const TopicsView: React.FC<TopicsViewProps> = ({
 
               {/* Sección 3: Examen Mixto */}
               {questions.length > 0 && (
-                <div className="bg-indigo-50/70 dark:bg-indigo-950/25 border border-indigo-100/90 dark:border-indigo-800/40 rounded-xl px-3 sm:px-4 py-2.5 space-y-2.5 shadow-2xs">
+                <div className="bg-indigo-50/70 dark:bg-slate-800/60 border border-indigo-100/90 dark:border-slate-700 rounded-xl px-3 sm:px-4 py-2.5 space-y-2.5 shadow-2xs">
                   {/* Top row: Title, badge and summary description */}
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="flex items-center gap-1.5 text-xs sm:text-sm font-black text-indigo-900 dark:text-indigo-100">
+                      <span className="flex items-center gap-1.5 text-xs sm:text-sm font-black text-indigo-900 dark:text-white">
                         <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 text-indigo-600 dark:text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
                         </svg>
                         <span>Examen Mixto</span>
                       </span>
                       {renderPracticeBadge("Examen Mixto")}
-                      <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-indigo-100 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200/80 dark:border-indigo-800/50">
+                      <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-indigo-100 dark:bg-slate-800 text-indigo-700 dark:text-white border border-indigo-200/80 dark:border-slate-700">
                         {calculatedMixedQuestions.length} {calculatedMixedQuestions.length === 1 ? 'pregunta' : 'preguntas'} listas
                       </span>
                     </div>
-                    <p className="text-indigo-700/70 dark:text-indigo-300/70 text-[11px]">
+                    <p className="text-indigo-700/70 dark:text-white/80 text-[11px]">
                       {mixedDistMode === 'PER_TOPIC' && `${perTopicCount} de cada uno de los ${topics.length} temas`}
                       {mixedDistMode === 'PER_WEEK' && `${perWeekCount} de cada una de las ${availableWeeks.length || 'todas las'} semanas`}
                       {mixedDistMode === 'TOTAL' && `Aleatorio global entre todos los temas`}
@@ -1167,16 +1176,16 @@ const TopicsView: React.FC<TopicsViewProps> = ({
                   </div>
 
                   {/* Controls row: Selector de modo, control de cantidad y botones de inicio */}
-                  <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-2.5 pt-1.5 border-t border-indigo-100/60 dark:border-indigo-900/30">
+                  <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-2.5 pt-1.5 border-t border-indigo-100/60 dark:border-slate-700/60">
                     {/* Mode Segmented Selector */}
-                    <div className="flex items-center gap-1 bg-white/70 dark:bg-slate-900/60 p-0.5 rounded-lg border border-indigo-100 dark:border-indigo-900/40 shrink-0">
+                    <div className="flex items-center gap-1 bg-white/70 dark:bg-slate-900/60 p-0.5 rounded-lg border border-indigo-100 dark:border-slate-700 shrink-0">
                       <button
                         type="button"
                         onClick={() => handleSelectDistMode('PER_TOPIC')}
                         className={`px-2.5 py-1 text-[11px] font-black rounded-md transition-all flex items-center gap-1 cursor-pointer ${
                           mixedDistMode === 'PER_TOPIC'
                             ? 'bg-indigo-600 text-white shadow-xs'
-                            : 'text-gray-600 dark:text-gray-300 hover:text-indigo-600 dark:hover:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-slate-800/60'
+                            : 'text-gray-600 dark:text-white hover:text-indigo-600 dark:hover:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-slate-800/60'
                         }`}
                         title="Genera un examen con 1 o más preguntas de cada tema para un repaso equilibrado"
                       >
@@ -1189,13 +1198,13 @@ const TopicsView: React.FC<TopicsViewProps> = ({
                         className={`px-2.5 py-1 text-[11px] font-black rounded-md transition-all flex items-center gap-1 cursor-pointer ${
                           mixedDistMode === 'PER_WEEK'
                             ? 'bg-indigo-600 text-white shadow-xs'
-                            : 'text-gray-600 dark:text-gray-300 hover:text-indigo-600 dark:hover:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-slate-800/60'
+                            : 'text-gray-600 dark:text-white hover:text-indigo-600 dark:hover:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-slate-800/60'
                         }`}
                         title="Genera un examen con 1 o más preguntas de cada semana"
                       >
                         <span>1+ por Semana</span>
                         {availableWeeks.length > 0 && (
-                          <span className={`text-[9px] px-1 rounded ${mixedDistMode === 'PER_WEEK' ? 'bg-indigo-800/70 text-indigo-100' : 'bg-gray-200 dark:bg-slate-800 text-gray-700 dark:text-gray-300'}`}>
+                          <span className={`text-[9px] px-1 rounded ${mixedDistMode === 'PER_WEEK' ? 'bg-indigo-800/70 text-indigo-100' : 'bg-gray-200 dark:bg-slate-700 text-gray-700 dark:text-white'}`}>
                             {availableWeeks.length}
                           </span>
                         )}
@@ -1207,7 +1216,7 @@ const TopicsView: React.FC<TopicsViewProps> = ({
                         className={`px-2.5 py-1 text-[11px] font-black rounded-md transition-all flex items-center gap-1 cursor-pointer ${
                           mixedDistMode === 'TOTAL'
                             ? 'bg-indigo-600 text-white shadow-xs'
-                            : 'text-gray-600 dark:text-gray-300 hover:text-indigo-600 dark:hover:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-slate-800/60'
+                            : 'text-gray-600 dark:text-white hover:text-indigo-600 dark:hover:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-slate-800/60'
                         }`}
                         title="Selecciona una cantidad fija aleatoria de todas las preguntas"
                       >
@@ -1218,24 +1227,24 @@ const TopicsView: React.FC<TopicsViewProps> = ({
                     {/* Stepper / Count Input depending on mode */}
                     <div className="flex items-center gap-2 justify-between md:justify-end flex-wrap sm:flex-nowrap">
                       {mixedDistMode === 'PER_TOPIC' && (
-                        <div className="flex items-center gap-1.5 bg-white/80 dark:bg-slate-900/60 px-2 py-0.5 rounded-lg border border-indigo-100 dark:border-indigo-900/40">
-                          <span className="text-[10px] font-black text-indigo-800 dark:text-indigo-300 uppercase">Por Tema:</span>
+                        <div className="flex items-center gap-1.5 bg-white/80 dark:bg-slate-900/60 px-2 py-0.5 rounded-lg border border-indigo-100 dark:border-slate-700">
+                          <span className="text-[10px] font-black text-indigo-800 dark:text-white uppercase">Por Tema:</span>
                           <div className="flex items-center">
                             <button
                               type="button"
                               onClick={() => handleUpdatePerTopicCount(perTopicCount - 1)}
                               disabled={perTopicCount <= 1}
-                              className="w-5 h-5 rounded flex items-center justify-center text-xs font-black text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 disabled:opacity-30 disabled:cursor-not-allowed"
+                              className="w-5 h-5 rounded flex items-center justify-center text-xs font-black text-indigo-700 dark:text-white hover:bg-indigo-100 dark:hover:bg-slate-800 disabled:opacity-30 disabled:cursor-not-allowed"
                             >
                               -
                             </button>
-                            <span className="w-7 text-center text-xs font-black text-indigo-950 dark:text-indigo-100 font-mono">
+                            <span className="w-7 text-center text-xs font-black text-indigo-950 dark:text-white font-mono">
                               {perTopicCount}
                             </span>
                             <button
                               type="button"
                               onClick={() => handleUpdatePerTopicCount(perTopicCount + 1)}
-                              className="w-5 h-5 rounded flex items-center justify-center text-xs font-black text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/60"
+                              className="w-5 h-5 rounded flex items-center justify-center text-xs font-black text-indigo-700 dark:text-white hover:bg-indigo-100 dark:hover:bg-slate-800"
                             >
                               +
                             </button>
@@ -1244,24 +1253,24 @@ const TopicsView: React.FC<TopicsViewProps> = ({
                       )}
 
                       {mixedDistMode === 'PER_WEEK' && (
-                        <div className="flex items-center gap-1.5 bg-white/80 dark:bg-slate-900/60 px-2 py-0.5 rounded-lg border border-indigo-100 dark:border-indigo-900/40">
-                          <span className="text-[10px] font-black text-indigo-800 dark:text-indigo-300 uppercase">Por Semana:</span>
+                        <div className="flex items-center gap-1.5 bg-white/80 dark:bg-slate-900/60 px-2 py-0.5 rounded-lg border border-indigo-100 dark:border-slate-700">
+                          <span className="text-[10px] font-black text-indigo-800 dark:text-white uppercase">Por Semana:</span>
                           <div className="flex items-center">
                             <button
                               type="button"
                               onClick={() => handleUpdatePerWeekCount(perWeekCount - 1)}
                               disabled={perWeekCount <= 1}
-                              className="w-5 h-5 rounded flex items-center justify-center text-xs font-black text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 disabled:opacity-30 disabled:cursor-not-allowed"
+                              className="w-5 h-5 rounded flex items-center justify-center text-xs font-black text-indigo-700 dark:text-white hover:bg-indigo-100 dark:hover:bg-slate-800 disabled:opacity-30 disabled:cursor-not-allowed"
                             >
                               -
                             </button>
-                            <span className="w-7 text-center text-xs font-black text-indigo-950 dark:text-indigo-100 font-mono">
+                            <span className="w-7 text-center text-xs font-black text-indigo-950 dark:text-white font-mono">
                               {perWeekCount}
                             </span>
                             <button
                               type="button"
                               onClick={() => handleUpdatePerWeekCount(perWeekCount + 1)}
-                              className="w-5 h-5 rounded flex items-center justify-center text-xs font-black text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/60"
+                              className="w-5 h-5 rounded flex items-center justify-center text-xs font-black text-indigo-700 dark:text-white hover:bg-indigo-100 dark:hover:bg-slate-800"
                             >
                               +
                             </button>
@@ -1270,15 +1279,15 @@ const TopicsView: React.FC<TopicsViewProps> = ({
                       )}
 
                       {mixedDistMode === 'TOTAL' && (
-                        <div className="flex items-center gap-1.5 bg-white/80 dark:bg-slate-900/60 px-2 py-0.5 rounded-lg border border-indigo-100 dark:border-indigo-900/40">
-                          <span className="text-[10px] font-black text-indigo-800 dark:text-indigo-300 uppercase">Total:</span>
+                        <div className="flex items-center gap-1.5 bg-white/80 dark:bg-slate-900/60 px-2 py-0.5 rounded-lg border border-indigo-100 dark:border-slate-700">
+                          <span className="text-[10px] font-black text-indigo-800 dark:text-white uppercase">Total:</span>
                           <input 
                             type="number" 
                             min="1" 
                             max={filteredQuestions.length}
                             value={mixedCount}
                             onChange={(e) => setMixedCount(parseInt(e.target.value) || 1)}
-                            className="w-14 px-1 py-0.5 rounded border border-indigo-200 dark:border-indigo-800/80 bg-white dark:bg-[#020b38] text-gray-800 dark:text-gray-100 font-bold focus:ring-1 focus:ring-indigo-500 outline-none text-center text-xs"
+                            className="w-14 px-1 py-0.5 rounded border border-indigo-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-gray-800 dark:text-white font-bold focus:ring-1 focus:ring-indigo-500 outline-none text-center text-xs"
                           />
                         </div>
                       )}
@@ -1317,7 +1326,7 @@ const TopicsView: React.FC<TopicsViewProps> = ({
                 <button
                   type="button"
                   onClick={toggleToolsExpanded}
-                  className="text-xs font-bold text-gray-500 dark:text-indigo-300/80 hover:text-indigo-600 dark:hover:text-indigo-200 transition-colors py-1 px-3 rounded-lg flex items-center gap-1 cursor-pointer"
+                  className="text-xs font-bold text-gray-500 dark:text-white/80 hover:text-indigo-600 dark:hover:text-white transition-colors py-1 px-3 rounded-lg flex items-center gap-1 cursor-pointer"
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 15l7-7 7 7" />
@@ -1517,8 +1526,8 @@ const TopicsView: React.FC<TopicsViewProps> = ({
       {/* Topic List */}
       {topics.length === 0 ? (
         subjectName === 'Simulacros Oficiales' ? (
-          <div className="bg-gradient-to-br from-indigo-50/90 via-purple-50/50 to-white dark:from-[#020b38] dark:via-[#01093a] dark:to-[#020b38] rounded-3xl border-2 border-dashed border-indigo-200 dark:border-indigo-800/80 p-8 sm:p-12 text-center shadow-sm">
-            <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-indigo-600/10 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400 flex items-center justify-center border border-indigo-200 dark:border-indigo-800">
+          <div className="bg-gradient-to-br from-indigo-50/90 via-purple-50/50 to-white dark:from-slate-900 dark:via-slate-900 dark:to-slate-900 rounded-3xl border-2 border-dashed border-indigo-200 dark:border-slate-800 p-8 sm:p-12 text-center shadow-sm">
+            <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-indigo-600/10 dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 flex items-center justify-center border border-indigo-200 dark:border-slate-700">
               <svg xmlns="http://www.w3.org/2000/svg" className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
               </svg>
@@ -1526,7 +1535,7 @@ const TopicsView: React.FC<TopicsViewProps> = ({
             <h3 className="text-xl sm:text-2xl font-black text-gray-900 dark:text-white mb-2">
               Aún no hay preguntas de exámenes oficiales subidas
             </h3>
-            <p className="text-gray-500 dark:text-indigo-200/80 text-xs sm:text-sm max-w-lg mx-auto mb-6 leading-relaxed">
+            <p className="text-gray-500 dark:text-white/80 text-xs sm:text-sm max-w-lg mx-auto mb-6 leading-relaxed">
               Sube preguntas de exámenes de admisión anteriores (Ceprunsa u Ordinario). Al subir, podrás especificar de qué <strong>materia</strong> son (Física, Literatura, Biología, etc.) y a qué <strong>área</strong> corresponden (Biomédicas, Ingenierías o Sociales) para aplicar sus ponderaciones oficiales automáticamente dentro del mismo mazo.
             </p>
             {onSaveQuestions && (
@@ -1545,16 +1554,16 @@ const TopicsView: React.FC<TopicsViewProps> = ({
             )}
           </div>
         ) : (subjectName === 'Exámenes Rendidos' || subjectName === 'Exámenes Simulacros') ? null : (
-          <div className="bg-white dark:bg-[#020b38] rounded-2xl border-2 border-dashed border-gray-200 dark:border-indigo-900/60 p-8 sm:p-12 text-center">
-            <div className="w-12 h-12 mx-auto mb-3 text-gray-300 dark:text-indigo-400/60 flex items-center justify-center">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border-2 border-dashed border-gray-200 dark:border-slate-800 p-8 sm:p-12 text-center">
+            <div className="w-12 h-12 mx-auto mb-3 text-gray-300 dark:text-slate-600 flex items-center justify-center">
               <svg xmlns="http://www.w3.org/2000/svg" className="w-10 h-10" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
               </svg>
             </div>
-            <h3 className="text-base sm:text-lg font-bold text-gray-700 dark:text-gray-300">
+            <h3 className="text-base sm:text-lg font-bold text-gray-700 dark:text-white">
               No hay temas registrados aún
             </h3>
-            <p className="text-gray-400 dark:text-gray-500 text-xs mt-1 max-w-md mx-auto">
+            <p className="text-gray-400 dark:text-white/70 text-xs mt-1 max-w-md mx-auto">
               Ve al Panel de Admin para crear la primera práctica.
             </p>
           </div>
@@ -1563,10 +1572,10 @@ const TopicsView: React.FC<TopicsViewProps> = ({
         <div className="space-y-8 sm:space-y-10 animate-fade-in">
           {topicsByWeek.map(([weekName, weekTopics]) => (
             <div key={weekName} className="space-y-3 sm:space-y-4">
-              <h3 className="text-xs font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-widest flex items-center gap-2 border-b-2 border-indigo-100 dark:border-indigo-950 pb-2">
+              <h3 className="text-xs font-black text-indigo-600 dark:text-white uppercase tracking-widest flex items-center gap-2 border-b-2 border-indigo-100 dark:border-slate-800 pb-2">
                 <span className="w-2.5 h-2.5 rounded-full bg-indigo-600 animate-pulse"></span>
                 {weekName}
-                <span className="text-[10px] text-gray-400 font-bold ml-auto">
+                <span className="text-[10px] text-gray-400 dark:text-white/80 font-bold ml-auto">
                   {weekTopics.length} {weekTopics.length === 1 ? 'tema' : 'temas'}
                 </span>
               </h3>
@@ -1588,15 +1597,15 @@ const TopicsView: React.FC<TopicsViewProps> = ({
       {/* Delete Topic Modal */}
       {topicToDelete !== null && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-[#020b38] rounded-2xl p-6 max-w-sm w-full shadow-xl border border-gray-100 dark:border-indigo-900/80">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 max-w-sm w-full shadow-xl border border-gray-100 dark:border-slate-800">
             <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Eliminar Práctica</h3>
-            <p className="text-gray-600 dark:text-gray-300 mb-6">
-              ¿Seguro que deseas eliminar la práctica <span className="font-bold text-gray-800 dark:text-gray-100">"{topicToDelete}"</span>? Esta acción no se puede deshacer.
+            <p className="text-gray-600 dark:text-white/80 mb-6">
+              ¿Seguro que deseas eliminar la práctica <span className="font-bold text-gray-800 dark:text-white">"{topicToDelete}"</span>? Esta acción no se puede deshacer.
             </p>
             <div className="flex justify-end gap-3">
               <button
                 onClick={() => setTopicToDelete(null)}
-                className="px-4 py-2 text-indigo-700 dark:text-indigo-300 font-bold hover:bg-indigo-50 dark:hover:bg-indigo-950/60 rounded-xl transition-colors text-xs"
+                className="px-4 py-2 text-indigo-700 dark:text-white font-bold hover:bg-indigo-50 dark:hover:bg-slate-800 rounded-xl transition-colors text-xs"
               >
                 Cancelar
               </button>

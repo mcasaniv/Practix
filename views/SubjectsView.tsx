@@ -33,7 +33,7 @@ const SubjectsView: React.FC<SubjectsViewProps> = ({
   return (
     <div className="space-y-6 sm:space-y-8">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white dark:bg-[#060a22] p-4 sm:p-6 rounded-2xl sm:rounded-3xl border border-gray-100 dark:border-indigo-950 shadow-sm">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white dark:bg-slate-900 p-4 sm:p-6 rounded-2xl sm:rounded-3xl border border-gray-100 dark:border-slate-800 shadow-sm">
         <div className="flex items-center gap-3.5 sm:gap-4">
           <div className={`w-14 h-14 sm:w-16 sm:h-16 rounded-2xl overflow-hidden shadow-md ${course.color.split(' ')[0]} dark:opacity-90 shrink-0`}>
             <img 
@@ -46,14 +46,14 @@ const SubjectsView: React.FC<SubjectsViewProps> = ({
           <div className="min-w-0">
             <div className="flex items-center gap-2 mb-1">
               <span className="text-[10px] font-black uppercase text-indigo-600 dark:text-indigo-400">Curso</span>
-              <span className={`text-[10px] font-black px-2 py-0.5 rounded-full uppercase border ${areaBadge.bg} ${areaBadge.text} ${areaBadge.border}`}>
+              <span className={`text-[10px] font-black px-2 py-0.5 rounded-full uppercase border ${areaBadge.bg} ${areaBadge.text} ${areaBadge.border} dark:text-white`}>
                 {areaBadge.icon} Área: {selectedArea}
               </span>
             </div>
-            <h2 className="text-2xl sm:text-3xl font-black text-gray-800 dark:text-gray-100 truncate">
+            <h2 className="text-2xl sm:text-3xl font-black text-gray-800 dark:text-white truncate">
               Materias de {courseName}
             </h2>
-            <p className="text-xs sm:text-sm font-medium text-gray-400 dark:text-gray-500 truncate">
+            <p className="text-xs sm:text-sm font-medium text-gray-400 dark:text-white/80 truncate">
               {courseName === 'Exámenes' 
                 ? 'Accede a tus simulacros dados, historial y resoluciones' 
                 : `Prácticas semanales adaptadas para el área de ${selectedArea}`}
@@ -77,20 +77,20 @@ const SubjectsView: React.FC<SubjectsViewProps> = ({
             <div 
               key={subject}
               onClick={() => onSelectSubject(subject)}
-              className="bg-white dark:bg-[#060a22] border border-gray-100 dark:border-indigo-950/80 hover:border-indigo-200 hover:dark:border-indigo-800/80 rounded-2xl p-4 sm:p-5 shadow-sm hover:shadow-md active:scale-[0.98] cursor-pointer group transition-all flex items-center justify-between min-h-[58px]"
+              className="bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800 hover:border-indigo-200 dark:hover:border-slate-700 rounded-2xl p-4 sm:p-5 shadow-sm hover:shadow-md active:scale-[0.98] cursor-pointer group transition-all flex items-center justify-between min-h-[58px]"
             >
               <div className="min-w-0 pr-3">
                 <div className="flex items-center gap-2">
-                  <h3 className="text-base sm:text-lg font-black text-gray-800 dark:text-gray-100 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors truncate">
+                  <h3 className="text-base sm:text-lg font-black text-gray-800 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors truncate">
                     {subject}
                   </h3>
                   {mistakesCount > 0 && (
-                    <span className="px-1.5 py-0.5 rounded-md text-[9px] font-black bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-900/60 shrink-0">
+                    <span className="px-1.5 py-0.5 rounded-md text-[9px] font-black bg-emerald-50 dark:bg-slate-800 text-emerald-700 dark:text-white border border-emerald-200 dark:border-slate-700 shrink-0">
                       {mistakesCount} {mistakesCount === 1 ? 'por reforzar' : 'por reforzar'}
                     </span>
                   )}
                 </div>
-                <span className="text-[11px] font-bold text-gray-400 dark:text-indigo-300/80">
+                <span className="text-[11px] font-bold text-gray-400 dark:text-white/80">
                   {isSavedExamsSubject
                     ? (savedExams.length > 0 
                         ? `${savedExams.length} ${savedExams.length === 1 ? 'examen registrado' : 'exámenes registrados'}` 
@@ -106,7 +106,7 @@ const SubjectsView: React.FC<SubjectsViewProps> = ({
                         : 'Sin preguntas registradas')}
                 </span>
               </div>
-              <div className="w-8 h-8 rounded-full bg-indigo-50 dark:bg-indigo-950/80 flex items-center justify-center text-indigo-600 dark:text-indigo-300 border border-indigo-100 dark:border-indigo-900/60 group-hover:bg-indigo-600 group-hover:text-white dark:group-hover:bg-indigo-600 dark:group-hover:text-white transition-all shrink-0">
+              <div className="w-8 h-8 rounded-full bg-indigo-50 dark:bg-slate-800 flex items-center justify-center text-indigo-600 dark:text-white border border-indigo-100 dark:border-slate-700 group-hover:bg-indigo-600 group-hover:text-white dark:group-hover:bg-indigo-600 dark:group-hover:text-white transition-all shrink-0">
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 group-hover:translate-x-0.5 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" />
                 </svg>

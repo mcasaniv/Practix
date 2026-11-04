@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Flashcard } from '../types';
+import { Flashcard, OcclusionBox } from '../types';
 import { formatQuestionText } from '../utils';
+import { soundController } from '../utils/soundEffects';
 
 interface FlashcardsPlayViewProps {
   courseName: string;
@@ -11,6 +12,46 @@ interface FlashcardsPlayViewProps {
   onBack: () => void;
   onUpdateCardDifficulty: (cardId: string, difficulty: 'EASY' | 'MEDIUM' | 'HARD') => void;
 }
+
+// Text normalization for grading: removes accents, symbols, extra spaces and casing
+const normalizeAnswer = (text: string) => {
+  return text
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?"'«»]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+};
+
+const isAnswerCorrect = (typed: string, target: string) => {
+  const normTyped = normalizeAnswer(typed);
+  const normTarget = normalizeAnswer(target);
+  if (!normTyped) return false;
+  if (normTyped === normTarget) return true;
+
+  // Split target if it has alternatives (e.g. "Ventrículo izquierdo / VI")
+  const options = target.split(/[/,;]/).map(t => normalizeAnswer(t)).filter(Boolean);
+  if (options.some(opt => opt === normTyped)) return true;
+
+  // Check 1-char typo tolerance for words >= 5 characters
+  if (Math.abs(normTyped.length - normTarget.length) <= 1 && normTarget.length >= 5) {
+    let diff = 0;
+    for (let i = 0, j = 0; i < normTyped.length && j < normTarget.length; ) {
+      if (normTyped[i] !== normTarget[j]) {
+        diff++;
+        if (normTyped.length > normTarget.length) i++;
+        else if (normTarget.length > normTyped.length) j++;
+        else { i++; j++; }
+      } else {
+        i++; j++;
+      }
+    }
+    if (diff <= 1) return true;
+  }
+
+  return false;
+};
 
 const FlashcardsPlayView: React.FC<FlashcardsPlayViewProps> = ({
   courseName,
@@ -30,7 +71,18 @@ const FlashcardsPlayView: React.FC<FlashcardsPlayViewProps> = ({
   // Track categorization session ratings for current run
   const [ratings, setRatings] = useState<Record<string, 'EASY' | 'MEDIUM' | 'HARD'>>({});
 
+  // Image Occlusion states
+  const [userTypedAnswer, setUserTypedAnswer] = useState<string>('');
+  const [evaluation, setEvaluation] = useState<{
+    isCorrect: boolean;
+    userTyped: string;
+    expected: string;
+  } | null>(null);
+  const [showUnmaskedImage, setShowUnmaskedImage] = useState<boolean>(false);
+  const [selectedBoxOverride, setSelectedBoxOverride] = useState<string | null>(null);
+
   const cardRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   // Track filter key to only shuffle when course, subject, or topic changes
   const sessionKey = `${courseName}_${subjectName}_${topicName || ''}`;
@@ -46,8 +98,23 @@ const FlashcardsPlayView: React.FC<FlashcardsPlayViewProps> = ({
       setIsFinished(false);
       setIsTransitioning(false);
       setRatings({});
+      setUserTypedAnswer('');
+      setEvaluation(null);
+      setShowUnmaskedImage(false);
+      setSelectedBoxOverride(null);
     }
   }, [sessionKey]);
+
+  // Reset occlusion input when navigating cards
+  useEffect(() => {
+    setUserTypedAnswer('');
+    setEvaluation(null);
+    setShowUnmaskedImage(false);
+    setSelectedBoxOverride(null);
+    if (inputRef.current) {
+      setTimeout(() => inputRef.current?.focus(), 50);
+    }
+  }, [currentCardIndex]);
 
   // Typeset math in KaTeX when the card is shown or flipped
   useEffect(() => {
@@ -78,6 +145,11 @@ const FlashcardsPlayView: React.FC<FlashcardsPlayViewProps> = ({
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (isFinished || isTransitioning) return;
+
+      const targetTag = (e.target as HTMLElement)?.tagName;
+      if (targetTag === 'INPUT' || targetTag === 'TEXTAREA') {
+        return;
+      }
 
       const key = e.key;
       const code = e.code;
@@ -393,76 +465,402 @@ const FlashcardsPlayView: React.FC<FlashcardsPlayViewProps> = ({
         />
       </div>
 
-      {/* Dynamic 3D Flashcard container */}
-      <div className="perspective-1000 w-full max-w-xl mx-auto min-h-[350px] h-[370px] sm:h-[400px] mb-8 relative">
-        <div 
-          ref={cardRef}
-          onClick={() => {
-            if (isTransitioning) return;
-            setIsFlipped(!isFlipped);
-          }}
-          className={`w-full h-full transform-style-3d transition-transform duration-500 cursor-pointer absolute ${
-            isFlipped ? 'rotate-y-180' : ''
-          }`}
-        >
-          {/* FRONT FACE (Backface hidden) */}
-          <div className="absolute inset-0 bg-white dark:bg-slate-900 border-2 border-indigo-100 dark:border-indigo-950 rounded-3xl p-6 sm:p-8 shadow-lg flex flex-col justify-between backface-hidden overflow-hidden">
-            <div className="flex justify-between items-center shrink-0">
-              <span className="text-[9px] uppercase font-black text-indigo-400 tracking-widest bg-indigo-50 dark:bg-indigo-950/50 px-2.5 py-1 rounded">
-                Pregunta / Recto
-              </span>
-              {(activeCard?.topic || topicName) && (
-                <span className="text-xs font-semibold text-gray-400 dark:text-gray-500 max-w-[200px] truncate">
-                  {activeCard?.topic || topicName}
-                </span>
-              )}
-            </div>
+      {/* Image Occlusion Player OR Classic 3D Flashcard container */}
+      {(() => {
+        const isImageCard = Boolean(
+          activeCard && (activeCard.type === 'IMAGE_OCCLUSION' || (activeCard.imageUrl && activeCard.occlusionBoxes && activeCard.occlusionBoxes.length > 0))
+        );
 
-            <div className="flex-grow min-h-0 flex items-center justify-center py-2 px-1 text-center my-auto overflow-y-auto overscroll-contain max-h-[250px] [scrollbar-width:thin] [scrollbar-color:rgba(99,102,241,0.3)_transparent]">
-              <div className={`w-full max-w-full font-bold text-gray-800 dark:text-gray-100 break-words whitespace-pre-wrap selection:bg-indigo-100 ${getFrontFontSize(activeCard?.front || '')}`}>
-                {formatQuestionText(activeCard?.front || '')}
+        if (isImageCard && activeCard) {
+          const boxes = activeCard.occlusionBoxes || [];
+          const currentTargetBoxId = activeCard.activeBoxId || selectedBoxOverride || boxes[0]?.id;
+          const targetBox = boxes.find(b => b.id === currentTargetBoxId) || boxes[0];
+
+          const handleGradeOcclusion = (e?: React.FormEvent) => {
+            if (e) e.preventDefault();
+            if (!userTypedAnswer.trim() || !activeCard) return;
+
+            const expected = targetBox ? targetBox.correctAnswer : activeCard.back;
+            const isCorrect = isAnswerCorrect(userTypedAnswer, expected);
+
+            setEvaluation({
+              isCorrect,
+              userTyped: userTypedAnswer.trim(),
+              expected
+            });
+
+            if (isCorrect) {
+              soundController.playSuccess();
+            } else {
+              soundController.playError();
+            }
+          };
+
+          return (
+            <div className="w-full max-w-2xl mx-auto space-y-4 mb-8">
+              {/* Card Container */}
+              <div className="bg-white dark:bg-slate-900 border-2 border-indigo-100 dark:border-indigo-950 rounded-3xl p-4 sm:p-6 shadow-xl relative overflow-hidden">
+                {/* Header tag */}
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] uppercase font-black text-indigo-700 dark:text-indigo-300 tracking-widest bg-indigo-50 dark:bg-indigo-950/70 border border-indigo-200/50 dark:border-indigo-800/50 px-2.5 py-1 rounded-lg flex items-center gap-1.5">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                      </svg>
+                      <span>Oclusión de Imagen</span>
+                    </span>
+                    {targetBox?.label && (
+                      <span className="text-xs font-bold text-gray-600 dark:text-indigo-200">
+                        Objetivo: <strong className="text-indigo-600 dark:text-indigo-400">{targetBox.label}</strong>
+                      </span>
+                    )}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setShowUnmaskedImage(!showUnmaskedImage)}
+                    className="text-xs font-bold text-indigo-600 dark:text-indigo-300 hover:underline flex items-center gap-1 bg-indigo-50/70 dark:bg-indigo-950/60 border border-indigo-200/50 dark:border-indigo-800/60 px-2.5 py-1 rounded-lg transition-colors"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                    </svg>
+                    <span>{showUnmaskedImage ? 'Tapar imagen' : 'Ver original'}</span>
+                  </button>
+                </div>
+
+                {/* Instruction / Front text */}
+                <h3 className="text-base sm:text-lg font-black text-gray-800 dark:text-gray-100 mb-3">
+                  {activeCard.front || 'Identifica la estructura oculta en el cuadro blanco:'}
+                </h3>
+
+                {/* Occluded Image Canvas */}
+                <div className="relative border border-gray-200 dark:border-slate-800 rounded-2xl overflow-hidden bg-gray-950/5 dark:bg-black/20 flex items-center justify-center p-1 sm:p-2 select-none min-h-[220px]">
+                  <div className="relative inline-block max-w-full">
+                    <img
+                      src={activeCard.imageUrl}
+                      alt="Diagrama con oclusión"
+                      className="block max-h-[380px] w-auto max-w-full object-contain rounded-xl"
+                      referrerPolicy="no-referrer"
+                      draggable={false}
+                    />
+
+                    {/* Occlusion Boxes */}
+                    {boxes.map((box, idx) => {
+                      const isTarget = box.id === currentTargetBoxId;
+
+                      if (showUnmaskedImage) {
+                        // Reveal underlying image but outline box faintly
+                        return (
+                          <div
+                            key={box.id}
+                            style={{
+                              left: `${box.x}%`,
+                              top: `${box.y}%`,
+                              width: `${box.width}%`,
+                              height: `${box.height}%`
+                            }}
+                            className="absolute border border-indigo-400/40 rounded pointer-events-none"
+                          />
+                        );
+                      }
+
+                      if (isTarget) {
+                        // Evaluated state
+                        if (evaluation) {
+                          return (
+                            <div
+                              key={box.id}
+                              style={{
+                                left: `${box.x}%`,
+                                top: `${box.y}%`,
+                                width: `${box.width}%`,
+                                height: `${box.height}%`
+                              }}
+                              className={`absolute rounded flex items-center justify-center p-1 text-center shadow-2xl z-30 transition-all font-black text-xs ${
+                                evaluation.isCorrect
+                                  ? 'bg-emerald-500 text-white border-2 border-emerald-600 ring-4 ring-emerald-300/40'
+                                  : 'bg-rose-500 text-white border-2 border-rose-600 ring-4 ring-rose-300/40'
+                              }`}
+                            >
+                              <span className="truncate max-w-full font-black text-[11px] sm:text-xs">
+                                {evaluation.isCorrect ? `✓ ${box.correctAnswer}` : `✗ ${box.correctAnswer}`}
+                              </span>
+                            </div>
+                          );
+                        }
+
+                        // Target Box waiting for user input (Cuadro en blanco 100% opaco y sólido)
+                        return (
+                          <div
+                            key={box.id}
+                            onClick={() => inputRef.current?.focus()}
+                            style={{
+                              left: `${box.x}%`,
+                              top: `${box.y}%`,
+                              width: `${box.width}%`,
+                              height: `${box.height}%`
+                            }}
+                            className="absolute bg-white opacity-100 rounded flex items-center justify-center p-1 text-center shadow-xl z-30 border-2 border-dashed border-indigo-600 ring-4 ring-indigo-500/40 cursor-text select-none"
+                            title="Escribe la respuesta en el campo de texto"
+                          >
+                            <span className="bg-indigo-600 text-white text-[10px] font-black px-2 py-0.5 rounded shadow">
+                              {box.label || `?`}
+                            </span>
+                          </div>
+                        );
+                      }
+
+                      // Non-target boxes: 100% solid white mask covering the text
+                      return (
+                        <div
+                          key={box.id}
+                          onClick={() => {
+                            setSelectedBoxOverride(box.id);
+                            setUserTypedAnswer('');
+                            setEvaluation(null);
+                            setTimeout(() => inputRef.current?.focus(), 50);
+                          }}
+                          style={{
+                            left: `${box.x}%`,
+                            top: `${box.y}%`,
+                            width: `${box.width}%`,
+                            height: `${box.height}%`
+                          }}
+                          className="absolute bg-white opacity-100 rounded flex items-center justify-center p-1 text-center shadow border border-gray-300 z-20 cursor-pointer hover:ring-2 hover:ring-indigo-300 transition-all select-none"
+                          title={`Cuadro ${box.label || (idx + 1)}. Clic para responder este`}
+                        >
+                          <span className="text-[10px] font-bold text-gray-500">
+                            {box.label || `#${idx + 1}`}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Form to write answer and grade */}
+                <form onSubmit={handleGradeOcclusion} className="mt-4 space-y-3">
+                  <div className="flex flex-col sm:flex-row gap-2.5">
+                    <div className="relative flex-grow">
+                      <input
+                        ref={inputRef}
+                        type="text"
+                        value={userTypedAnswer}
+                        onChange={(e) => setUserTypedAnswer(e.target.value)}
+                        placeholder={`Escribe aquí el nombre que oculta ${targetBox?.label || 'el cuadro blanco'}...`}
+                        disabled={evaluation !== null}
+                        className="w-full py-3.5 px-4 rounded-2xl border-2 border-indigo-300 dark:border-indigo-700/80 bg-white dark:bg-[#000b17] text-gray-900 dark:text-white font-bold outline-none text-sm sm:text-base shadow-sm focus:border-indigo-600 dark:focus:border-indigo-400 focus:ring-4 focus:ring-indigo-500/20 transition-all placeholder:text-gray-400 dark:placeholder:text-gray-500"
+                        autoFocus
+                      />
+                      {userTypedAnswer && !evaluation && (
+                        <button
+                          type="button"
+                          onClick={() => setUserTypedAnswer('')}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:text-gray-400 dark:hover:text-white p-1 rounded-lg transition-colors"
+                          title="Limpiar texto"
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="flex gap-2 shrink-0">
+                      {/* Button 1: Calificar */}
+                      <button
+                        type="submit"
+                        disabled={!userTypedAnswer.trim() || evaluation !== null}
+                        className="flex-1 sm:flex-initial py-3.5 px-6 bg-indigo-600 hover:bg-indigo-700 dark:bg-[#5950e7] dark:hover:bg-[#4d44db] disabled:opacity-40 disabled:cursor-not-allowed text-white font-black text-xs sm:text-sm uppercase tracking-wider rounded-2xl shadow-md hover:shadow-indigo-500/25 transition-all active:scale-95 flex items-center justify-center gap-2 min-h-[46px]"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                        </svg>
+                        <span className="text-white">Calificar</span>
+                      </button>
+
+                      {/* Button 2: Reintentar o Revelar */}
+                      {evaluation ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEvaluation(null);
+                            setUserTypedAnswer('');
+                            setTimeout(() => inputRef.current?.focus(), 50);
+                          }}
+                          className="py-3.5 px-5 bg-indigo-50 hover:bg-indigo-100 dark:bg-[#000c19] dark:hover:bg-[#00152b] text-indigo-700 dark:text-white border border-indigo-200/80 dark:border-indigo-800/80 font-black text-xs uppercase tracking-wider rounded-2xl shadow-sm transition-all active:scale-95 flex items-center justify-center gap-1.5 min-h-[46px]"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 text-indigo-600 dark:text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                          </svg>
+                          <span className="text-indigo-700 dark:text-white">Reintentar</span>
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const expected = targetBox ? targetBox.correctAnswer : activeCard.back;
+                            setEvaluation({
+                              isCorrect: false,
+                              userTyped: userTypedAnswer.trim() || '(Sin respuesta)',
+                              expected
+                            });
+                          }}
+                          className="py-3.5 px-5 bg-indigo-50 hover:bg-indigo-100 dark:bg-[#000c19] dark:hover:bg-[#00152b] text-indigo-700 dark:text-white border border-indigo-200/80 dark:border-indigo-800/80 font-black text-xs uppercase tracking-wider rounded-2xl shadow-sm transition-all active:scale-95 flex items-center justify-center gap-1.5 min-h-[46px]"
+                          title="Revelar respuesta oculta"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 text-indigo-600 dark:text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                          </svg>
+                          <span className="text-indigo-700 dark:text-white">Revelar</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </form>
+
+                {/* Grading Feedback Results */}
+                {evaluation && (
+                  <div className="mt-3 animate-fade-in">
+                    {evaluation.isCorrect ? (
+                      <div className="p-4 bg-emerald-50 dark:bg-emerald-950/40 border-2 border-emerald-400 dark:border-emerald-700 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-emerald-900 dark:text-emerald-100 shadow-md">
+                        <div className="flex items-center gap-3">
+                          <div className="w-9 h-9 rounded-xl bg-emerald-500 text-white flex items-center justify-center font-black text-base shadow">
+                            ✓
+                          </div>
+                          <div>
+                            <h4 className="text-sm font-black text-emerald-800 dark:text-emerald-200">
+                              ¡Respuesta Correcta! Excelente trabajo
+                            </h4>
+                            <p className="text-xs text-emerald-700 dark:text-emerald-300">
+                              Nombre exacto: <strong>{evaluation.expected}</strong>
+                            </p>
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => handleRate('EASY')}
+                          className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs uppercase tracking-wider rounded-xl shadow transition-all active:scale-95 shrink-0"
+                        >
+                          Siguiente (Fácil) →
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="p-4 bg-rose-50 dark:bg-rose-950/40 border-2 border-rose-400 dark:border-rose-700 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-rose-900 dark:text-rose-100 shadow-md">
+                        <div className="flex items-start sm:items-center gap-3">
+                          <div className="w-9 h-9 rounded-xl bg-rose-500 text-white flex items-center justify-center font-black text-base shadow shrink-0">
+                            ✗
+                          </div>
+                          <div>
+                            <h4 className="text-sm font-black text-rose-800 dark:text-rose-200">
+                              Respuesta no coincide
+                            </h4>
+                            <p className="text-xs text-rose-700 dark:text-rose-300">
+                              Escribiste: <span className="line-through font-semibold">{evaluation.userTyped}</span>
+                              <br className="sm:hidden" /> • Respuesta correcta: <strong className="text-emerald-700 dark:text-emerald-400 underline font-black">{evaluation.expected}</strong>
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => handleRate('HARD')}
+                            className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white font-black text-xs uppercase tracking-wider rounded-xl shadow transition-all active:scale-95"
+                          >
+                            Marcar Difícil
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleRate('MEDIUM')}
+                            className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white font-black text-xs uppercase tracking-wider rounded-xl shadow transition-all active:scale-95"
+                          >
+                            Casi
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
+          );
+        }
 
-            <div className="text-center text-xs text-indigo-400/80 dark:text-indigo-500/80 font-medium animate-pulse flex items-center justify-center gap-1.5 shrink-0">
-              <span>Click o tecla Espacio para voltear</span>
-              <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5 inline" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-              </svg>
-            </div>
-          </div>
+        // Standard 3D Flip Card for Text Flashcards
+        return (
+          <div className="perspective-1000 w-full max-w-xl mx-auto min-h-[350px] h-[370px] sm:h-[400px] mb-8 relative">
+            <div 
+              ref={cardRef}
+              onClick={() => {
+                if (isTransitioning) return;
+                setIsFlipped(!isFlipped);
+              }}
+              className={`w-full h-full transform-style-3d transition-transform duration-500 cursor-pointer absolute ${
+                isFlipped ? 'rotate-y-180' : ''
+              }`}
+            >
+              {/* FRONT FACE (Backface hidden) */}
+              <div className="absolute inset-0 bg-white dark:bg-slate-900 border-2 border-indigo-100 dark:border-indigo-950 rounded-3xl p-6 sm:p-8 shadow-lg flex flex-col justify-between backface-hidden overflow-hidden">
+                <div className="flex justify-between items-center shrink-0">
+                  <span className="text-[9px] uppercase font-black text-indigo-400 tracking-widest bg-indigo-50 dark:bg-indigo-950/50 px-2.5 py-1 rounded">
+                    Pregunta / Recto
+                  </span>
+                  {(activeCard?.topic || topicName) && (
+                    <span className="text-xs font-semibold text-gray-400 dark:text-gray-500 max-w-[200px] truncate">
+                      {activeCard?.topic || topicName}
+                    </span>
+                  )}
+                </div>
 
-          {/* BACK FACE (Rotated 180 and Backface hidden) */}
-          <div className="absolute inset-0 bg-gradient-to-b from-indigo-50/20 to-indigo-100/5 dark:from-indigo-950/10 dark:to-indigo-950/30 border-2 border-dashed border-indigo-400 dark:border-indigo-800 rounded-3xl p-6 sm:p-8 shadow-lg flex flex-col justify-between backface-hidden rotate-y-180 overflow-hidden">
-            <div className="flex justify-between items-center shrink-0">
-              <span className="text-[9px] uppercase font-black text-amber-500 tracking-widest bg-amber-50 dark:bg-amber-950/50 px-2.5 py-1 rounded">
-                Respuesta / Verso
-              </span>
-              <span className="text-[10px] rounded uppercase font-bold text-gray-400 flex items-center gap-1">
-                Anterior: {activeCard?.difficulty ? (
-                  activeCard.difficulty === 'EASY' ? (
-                    <span className="text-emerald-500 font-bold">Fácil</span>
-                  ) : activeCard.difficulty === 'MEDIUM' ? (
-                    <span className="text-amber-500 font-bold">Casi</span>
-                  ) : (
-                    <span className="text-rose-500 font-bold">Difícil</span>
-                  )
-                ) : 'Ninguno'}
-              </span>
-            </div>
+                <div className="flex-grow min-h-0 flex items-center justify-center py-2 px-1 text-center my-auto overflow-y-auto overscroll-contain max-h-[250px] [scrollbar-width:thin] [scrollbar-color:rgba(99,102,241,0.3)_transparent]">
+                  <div className={`w-full max-w-full font-bold text-gray-800 dark:text-gray-100 break-words whitespace-pre-wrap selection:bg-indigo-100 ${getFrontFontSize(activeCard?.front || '')}`}>
+                    {formatQuestionText(activeCard?.front || '')}
+                  </div>
+                </div>
 
-            <div className="flex-grow min-h-0 flex items-center justify-center py-2 px-1 text-center my-auto overflow-y-auto overscroll-contain max-h-[250px] [scrollbar-width:thin] [scrollbar-color:rgba(99,102,241,0.3)_transparent]">
-              <div className={`w-full max-w-full font-semibold text-indigo-950 dark:text-slate-100 break-words whitespace-pre-wrap select-text ${getBackFontSize(activeCard?.back || '')}`}>
-                {formatQuestionText(activeCard?.back || '')}
+                <div className="text-center text-xs text-indigo-400/80 dark:text-indigo-500/80 font-medium animate-pulse flex items-center justify-center gap-1.5 shrink-0">
+                  <span>Click o tecla Espacio para voltear</span>
+                  <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5 inline" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                </div>
+              </div>
+
+              {/* BACK FACE (Rotated 180 and Backface hidden) */}
+              <div className="absolute inset-0 bg-gradient-to-b from-indigo-50/20 to-indigo-100/5 dark:from-indigo-950/10 dark:to-indigo-950/30 border-2 border-dashed border-indigo-400 dark:border-indigo-800 rounded-3xl p-6 sm:p-8 shadow-lg flex flex-col justify-between backface-hidden rotate-y-180 overflow-hidden">
+                <div className="flex justify-between items-center shrink-0">
+                  <span className="text-[9px] uppercase font-black text-amber-500 tracking-widest bg-amber-50 dark:bg-amber-950/50 px-2.5 py-1 rounded">
+                    Respuesta / Verso
+                  </span>
+                  <span className="text-[10px] rounded uppercase font-bold text-gray-400 flex items-center gap-1">
+                    Anterior: {activeCard?.difficulty ? (
+                      activeCard.difficulty === 'EASY' ? (
+                        <span className="text-emerald-500 font-bold">Fácil</span>
+                      ) : activeCard.difficulty === 'MEDIUM' ? (
+                        <span className="text-amber-500 font-bold">Casi</span>
+                      ) : (
+                        <span className="text-rose-500 font-bold">Difícil</span>
+                      )
+                    ) : 'Ninguno'}
+                  </span>
+                </div>
+
+                <div className="flex-grow min-h-0 flex items-center justify-center py-2 px-1 text-center my-auto overflow-y-auto overscroll-contain max-h-[250px] [scrollbar-width:thin] [scrollbar-color:rgba(99,102,241,0.3)_transparent]">
+                  <div className={`w-full max-w-full font-semibold text-indigo-950 dark:text-slate-100 break-words whitespace-pre-wrap select-text ${getBackFontSize(activeCard?.back || '')}`}>
+                    {formatQuestionText(activeCard?.back || '')}
+                  </div>
+                </div>
+
+                <div className="text-center text-xs text-amber-500/80 font-medium shrink-0">
+                  ¿Cuál fue la dificultad de esta tarjeta?
+                </div>
               </div>
             </div>
-
-            <div className="text-center text-xs text-amber-500/80 font-medium shrink-0">
-              ¿Cuál fue la dificultad de esta tarjeta?
-            </div>
           </div>
-        </div>
-      </div>
+        );
+      })()}
 
       {/* Control buttons & Keyboard hotkeys representation */}
       <div className="max-w-xl mx-auto space-y-5">

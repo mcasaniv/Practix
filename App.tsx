@@ -974,6 +974,8 @@ const App: React.FC = () => {
             onStartPlay={(course, subject, topic) => handleNavigate('FLASHCARDS_PLAY', { selectedCourse: course, selectedSubject: subject, selectedTopic: topic })}
             onGoToAdmin={() => handleNavigate('ADMIN')}
             onMoveTopic={moveFlashcardTopic}
+            onSaveFlashcardsBatch={saveFlashcardsBatch}
+            onToast={showToast}
           />
         );
       case 'FLASHCARDS_PLAY': {

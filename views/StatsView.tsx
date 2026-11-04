@@ -2,6 +2,7 @@ import React, { useMemo, useState, useEffect } from 'react';
 import { AREA_EXAM_CONFIGS, ADMISSION_PROCESSES } from '../constants';
 import { Question, TopicResult, CourseStructure, UserProfile } from '../types';
 import { getQuestionProcess, getProcessBadgeStyle } from '../utils';
+import { StatsCourseCard } from '../components/StatsCourseCard';
 
 interface StatsViewProps {
   questions: Question[];
@@ -352,7 +353,7 @@ export const StatsView: React.FC<StatsViewProps> = ({
   }, [selectedArea, areaStats]);
 
   return (
-    <div className="max-w-6xl mx-auto space-y-10 py-4 animate-fade-in">
+    <div id="stats-view-root" className="stats-view-container max-w-6xl mx-auto space-y-10 py-4 animate-fade-in">
       
       {/* Header section with academic area switcher AND process dropdown */}
       <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6 bg-white dark:bg-slate-900 p-5 sm:p-8 rounded-2xl sm:rounded-3xl border border-gray-100 dark:border-slate-800 shadow-xl">
@@ -571,131 +572,14 @@ export const StatsView: React.FC<StatsViewProps> = ({
         </h3>
         
         <div className="grid grid-cols-1 gap-4">
-          {courseStats.map(course => {
-            const isExpanded = expandedCourse === course.courseName;
-            
-            return (
-              <div 
-                key={course.courseName}
-                id={`course-stat-${course.courseName}`}
-                className="bg-white dark:bg-slate-900 rounded-2xl border border-gray-100 dark:border-slate-800 shadow-md overflow-hidden transition-all duration-300"
-              >
-                {/* Main header row */}
-                <div 
-                  onClick={() => setExpandedCourse(isExpanded ? null : course.courseName)}
-                  className="p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 cursor-pointer hover:bg-gray-50/50 dark:hover:bg-slate-800/20 transition-colors"
-                >
-                  <div className="flex items-center gap-4">
-                    <div className={`w-12 h-12 rounded-xl overflow-hidden shrink-0 bg-gray-100 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 relative`}>
-                      <img 
-                        src={course.icon} 
-                        alt={course.courseName} 
-                        className="w-full h-full object-cover"
-                        referrerPolicy="no-referrer"
-                      />
-                    </div>
-                    <div>
-                      <h4 className="font-black text-lg text-gray-800 dark:text-gray-100 flex items-center gap-2">
-                        {course.courseName}
-                      </h4>
-                      <span className="text-[10px] text-gray-400 dark:text-gray-500 font-bold uppercase tracking-wide">
-                        {course.practicedTopics} / {course.totalTopics} Temas Completados
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="flex flex-wrap items-center gap-6 w-full sm:w-auto justify-between sm:justify-end">
-                    {/* Course Weight badge */}
-                    <div className="text-left sm:text-right">
-                      <span className="text-[9px] uppercase font-black text-indigo-400 block tracking-wider leading-none">Peso Estimado</span>
-                      <span className="text-sm font-black text-indigo-600 dark:text-indigo-400">
-                        {(course.earnedExamPoints ?? 0).toFixed(2)} <span className="text-xs font-normal text-gray-400">/ {(course.maxExamPoints ?? 0).toFixed(2)} pts</span>
-                      </span>
-                    </div>
-
-                    {/* Accuracy badge */}
-                    <div className="text-left sm:text-right">
-                      <span className="text-[9px] uppercase font-black text-gray-400 block tracking-wider leading-none">Precisión</span>
-                      <span className={`text-sm font-black ${
-                        course.practicedQuestions > 0
-                          ? course.accuracy >= 75 ? 'text-emerald-500' : course.accuracy >= 50 ? 'text-amber-500' : 'text-rose-500'
-                          : 'text-gray-400'
-                      }`}>
-                        {course.practicedQuestions > 0 ? `${(course.accuracy ?? 0).toFixed(1)}%` : 'Sin práctica'}
-                      </span>
-                    </div>
-
-                    {/* Arrow toggle */}
-                    <button className="text-gray-400 dark:text-gray-600 p-1 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-lg transition-colors">
-                      <svg 
-                        xmlns="http://www.w3.org/2000/svg" 
-                        className={`h-5 w-5 transform transition-transform ${isExpanded ? 'rotate-180' : ''}`} 
-                        fill="none" 
-                        viewBox="0 0 24 24" 
-                        stroke="currentColor"
-                      >
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M19 9l-7 7-7-7" />
-                      </svg>
-                    </button>
-                  </div>
-                </div>
-
-                {/* Expanded subjects detail */}
-                {isExpanded && (
-                  <div className="px-6 pb-6 pt-2 bg-gray-50/50 dark:bg-slate-900/40 border-t border-gray-100 dark:border-slate-800">
-                    <div className="space-y-4 max-w-4xl mx-auto">
-                      <h5 className="text-xs font-black uppercase text-gray-400 tracking-widest mb-3">Materias de {course.courseName}</h5>
-                      
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {course.subjects.map(subj => (
-                          <div 
-                            key={subj.name}
-                            className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-gray-100 dark:border-slate-800 shadow-sm space-y-3"
-                          >
-                            <div className="flex justify-between items-start">
-                              <div>
-                                <h6 className="font-bold text-gray-700 dark:text-gray-200 text-sm">{subj.name}</h6>
-                                <span className="text-[10px] text-gray-400 dark:text-gray-500 font-bold">
-                                  {subj.practicedTopics} / {subj.totalTopics} Temas Practicados
-                                </span>
-                              </div>
-                              <span className="text-[10px] bg-indigo-50 dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 font-black px-2.5 py-1 rounded-full uppercase tracking-wider flex items-center gap-1">
-                                <span>Peso: {(subj.weight ?? 0).toFixed(2)} pts</span>
-                                {subj.questionCount > 0 && (
-                                  <span className="text-indigo-400 dark:text-indigo-500 font-bold">({subj.questionCount % 1 === 0 ? subj.questionCount : (subj.questionCount ?? 0).toFixed(1)} preg.)</span>
-                                )}
-                              </span>
-                            </div>
-
-                            <div className="space-y-1">
-                              <div className="flex justify-between text-[10px] font-black text-gray-400">
-                                <span>ACIERTOS</span>
-                                <span className={
-                                  subj.practicedQuestions > 0
-                                    ? subj.accuracy >= 75 ? 'text-emerald-500' : subj.accuracy >= 50 ? 'text-amber-500' : 'text-rose-500'
-                                    : 'text-gray-400'
-                                }>
-                                  {subj.practicedQuestions > 0 ? `${(subj.accuracy ?? 0).toFixed(0)}%` : 'PENDIENTE'}
-                                </span>
-                              </div>
-                              <div className="w-full bg-gray-100 dark:bg-slate-800 rounded-full h-1.5">
-                                <div 
-                                  className={`h-1.5 rounded-full ${
-                                    subj.accuracy >= 75 ? 'bg-emerald-500' : subj.accuracy >= 50 ? 'bg-amber-500' : 'bg-rose-500'
-                                  }`}
-                                  style={{ width: `${subj.practicedQuestions > 0 ? subj.accuracy : 0}%` }}
-                                />
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            );
-          })}
+          {courseStats.map(course => (
+            <StatsCourseCard 
+              key={course.courseName}
+              course={course}
+              isExpanded={expandedCourse === course.courseName}
+              onToggleExpand={() => setExpandedCourse(expandedCourse === course.courseName ? null : course.courseName)}
+            />
+          ))}
         </div>
       </div>
 

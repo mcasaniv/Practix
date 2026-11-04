@@ -50,6 +50,17 @@ export interface TopicResult {
   history?: TopicPracticeHistoryItem[];
 }
 
+export interface OcclusionBox {
+  id: string;
+  x: number; // percentage 0 - 100
+  y: number; // percentage 0 - 100
+  width: number; // percentage 0 - 100
+  height: number; // percentage 0 - 100
+  correctAnswer: string;
+  label?: string;
+  hint?: string;
+}
+
 export interface Flashcard {
   id: string;
   course: string;
@@ -60,6 +71,10 @@ export interface Flashcard {
   difficulty?: 'EASY' | 'MEDIUM' | 'HARD';
   createdAt: number;
   order?: number;
+  type?: 'TEXT' | 'IMAGE_OCCLUSION';
+  imageUrl?: string;
+  occlusionBoxes?: OcclusionBox[];
+  activeBoxId?: string;
 }
 
 export interface SavedExam {
