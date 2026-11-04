@@ -313,7 +313,7 @@ export const ImageOcclusionModal: React.FC<ImageOcclusionModalProps> = ({
     const cardsToSave: Flashcard[] = [];
 
     if (mode === 'ONE_PER_BOX') {
-      // Create one flashcard per occlusion box (Anki style)
+      // Create one flashcard per occlusion box (style)
       boxes.forEach((box, index) => {
         const cardId = crypto.randomUUID();
         const card: Flashcard = {
@@ -713,7 +713,7 @@ export const ImageOcclusionModal: React.FC<ImageOcclusionModalProps> = ({
                   </span>
                   <p className="text-[11px] text-gray-500 dark:text-gray-400">
                     {mode === 'ONE_PER_BOX' 
-                      ? 'Recomendado (estilo Anki): Crea una flashcard por cada cuadro colocado para repasar individualmente.' 
+                      ? 'Recomendado: Crea una flashcard por cada cuadro colocado para repasar individualmente.' 
                       : 'Crea una sola flashcard donde deberás completar todos los cuadros de la imagen a la vez.'
                     }
                   </p>

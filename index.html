@@ -106,17 +106,13 @@
       .dark .text-indigo-950:not([class*="dark:text-"]):not(button.bg-white *):not(.bg-white *) { color: #e0e7ff !important; }
       .dark .text-indigo-900:not([class*="dark:text-"]):not(button.bg-white *):not(.bg-white *) { color: #e0e7ff !important; }
 
-      /* Focus Mode styles for Flashcards with image occlusion */
-      html.dark div#root > div:nth-of-type(1) > main:nth-of-type(1) > div:nth-of-type(1):not(#stats-view-root) > div:nth-of-type(3) > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(2) > div:nth-of-type(1),
-      .dark div#root > div:nth-of-type(1) > main:nth-of-type(1) > div:nth-of-type(1):not(#stats-view-root) > div:nth-of-type(3) > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(2) > div:nth-of-type(1) {
-        background-color: #000c19 !important;
-      }
-      html.dark div#root > div:nth-of-type(1) > main:nth-of-type(1) > div:nth-of-type(1):not(#stats-view-root) > div:nth-of-type(3) > div:nth-of-type(1) > div:nth-of-type(1),
-      .dark div#root > div:nth-of-type(1) > main:nth-of-type(1) > div:nth-of-type(1):not(#stats-view-root) > div:nth-of-type(3) > div:nth-of-type(1) > div:nth-of-type(1) {
+      /* Focus Mode styles scoped strictly to Flashcards Topics View */
+      html.dark #flashcards-home-topics-root .flashcard-topic-component#flashcard-topic-card-0,
+      .dark #flashcards-home-topics-root .flashcard-topic-component#flashcard-topic-card-0 {
         background-color: #001228 !important;
       }
-      html.dark div#root > div:nth-of-type(1) > main:nth-of-type(1) > div:nth-of-type(1):not(#stats-view-root) > div:nth-of-type(3) > div:nth-of-type(1) > div:nth-of-type(3),
-      .dark div#root > div:nth-of-type(1) > main:nth-of-type(1) > div:nth-of-type(1):not(#stats-view-root) > div:nth-of-type(3) > div:nth-of-type(1) > div:nth-of-type(3) {
+      html.dark #flashcards-home-topics-root .flashcard-topic-component#flashcard-topic-card-2,
+      .dark #flashcards-home-topics-root .flashcard-topic-component#flashcard-topic-card-2 {
         background-color: #000307 !important;
       }
 

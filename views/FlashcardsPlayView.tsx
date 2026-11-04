@@ -80,6 +80,8 @@ const FlashcardsPlayView: React.FC<FlashcardsPlayViewProps> = ({
   } | null>(null);
   const [showUnmaskedImage, setShowUnmaskedImage] = useState<boolean>(false);
   const [selectedBoxOverride, setSelectedBoxOverride] = useState<string | null>(null);
+  // Track answered occlusion boxes so they stay revealed for the remainder of the session
+  const [answeredBoxIds, setAnsweredBoxIds] = useState<Set<string>>(new Set());
 
   const cardRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -102,6 +104,7 @@ const FlashcardsPlayView: React.FC<FlashcardsPlayViewProps> = ({
       setEvaluation(null);
       setShowUnmaskedImage(false);
       setSelectedBoxOverride(null);
+      setAnsweredBoxIds(new Set());
     }
   }, [sessionKey]);
 
@@ -141,71 +144,6 @@ const FlashcardsPlayView: React.FC<FlashcardsPlayViewProps> = ({
     };
   }, [currentCardIndex, isFlipped, currentCards]);
 
-  // Keyboard controls
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (isFinished || isTransitioning) return;
-
-      const targetTag = (e.target as HTMLElement)?.tagName;
-      if (targetTag === 'INPUT' || targetTag === 'TEXTAREA') {
-        return;
-      }
-
-      const key = e.key;
-      const code = e.code;
-
-      if (code === 'Space') {
-        e.preventDefault(); // Prevents page scrolling
-        setIsFlipped(prev => !prev);
-      } else {
-        if (key === '1') {
-          handleRate('EASY');
-        } else if (key === '2') {
-          handleRate('MEDIUM');
-        } else if (key === '3') {
-          handleRate('HARD');
-        }
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [currentCardIndex, isFlipped, isFinished, currentCards, isTransitioning]);
-
-  if (flashcards.length === 0) {
-    return (
-      <div className="max-w-md mx-auto text-center py-12 bg-white dark:bg-slate-900 border border-gray-150 dark:border-slate-800 rounded-3xl p-8 shadow-md">
-        <div className="w-12 h-12 mx-auto text-indigo-500 flex items-center justify-center">
-          <svg xmlns="http://www.w3.org/2000/svg" className="w-10 h-10" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-          </svg>
-        </div>
-        <h3 className="text-xl font-bold text-gray-800 dark:text-gray-100 mt-4 mb-2">Sin Tarjetas</h3>
-        <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
-          Aún no se han agregado flashcards para <strong className="text-indigo-600 dark:text-indigo-400">{subjectName}</strong>
-          {topicName && <> (Tema: <strong className="text-gray-700 dark:text-gray-300">{topicName}</strong>)</>}.
-        </p>
-        <button 
-          onClick={onBack}
-          className="mx-auto block px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl transition-all"
-        >
-          Volver atrás
-        </button>
-      </div>
-    );
-  }
-
-  if (currentCards.length === 0) {
-    return (
-      <div className="flex flex-col justify-center items-center py-20">
-        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-indigo-600 mb-3"></div>
-        <p className="text-sm text-gray-500 font-medium">Cargando tarjetas...</p>
-      </div>
-    );
-  }
-
   const activeCard = currentCards[currentCardIndex];
 
   const handleRate = (difficulty: 'EASY' | 'MEDIUM' | 'HARD') => {
@@ -242,6 +180,7 @@ const FlashcardsPlayView: React.FC<FlashcardsPlayViewProps> = ({
     setIsFinished(false);
     setIsTransitioning(false);
     setRatings({});
+    setAnsweredBoxIds(new Set());
   };
 
   const handleStudyOnlyIncorrect = () => {
@@ -262,8 +201,86 @@ const FlashcardsPlayView: React.FC<FlashcardsPlayViewProps> = ({
       setIsFinished(false);
       setIsTransitioning(false);
       setRatings({});
+      setAnsweredBoxIds(new Set());
     }
   };
+
+  // Keyboard controls with Enter advancement for Image Occlusion (called unconditionally)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (isFinished || isTransitioning || !activeCard) return;
+
+      const targetTag = (e.target as HTMLElement)?.tagName;
+      const isInput = targetTag === 'INPUT' || targetTag === 'TEXTAREA';
+
+      // If occlusion card is evaluated, pressing Enter ANYWHERE (even in the input) advances to next card
+      if (e.key === 'Enter') {
+        if (evaluation !== null) {
+          e.preventDefault();
+          handleRate(evaluation.isCorrect ? 'EASY' : 'HARD');
+          return;
+        }
+      }
+
+      // If user is currently typing in an input and card is not yet evaluated, allow typing
+      if (isInput) {
+        return;
+      }
+
+      const key = e.key;
+      const code = e.code;
+
+      if (code === 'Space') {
+        e.preventDefault(); // Prevents page scrolling
+        setIsFlipped(prev => !prev);
+      } else {
+        if (key === '1') {
+          handleRate('EASY');
+        } else if (key === '2') {
+          handleRate('MEDIUM');
+        } else if (key === '3') {
+          handleRate('HARD');
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [currentCardIndex, isFlipped, isFinished, currentCards, isTransitioning, evaluation, activeCard]);
+
+  if (flashcards.length === 0) {
+    return (
+      <div className="max-w-md mx-auto text-center py-12 bg-white dark:bg-slate-900 border border-gray-150 dark:border-slate-800 rounded-3xl p-8 shadow-md">
+        <div className="w-12 h-12 mx-auto text-indigo-500 flex items-center justify-center">
+          <svg xmlns="http://www.w3.org/2000/svg" className="w-10 h-10" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+          </svg>
+        </div>
+        <h3 className="text-xl font-bold text-gray-800 dark:text-gray-100 mt-4 mb-2">Sin Tarjetas</h3>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
+          Aún no se han agregado flashcards para <strong className="text-indigo-600 dark:text-indigo-400">{subjectName}</strong>
+          {topicName && <> (Tema: <strong className="text-gray-700 dark:text-gray-300">{topicName}</strong>)</>}.
+        </p>
+        <button 
+          onClick={onBack}
+          className="mx-auto block px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl transition-all"
+        >
+          Volver atrás
+        </button>
+      </div>
+    );
+  }
+
+  if (currentCards.length === 0) {
+    return (
+      <div className="flex flex-col justify-center items-center py-20">
+        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-indigo-600 mb-3"></div>
+        <p className="text-sm text-gray-500 font-medium">Cargando tarjetas...</p>
+      </div>
+    );
+  }
 
   // Render finish summary
   if (isFinished) {
@@ -478,6 +495,13 @@ const FlashcardsPlayView: React.FC<FlashcardsPlayViewProps> = ({
 
           const handleGradeOcclusion = (e?: React.FormEvent) => {
             if (e) e.preventDefault();
+
+            // If already evaluated, pressing Enter or submitting advances to the next question
+            if (evaluation !== null) {
+              handleRate(evaluation.isCorrect ? 'EASY' : 'HARD');
+              return;
+            }
+
             if (!userTypedAnswer.trim() || !activeCard) return;
 
             const expected = targetBox ? targetBox.correctAnswer : activeCard.back;
@@ -488,6 +512,11 @@ const FlashcardsPlayView: React.FC<FlashcardsPlayViewProps> = ({
               userTyped: userTypedAnswer.trim(),
               expected
             });
+
+            // Mark this box as answered so it stays revealed for the remainder of the session
+            if (targetBox) {
+              setAnsweredBoxIds(prev => new Set(prev).add(targetBox.id));
+            }
 
             if (isCorrect) {
               soundController.playSuccess();
@@ -566,7 +595,8 @@ const FlashcardsPlayView: React.FC<FlashcardsPlayViewProps> = ({
                       }
 
                       if (isTarget) {
-                        // Evaluated state
+                        // Evaluated state: Remove the solid blocking box so the underlying label is visible,
+                        // and indicate answer with an outline and badge
                         if (evaluation) {
                           return (
                             <div
@@ -577,13 +607,17 @@ const FlashcardsPlayView: React.FC<FlashcardsPlayViewProps> = ({
                                 width: `${box.width}%`,
                                 height: `${box.height}%`
                               }}
-                              className={`absolute rounded flex items-center justify-center p-1 text-center shadow-2xl z-30 transition-all font-black text-xs ${
+                              className={`absolute rounded pointer-events-none z-30 transition-all border-2 flex items-center justify-center ${
                                 evaluation.isCorrect
-                                  ? 'bg-emerald-500 text-white border-2 border-emerald-600 ring-4 ring-emerald-300/40'
-                                  : 'bg-rose-500 text-white border-2 border-rose-600 ring-4 ring-rose-300/40'
+                                  ? 'border-emerald-500 bg-emerald-500/15 ring-2 ring-emerald-400/30'
+                                  : 'border-rose-500 bg-rose-500/15 ring-2 ring-rose-400/30'
                               }`}
                             >
-                              <span className="truncate max-w-full font-black text-[11px] sm:text-xs">
+                              <span
+                                className={`absolute -top-3 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded text-[10px] font-black text-white shadow-md flex items-center gap-1 whitespace-nowrap z-40 ${
+                                  evaluation.isCorrect ? 'bg-emerald-600' : 'bg-rose-600'
+                                }`}
+                              >
                                 {evaluation.isCorrect ? `✓ ${box.correctAnswer}` : `✗ ${box.correctAnswer}`}
                               </span>
                             </div>
@@ -611,7 +645,13 @@ const FlashcardsPlayView: React.FC<FlashcardsPlayViewProps> = ({
                         );
                       }
 
-                      // Non-target boxes: 100% solid white mask covering the text
+                      // Non-target boxes:
+                      // If this box was already answered during this session, reveal it completely (remove the box for the rest of the game)
+                      if (answeredBoxIds.has(box.id)) {
+                        return null;
+                      }
+
+                      // Non-target boxes not yet answered: 100% solid white mask covering the text
                       return (
                         <div
                           key={box.id}
@@ -648,8 +688,18 @@ const FlashcardsPlayView: React.FC<FlashcardsPlayViewProps> = ({
                         type="text"
                         value={userTypedAnswer}
                         onChange={(e) => setUserTypedAnswer(e.target.value)}
-                        placeholder={`Escribe aquí el nombre que oculta ${targetBox?.label || 'el cuadro blanco'}...`}
-                        disabled={evaluation !== null}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && evaluation !== null) {
+                            e.preventDefault();
+                            handleRate(evaluation.isCorrect ? 'EASY' : 'HARD');
+                          }
+                        }}
+                        placeholder={
+                          evaluation 
+                            ? "Presiona Enter ↵ para la siguiente pregunta..." 
+                            : `Escribe aquí el nombre que oculta ${targetBox?.label || 'el cuadro blanco'}...`
+                        }
+                        readOnly={evaluation !== null}
                         className="w-full py-3.5 px-4 rounded-2xl border-2 border-indigo-300 dark:border-indigo-700/80 bg-white dark:bg-[#000b17] text-gray-900 dark:text-white font-bold outline-none text-sm sm:text-base shadow-sm focus:border-indigo-600 dark:focus:border-indigo-400 focus:ring-4 focus:ring-indigo-500/20 transition-all placeholder:text-gray-400 dark:placeholder:text-gray-500"
                         autoFocus
                       />
@@ -666,23 +716,44 @@ const FlashcardsPlayView: React.FC<FlashcardsPlayViewProps> = ({
                     </div>
 
                     <div className="flex gap-2 shrink-0">
-                      {/* Button 1: Calificar */}
-                      <button
-                        type="submit"
-                        disabled={!userTypedAnswer.trim() || evaluation !== null}
-                        className="flex-1 sm:flex-initial py-3.5 px-6 bg-indigo-600 hover:bg-indigo-700 dark:bg-[#5950e7] dark:hover:bg-[#4d44db] disabled:opacity-40 disabled:cursor-not-allowed text-white font-black text-xs sm:text-sm uppercase tracking-wider rounded-2xl shadow-md hover:shadow-indigo-500/25 transition-all active:scale-95 flex items-center justify-center gap-2 min-h-[46px]"
-                      >
-                        <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-                        </svg>
-                        <span className="text-white">Calificar</span>
-                      </button>
+                      {/* Primary Button: "Calificar" when waiting for answer, "Siguiente Pregunta (Enter)" when evaluated */}
+                      {evaluation ? (
+                        <button
+                          type="button"
+                          onClick={() => handleRate(evaluation.isCorrect ? 'EASY' : 'HARD')}
+                          className="flex-1 sm:flex-initial py-3.5 px-6 bg-indigo-600 hover:bg-indigo-700 dark:bg-[#5950e7] dark:hover:bg-[#4d44db] text-white font-black text-xs sm:text-sm uppercase tracking-wider rounded-2xl shadow-md hover:shadow-indigo-500/25 transition-all active:scale-95 flex items-center justify-center gap-2 min-h-[46px]"
+                        >
+                          <span className="text-white">Siguiente</span>
+                          <kbd className="hidden sm:inline-block px-1.5 py-0.5 text-[10px] bg-black/25 rounded font-mono text-white">Enter ↵</kbd>
+                          <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                          </svg>
+                        </button>
+                      ) : (
+                        <button
+                          type="submit"
+                          disabled={!userTypedAnswer.trim()}
+                          className="flex-1 sm:flex-initial py-3.5 px-6 bg-indigo-600 hover:bg-indigo-700 dark:bg-[#5950e7] dark:hover:bg-[#4d44db] disabled:opacity-40 disabled:cursor-not-allowed text-white font-black text-xs sm:text-sm uppercase tracking-wider rounded-2xl shadow-md hover:shadow-indigo-500/25 transition-all active:scale-95 flex items-center justify-center gap-2 min-h-[46px]"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                          </svg>
+                          <span className="text-white">Calificar</span>
+                        </button>
+                      )}
 
                       {/* Button 2: Reintentar o Revelar */}
                       {evaluation ? (
                         <button
                           type="button"
                           onClick={() => {
+                            if (targetBox) {
+                              setAnsweredBoxIds(prev => {
+                                const next = new Set(prev);
+                                next.delete(targetBox.id);
+                                return next;
+                              });
+                            }
                             setEvaluation(null);
                             setUserTypedAnswer('');
                             setTimeout(() => inputRef.current?.focus(), 50);
@@ -704,6 +775,9 @@ const FlashcardsPlayView: React.FC<FlashcardsPlayViewProps> = ({
                               userTyped: userTypedAnswer.trim() || '(Sin respuesta)',
                               expected
                             });
+                            if (targetBox) {
+                              setAnsweredBoxIds(prev => new Set(prev).add(targetBox.id));
+                            }
                           }}
                           className="py-3.5 px-5 bg-indigo-50 hover:bg-indigo-100 dark:bg-[#000c19] dark:hover:bg-[#00152b] text-indigo-700 dark:text-white border border-indigo-200/80 dark:border-indigo-800/80 font-black text-xs uppercase tracking-wider rounded-2xl shadow-sm transition-all active:scale-95 flex items-center justify-center gap-1.5 min-h-[46px]"
                           title="Revelar respuesta oculta"
@@ -741,9 +815,10 @@ const FlashcardsPlayView: React.FC<FlashcardsPlayViewProps> = ({
                         <button
                           type="button"
                           onClick={() => handleRate('EASY')}
-                          className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs uppercase tracking-wider rounded-xl shadow transition-all active:scale-95 shrink-0"
+                          className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs uppercase tracking-wider rounded-xl shadow transition-all active:scale-95 shrink-0 flex items-center gap-1.5"
                         >
-                          Siguiente (Fácil) →
+                          <span>Siguiente (Fácil)</span>
+                          <kbd className="hidden sm:inline-block px-1.5 py-0.5 text-[10px] bg-emerald-700/80 rounded font-mono text-white">↵ Enter</kbd>
                         </button>
                       </div>
                     ) : (
@@ -767,9 +842,10 @@ const FlashcardsPlayView: React.FC<FlashcardsPlayViewProps> = ({
                           <button
                             type="button"
                             onClick={() => handleRate('HARD')}
-                            className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white font-black text-xs uppercase tracking-wider rounded-xl shadow transition-all active:scale-95"
+                            className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white font-black text-xs uppercase tracking-wider rounded-xl shadow transition-all active:scale-95 flex items-center gap-1.5"
                           >
-                            Marcar Difícil
+                            <span>Difícil</span>
+                            <kbd className="hidden sm:inline-block px-1.5 py-0.5 text-[10px] bg-rose-700/80 rounded font-mono text-white">↵ Enter</kbd>
                           </button>
                           <button
                             type="button"

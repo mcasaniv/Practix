@@ -227,7 +227,7 @@ const FlashcardsHomeView: React.FC<FlashcardsHomeViewProps> = ({
     const totalSubjectCards = flashcards.filter(f => f.course === selectedCourseName && f.subject === selectedSubjectName).length;
 
     return (
-      <div className="space-y-6 animate-fade-in">
+      <div id="flashcards-home-topics-root" className="space-y-6 animate-fade-in">
         <button 
           onClick={() => setSelectedSubjectName(null)}
           className="flex items-center gap-2 text-indigo-600 dark:text-indigo-400 font-bold text-xs sm:text-sm min-h-[44px] px-2 py-1 rounded-xl hover:underline"

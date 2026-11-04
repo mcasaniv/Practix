@@ -490,35 +490,28 @@ const TopicsView: React.FC<TopicsViewProps> = ({
     onStartMixedQuiz(selected, mode, customTitle);
   };
 
-  const getTopicColorClasses = (topicName: string, globalIndex?: number) => {
+  const getTopicColorClasses = (topicName: string) => {
     const result = results[`${subjectName}|${topicName}`];
     const timesPracticed = result?.timesPracticed ?? (result && result.total > 0 ? 1 : 0);
     const isPracticed = timesPracticed > 0 && result && result.total > 0;
 
-    let darkBg = "dark:bg-slate-900";
-    if (globalIndex === 0) {
-      darkBg = "dark:bg-[#001228]";
-    } else if (globalIndex === 2) {
-      darkBg = "dark:bg-[#000307]";
-    }
-
-    // Color estándar consistente con el resto de componentes
+    // Sin practicar: fondo blanco / pizarra oscura
     if (!isPracticed) {
-      return `bg-white ${darkBg} border-gray-200 dark:border-slate-800 text-gray-800 dark:text-white hover:border-indigo-300 dark:hover:border-slate-700`;
+      return "bg-white dark:bg-slate-900 border-gray-200 dark:border-slate-800 text-gray-800 dark:text-white hover:border-indigo-300 dark:hover:border-slate-700";
     }
 
     const { score, total } = result;
 
-    // Verde: Puntaje perfecto
+    // Verde: Puntaje perfecto (100% de aciertos)
     if (score === total) {
-      return `bg-white ${darkBg} border-emerald-300 dark:border-emerald-700/80 shadow-sm text-gray-800 dark:text-white hover:border-emerald-400`;
+      return "bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-700/80 shadow-sm text-gray-900 dark:text-white hover:border-emerald-400";
     }
-    // Rojo: Inferior al 50% de aciertos
+    // Rojo: Desaprobado (menos del 50% de aciertos)
     if (score < total / 2) {
-      return `bg-white ${darkBg} border-rose-300 dark:border-rose-700/80 shadow-sm text-gray-800 dark:text-white hover:border-rose-400`;
+      return "bg-rose-50 dark:bg-rose-950/40 border-rose-300 dark:border-rose-700/80 shadow-sm text-gray-900 dark:text-white hover:border-rose-400";
     }
-    // Amarillo / Ámbar: Aprobado (>= 50% y < 100%)
-    return `bg-white ${darkBg} border-amber-300 dark:border-amber-700/80 shadow-sm text-gray-800 dark:text-white hover:border-amber-400`;
+    // Amarillo / Ámbar: Aprobado (>= 50% y < 100% de aciertos)
+    return "bg-amber-50 dark:bg-amber-950/40 border-amber-300 dark:border-amber-700/80 shadow-sm text-gray-900 dark:text-white hover:border-amber-400";
   };
 
   const renderPracticeBadge = (topicName: string) => {
@@ -564,6 +557,9 @@ const TopicsView: React.FC<TopicsViewProps> = ({
   const renderTopicCard = (topic: typeof topics[0], globalIndex: number) => {
     const isOfficialExamView = subjectName === 'Simulacros Oficiales' || courseName === 'Exámenes';
     const topicQuestions = filteredQuestions.filter(q => q.topic === topic.name);
+    const result = results[`${subjectName}|${topic.name}`];
+    const timesPracticed = result?.timesPracticed ?? (result && result.total > 0 ? 1 : 0);
+    const isPracticed = timesPracticed > 0 && result && result.total > 0;
     
     // Group subjects inside this exam deck
     const subjectsMap = new Map<string, { count: number; weight?: number }>();
@@ -581,11 +577,19 @@ const TopicsView: React.FC<TopicsViewProps> = ({
     return (
       <div 
         key={topic.name}
-        className={`rounded-2xl border p-4 sm:p-5 flex flex-col md:flex-row items-start md:items-center gap-3.5 sm:gap-4 md:gap-6 hover:shadow-md transition-all ${getTopicColorClasses(topic.name, globalIndex)}`}
+        className={`rounded-2xl border p-4 sm:p-5 flex flex-col md:flex-row items-start md:items-center gap-3.5 sm:gap-4 md:gap-6 hover:shadow-md transition-all ${getTopicColorClasses(topic.name)}`}
       >
         {/* Left Section: Topic Number + Topic Title + Badges */}
         <div className="flex items-start gap-3 w-full md:w-auto flex-grow min-w-0">
-          <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center font-black text-base sm:text-lg shrink-0 border bg-indigo-50 dark:bg-slate-800 text-indigo-700 dark:text-white border-indigo-100 dark:border-slate-700">
+          <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center font-black text-base sm:text-lg shrink-0 border shadow-sm ${
+            !isPracticed 
+              ? 'bg-indigo-50 dark:bg-slate-800 text-indigo-700 dark:text-white border-indigo-100 dark:border-slate-700'
+              : result.score === result.total
+                ? 'bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-200 border-emerald-300 dark:border-emerald-700'
+                : result.score < result.total / 2
+                  ? 'bg-rose-100 dark:bg-rose-900/60 text-rose-800 dark:text-rose-200 border-rose-300 dark:border-rose-700'
+                  : 'bg-amber-100 dark:bg-amber-900/60 text-amber-800 dark:text-amber-200 border-amber-300 dark:border-amber-700'
+          }`}>
             {topic.order === 999 ? '?' : topic.order}
           </div>
 
@@ -677,9 +681,7 @@ const TopicsView: React.FC<TopicsViewProps> = ({
           )}
 
           {/* Move Up/Down */}
-          <div className={`flex border border-gray-200 dark:border-slate-700 rounded-xl overflow-hidden ${
-            globalIndex === 1 ? 'bg-gray-50 dark:bg-[#000c19]' : 'bg-gray-50 dark:bg-slate-800'
-          } shrink-0`}>
+          <div className="flex border border-gray-200 dark:border-slate-700 rounded-xl overflow-hidden bg-gray-50 dark:bg-slate-800 shrink-0">
             <button 
               onClick={() => onMoveTopic(topic.name, 'UP')}
               disabled={globalIndex === 0}
@@ -746,7 +748,7 @@ const TopicsView: React.FC<TopicsViewProps> = ({
   };
 
   return (
-    <div className="space-y-3.5 sm:space-y-4">
+    <div id="topics-view-root" className="space-y-3.5 sm:space-y-4">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800 rounded-2xl sm:rounded-3xl p-4 sm:p-5 md:p-6 shadow-sm">
         <div>
