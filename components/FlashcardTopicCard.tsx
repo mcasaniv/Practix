@@ -22,6 +22,7 @@ interface FlashcardTopicCardProps {
   onStartPlay: (course: string, subject: string, topic?: string) => void;
   onMoveTopic?: (topicName: string, subjectName: string, courseName: string, direction: 'UP' | 'DOWN') => void;
   onUploadOcclusionForTopic?: (topicName: string) => void;
+  onCreateFormulaForTopic?: (topicName: string) => void;
 }
 
 export const FlashcardTopicCard: React.FC<FlashcardTopicCardProps> = ({
@@ -33,26 +34,20 @@ export const FlashcardTopicCard: React.FC<FlashcardTopicCardProps> = ({
   selectedSubjectName,
   onStartPlay,
   onMoveTopic,
-  onUploadOcclusionForTopic
+  onUploadOcclusionForTopic,
+  onCreateFormulaForTopic
 }) => {
   const mastery = topic.percent;
 
-  // Custom dark mode theme colors requested specifically for the flashcards topic view:
-  // Item 0 (CSS selector 2): dark:bg-[#001228]
-  // Item 2 (CSS selector 3): dark:bg-[#000307]
-  // Other items: dark:bg-slate-900
-  let darkBgClass = "dark:bg-slate-900";
-  if (index === 0) {
-    darkBgClass = "dark:bg-[#001228]";
-  } else if (index === 2) {
-    darkBgClass = "dark:bg-[#000307]";
-  }
-
-  let cardBgBorder = `bg-white ${darkBgClass} border-gray-100 dark:border-slate-800 hover:border-indigo-300 dark:hover:border-slate-700`;
+  let cardBgBorder = "bg-white dark:bg-slate-900 border-gray-200 dark:border-slate-800 text-gray-800 dark:text-white hover:border-indigo-300 dark:hover:border-slate-700";
   if (mastery !== null) {
-    if (mastery >= 80) cardBgBorder = `bg-white ${darkBgClass} border-emerald-300 dark:border-emerald-700/80 hover:border-emerald-400`;
-    else if (mastery >= 50) cardBgBorder = `bg-white ${darkBgClass} border-amber-300 dark:border-amber-700/80 hover:border-amber-400`;
-    else cardBgBorder = `bg-white ${darkBgClass} border-rose-300 dark:border-rose-700/80 hover:border-rose-400`;
+    if (mastery >= 80) {
+      cardBgBorder = "bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-700/80 shadow-sm text-gray-900 dark:text-white hover:border-emerald-400";
+    } else if (mastery >= 50) {
+      cardBgBorder = "bg-amber-50 dark:bg-amber-950/40 border-amber-300 dark:border-amber-700/80 shadow-sm text-gray-900 dark:text-white hover:border-amber-400";
+    } else {
+      cardBgBorder = "bg-rose-50 dark:bg-rose-950/40 border-rose-300 dark:border-rose-700/80 shadow-sm text-gray-900 dark:text-white hover:border-rose-400";
+    }
   }
 
   return (
@@ -63,13 +58,21 @@ export const FlashcardTopicCard: React.FC<FlashcardTopicCardProps> = ({
     >
       <div className="flex items-start sm:items-center gap-3.5 flex-grow min-w-0">
         {/* Topic Badge Number or Star Icon */}
-        <div className="bg-indigo-50 dark:bg-slate-800 text-indigo-700 dark:text-white border border-indigo-100/60 dark:border-slate-700 w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center font-black text-base sm:text-lg shrink-0 shadow-inner">
+        <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center font-black text-base sm:text-lg shrink-0 border shadow-sm ${
+          mastery === null
+            ? 'bg-indigo-50 dark:bg-slate-800 text-indigo-700 dark:text-white border-indigo-100 dark:border-slate-700'
+            : mastery >= 80
+              ? 'bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-200 border-emerald-300 dark:border-emerald-700'
+              : mastery >= 50
+                ? 'bg-amber-100 dark:bg-amber-900/60 text-amber-800 dark:text-amber-200 border-amber-300 dark:border-amber-700'
+                : 'bg-rose-100 dark:bg-rose-900/60 text-rose-800 dark:text-rose-200 border-rose-300 dark:border-rose-700'
+        }`}>
           {topic.isDefault ? (
             <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5 text-amber-500 fill-amber-400" viewBox="0 0 24 24">
               <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
             </svg>
           ) : (
-            <span className="text-gray-900 dark:text-white font-black">
+            <span className="font-black">
               {nonDefaultIndex === -1 ? '?' : (nonDefaultIndex + 1)}
             </span>
           )}
@@ -125,6 +128,21 @@ export const FlashcardTopicCard: React.FC<FlashcardTopicCardProps> = ({
                 <span>+ Imagen con oclusión</span>
               </button>
             )}
+
+            {/* Quick link to create formula flashcard for this topic */}
+            {onCreateFormulaForTopic && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onCreateFormulaForTopic(topic.isDefault ? '' : topic.name);
+                }}
+                className="text-[11px] font-bold text-amber-600 dark:text-amber-400 hover:text-amber-700 dark:hover:text-amber-300 hover:underline flex items-center gap-1"
+                title="Armar fórmula con bloques para este tema"
+              >
+                <span>🧩 + Armar fórmula</span>
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -135,9 +153,7 @@ export const FlashcardTopicCard: React.FC<FlashcardTopicCardProps> = ({
         onClick={(e) => e.stopPropagation()}
       >
         {onMoveTopic && !topic.isDefault && (
-          <div className={`flex border border-gray-200 dark:border-slate-700 rounded-xl overflow-hidden ${
-            index === 1 ? 'bg-gray-50 dark:bg-[#000c19]' : 'bg-gray-50 dark:bg-slate-800'
-          } shrink-0`}>
+          <div className="flex border border-gray-200 dark:border-slate-700 rounded-xl overflow-hidden bg-gray-50 dark:bg-slate-800 shrink-0">
             {/* Up Button */}
             <button 
               type="button"
@@ -152,7 +168,7 @@ export const FlashcardTopicCard: React.FC<FlashcardTopicCardProps> = ({
               ▲
             </button>
 
-            {/* Down Button (custom colored on item 3 / index 2 as requested) */}
+            {/* Down Button */}
             <button 
               type="button"
               onClick={(e) => {
@@ -160,14 +176,10 @@ export const FlashcardTopicCard: React.FC<FlashcardTopicCardProps> = ({
                 onMoveTopic(topic.name, selectedSubjectName, selectedCourseName, 'DOWN');
               }}
               disabled={nonDefaultIndex === nonDefaultCount - 1}
-              className={`p-2 min-h-[40px] min-w-[36px] flex items-center justify-center border-l border-gray-200 dark:border-slate-700 hover:bg-gray-200 dark:hover:bg-slate-700 disabled:opacity-30 transition-colors ${
-                index === 2 
-                  ? 'bg-indigo-600 dark:bg-[#5950e7] text-white hover:bg-indigo-700' 
-                  : 'text-gray-600 dark:text-white'
-              }`}
+              className="p-2 min-h-[40px] min-w-[36px] flex items-center justify-center border-l border-gray-200 dark:border-slate-700 hover:bg-gray-200 dark:hover:bg-slate-700 disabled:opacity-30 transition-colors text-gray-600 dark:text-white font-bold"
               title="Mover Abajo"
             >
-              <span className="text-white font-bold">▼</span>
+              ▼
             </button>
           </div>
         )}

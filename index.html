@@ -106,100 +106,48 @@
       .dark .text-indigo-950:not([class*="dark:text-"]):not(button.bg-white *):not(.bg-white *) { color: #e0e7ff !important; }
       .dark .text-indigo-900:not([class*="dark:text-"]):not(button.bg-white *):not(.bg-white *) { color: #e0e7ff !important; }
 
-      /* Focus Mode styles scoped strictly to Flashcards Topics View */
-      html.dark #flashcards-home-topics-root .flashcard-topic-component#flashcard-topic-card-0,
-      .dark #flashcards-home-topics-root .flashcard-topic-component#flashcard-topic-card-0 {
-        background-color: #001228 !important;
-      }
-      html.dark #flashcards-home-topics-root .flashcard-topic-component#flashcard-topic-card-2,
-      .dark #flashcards-home-topics-root .flashcard-topic-component#flashcard-topic-card-2 {
-        background-color: #000307 !important;
-      }
-
-      /* Guarantees Estadísticas y Progreso stays on standard dark slate background */
-      html.dark #stats-view-root .stats-course-component,
-      .dark #stats-view-root .stats-course-component,
-      html.dark .stats-course-component,
-      .dark .stats-course-component {
-        background-color: #0f172a !important;
-      }
-      /* KaTeX tweaks */
-      .katex-display {
-        margin: 1em 0;
-        overflow-x: auto;
-        overflow-y: hidden;
-      }
-
-      /* High visibility styling for underlined words in questions, statements, and options */
+      /* Underlined words in questions, statements, and options: clean underline without heavy highlighting */
       u,
       ins,
       .practix-underlined-text {
         text-decoration: underline !important;
-        text-decoration-thickness: 3.5px !important;
-        text-underline-offset: 4px !important;
-        text-decoration-skip-ink: none !important;
-        font-weight: 800 !important;
-        display: inline-block !important;
-        vertical-align: baseline !important;
-        padding: 1px 6px 2px 6px !important;
-        margin: 0 2px !important;
-        border-radius: 5px !important;
-        box-decoration-break: clone !important;
-        -webkit-box-decoration-break: clone !important;
+        text-decoration-thickness: 2px !important;
+        text-underline-offset: 3.5px !important;
+        background: transparent !important;
+        background-color: transparent !important;
+        border: none !important;
+        box-shadow: none !important;
+        text-shadow: none !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        display: inline !important;
+        color: inherit !important;
+        text-decoration-color: currentColor !important;
       }
 
-      /* In dark theme & Practix mode: glowing golden highlighter badge with bold yellow underline */
-      .dark u,
-      .dark ins,
-      .dark .practix-underlined-text,
-      .practix-dark u,
-      .practix-dark ins,
-      .practix-dark .practix-underlined-text {
-        color: #fef08a !important; /* amber-100 luminous text */
-        text-decoration-color: #facc15 !important; /* vibrant yellow-400 */
-        border-bottom: 3.5px solid #facc15 !important;
-        background: linear-gradient(180deg, rgba(250, 204, 21, 0.18) 0%, rgba(250, 204, 21, 0.38) 100%) !important;
-        box-shadow: 0 0 10px rgba(250, 204, 21, 0.35), inset 0 0 0 1px rgba(250, 204, 21, 0.4) !important;
-        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7);
-      }
-
-      /* On colorful option buttons in Practix mode: high-contrast white badge with deep black text and double gold underline */
       button u,
       button ins,
       button .practix-underlined-text {
-        background-color: #ffffff !important;
-        color: #0f172a !important;
-        font-weight: 900 !important;
+        background: transparent !important;
+        background-color: transparent !important;
+        border: none !important;
+        box-shadow: none !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        display: inline !important;
+        color: inherit !important;
         text-decoration: underline !important;
-        text-decoration-color: #ca8a04 !important;
-        border: 1.5px solid #fde047 !important;
-        border-bottom: 4px solid #ca8a04 !important;
-        padding: 2px 8px 3px 8px !important;
-        margin: 0 2px !important;
-        border-radius: 6px !important;
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45) !important;
-        text-shadow: none !important;
-      }
-
-      /* In light mode (e.g. Classic exam on white paper): warm amber-yellow highlighter pen effect */
-      html:not(.dark) body:not(.dark) u:not(button *):not(.dark *):not(.practix-dark *),
-      html:not(.dark) body:not(.dark) ins:not(button *):not(.dark *):not(.practix-dark *),
-      html:not(.dark) body:not(.dark) .practix-underlined-text:not(button *):not(.dark *):not(.practix-dark *) {
-        color: #713f12 !important; /* amber-950 */
-        text-decoration-color: #d97706 !important; /* amber-600 */
-        border-bottom: 3px solid #d97706 !important;
-        background-color: rgba(253, 224, 71, 0.55) !important; /* vivid yellow marker */
-        border: 1px solid rgba(217, 119, 6, 0.3) !important;
-        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08) !important;
+        text-decoration-thickness: 2px !important;
+        text-underline-offset: 3.5px !important;
+        text-decoration-color: currentColor !important;
       }
 
       /* KaTeX math formulas containing \underline */
       .katex .underline,
       .katex-html .underline {
-        border-bottom: 3.5px solid #facc15 !important;
-        background-color: rgba(250, 204, 21, 0.22) !important;
-        border-radius: 3px !important;
-        padding: 0 3px 2px 3px !important;
+        border-bottom: 2px solid currentColor !important;
+        background-color: transparent !important;
+        padding: 0 !important;
       }
 
       /* 3D Flip Card Styles */

@@ -36,7 +36,7 @@ export const ACADEMIC_STRUCTURE: CourseStructure[] = [
   {
     name: 'Razonamiento',
     subjects: ['Razonamiento Matemático', 'Razonamiento Verbal', 'Raz. Lógico', 'Comprensión Lectora'],
-    icon: 'https://i.pinimg.com/736x/93/bc/75/93bc75ffd6e50150860b176ad1459faf.jpg',
+    icon: 'https://i.pinimg.com/736x/0d/3a/75/0d3a75d35ee3a42f06b02cc04ce33c73.jpg',
     color: 'bg-purple-100 text-purple-700 border-purple-200'
   },
   {
@@ -48,7 +48,7 @@ export const ACADEMIC_STRUCTURE: CourseStructure[] = [
   {
     name: 'Exámenes',
     subjects: ['Simulacros Oficiales', 'Exámenes Rendidos'],
-    icon: 'https://i.pinimg.com/736x/21/2e/0f/212e0f40d796790938497645166294b0.jpg',
+    icon: 'https://i.pinimg.com/736x/63/d9/52/63d9529e0243c5e21f8861cd6541410d.jpg',
     color: 'bg-indigo-100 text-indigo-700 border-indigo-200'
   }
 ];

@@ -100,6 +100,25 @@ const sanitizeDatabase = (data: AppDatabase): AppDatabase => {
     return { ...f, id: fId };
   });
 
+  // Seed sample Formula Builder flashcard if none exists
+  if (!sanitizedFlashcards.some(f => f.type === 'FORMULA_BUILDER' || f.id === 'sample-formula-einstein-1')) {
+    sanitizedFlashcards.push({
+      id: 'sample-formula-einstein-1',
+      course: 'Ciencias',
+      subject: 'Física',
+      topic: 'Física Moderna y Relatividad',
+      type: 'FORMULA_BUILDER',
+      front: '¿Cuál es la ecuación de equivalencia entre masa y energía en reposo según la teoría de Albert Einstein?',
+      back: 'E = mc²',
+      formulaFull: 'E = mc²',
+      formulaTokens: ['E', '=', 'm', 'c', '²'],
+      formulaDistractors: ['³', '-', '2', '/'],
+      formulaExplanation: 'E es la energía, m la masa y c la velocidad de la luz en el vacío (aprox. 300,000 km/s).',
+      createdAt: 1700000000000,
+      order: 1
+    });
+  }
+
   const seenCustomDeckIds = new Set<string>();
   const sanitizedCustomDecks = (data.customDecks ? [...data.customDecks] : []).map(d => {
     let dId = d.id;

@@ -71,9 +71,8 @@ function parseBasicFormatting(plainText: string, keyPrefix: string | number): Re
       underline = !isClose;
     } else if (part) {
       if (underline) {
-        // High visibility underline for exam questions, specially designed for Practix mode and dark/light backgrounds
-        let className = 'practix-underlined-text font-extrabold';
-        if (bold) className += ' font-black';
+        let className = 'practix-underlined-text';
+        if (bold) className += ' font-bold';
         if (italic) className += ' italic';
 
         elements.push(
@@ -834,3 +833,89 @@ export function parseAndNormalizeImport(
 
   throw new Error("Formato de JSON no reconocido como banco de preguntas ni copia de seguridad.");
 }
+
+/**
+ * Detects if a token is a fraction (LaTeX \frac{a}{b}, simple division "5/2" or unicode "½").
+ */
+export const parseFractionToken = (text: string): { numerator: string; denominator: string } | null => {
+  if (!text) return null;
+  const trimmed = text.trim();
+
+  // Case 1: LaTeX \frac{num}{den}
+  const fracMatch = /^\\frac\{([^{}]+)\}\{([^{}]+)\}$/.exec(trimmed);
+  if (fracMatch) {
+    return { numerator: fracMatch[1].trim(), denominator: fracMatch[2].trim() };
+  }
+
+  // Case 2: Unicode fractions
+  const unicodeMap: Record<string, [string, string]> = {
+    '½': ['1', '2'],
+    '⅓': ['1', '3'],
+    '¼': ['1', '4'],
+    '¾': ['3', '4'],
+    '⅔': ['2', '3'],
+    '⅕': ['1', '5'],
+    '⅖': ['2', '5'],
+    '⅗': ['3', '5'],
+    '⅘': ['4', '5'],
+    '⅙': ['1', '6'],
+    '⅚': ['5', '6'],
+    '⅛': ['1', '8'],
+    '⅜': ['3', '8'],
+    '⅝': ['5', '8'],
+    '⅞': ['7', '8'],
+  };
+  if (unicodeMap[trimmed]) {
+    const [num, den] = unicodeMap[trimmed];
+    return { numerator: num, denominator: den };
+  }
+
+  // Case 3: Simple division A/B (e.g. "5/2", "1/2", "3/4", "v/t", "m/s", "(a+b)/2")
+  // Must have exactly one '/' and neither side is empty
+  const slashParts = trimmed.split('/');
+  if (slashParts.length === 2 && slashParts[0].trim().length > 0 && slashParts[1].trim().length > 0) {
+    return { numerator: slashParts[0].trim(), denominator: slashParts[1].trim() };
+  }
+
+  return null;
+};
+
+/**
+ * Visual token renderer for formula blocks:
+ * Renders fractions vertically with numerator over denominator and horizontal vinculum bar,
+ * avoiding flat representations like "5/2".
+ */
+export const FormulaTokenRenderer: React.FC<{
+  text: string;
+  className?: string;
+  size?: 'sm' | 'md' | 'lg';
+}> = ({ text, className = '', size = 'md' }) => {
+  const frac = parseFractionToken(text);
+
+  if (frac) {
+    const numSize = size === 'sm' ? 'text-[10px]' : size === 'lg' ? 'text-xs sm:text-sm' : 'text-[11px] sm:text-xs';
+    const denSize = size === 'sm' ? 'text-[10px]' : size === 'lg' ? 'text-xs sm:text-sm' : 'text-[11px] sm:text-xs';
+    const minW = size === 'sm' ? 'min-w-[12px]' : 'min-w-[16px]';
+
+    return (
+      <span className={`inline-flex flex-col items-center justify-center align-middle text-center mx-0.5 leading-none select-none font-mono ${className}`}>
+        <span className={`${numSize} font-bold px-1 border-b-[1.5px] border-current pb-0.5 w-full text-center ${minW}`}>
+          {frac.numerator}
+        </span>
+        <span className={`${denSize} font-bold px-1 pt-0.5 w-full text-center ${minW}`}>
+          {frac.denominator}
+        </span>
+      </span>
+    );
+  }
+
+  // Render LaTeX if contains LaTeX backslash commands
+  if (text.includes('\\') || text.includes('^') || text.includes('_')) {
+    const html = renderLatexToString(text);
+    if (html) {
+      return <span className={`inline-block align-middle ${className}`} dangerouslySetInnerHTML={{ __html: html }} />;
+    }
+  }
+
+  return <span className={className}>{text}</span>;
+};

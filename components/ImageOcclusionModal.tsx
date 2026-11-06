@@ -91,6 +91,10 @@ export const ImageOcclusionModal: React.FC<ImageOcclusionModalProps> = ({
   const [currentDragRect, setCurrentDragRect] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
   const [isProcessingImage, setIsProcessingImage] = useState<boolean>(false);
 
+  // Batch session cards (cards created in this modal session for this deck)
+  const [sessionCards, setSessionCards] = useState<Flashcard[]>([]);
+  const [showSessionCardsList, setShowSessionCardsList] = useState<boolean>(false);
+
   const containerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -98,10 +102,18 @@ export const ImageOcclusionModal: React.FC<ImageOcclusionModalProps> = ({
   const availableSubjects = (academicStructure.find(c => c.name === course)?.subjects) || [];
 
   useEffect(() => {
-    if (initialCourseName) setCourse(initialCourseName);
-    if (initialSubjectName) setSubject(initialSubjectName);
-    if (initialTopicName !== undefined) setTopic(initialTopicName || '');
-  }, [initialCourseName, initialSubjectName, initialTopicName]);
+    if (isOpen) {
+      if (initialCourseName) setCourse(initialCourseName);
+      if (initialSubjectName) setSubject(initialSubjectName);
+      if (initialTopicName !== undefined) setTopic(initialTopicName || '');
+      setSessionCards([]);
+      setShowSessionCardsList(false);
+      setImageUrl('');
+      setUrlInput('');
+      setBoxes([]);
+      setSelectedBoxId(null);
+    }
+  }, [isOpen, initialCourseName, initialSubjectName, initialTopicName]);
 
   useEffect(() => {
     if (availableSubjects.length > 0 && (!subject || !availableSubjects.includes(subject))) {
@@ -282,38 +294,38 @@ export const ImageOcclusionModal: React.FC<ImageOcclusionModalProps> = ({
     }
   };
 
-  // Handle Save
-  const handleSave = () => {
+  // Builds flashcard(s) for the currently loaded image and boxes
+  const buildCurrentCards = (): Flashcard[] | null => {
     if (!course) {
-      alert("Por favor selecciona un curso.");
-      return;
+      if (onToast) onToast("Por favor selecciona un curso.");
+      return null;
     }
     if (!subject) {
-      alert("Por favor selecciona una materia.");
-      return;
+      if (onToast) onToast("Por favor selecciona una materia.");
+      return null;
     }
     if (!imageUrl) {
-      alert("Por favor sube o proporciona una imagen.");
-      return;
+      if (onToast) onToast("Por favor sube o proporciona una imagen.");
+      return null;
     }
     if (boxes.length === 0) {
-      alert("Debes colocar al menos un cuadro en blanco sobre la imagen para tapar algo.");
-      return;
+      if (onToast) onToast("Debes colocar al menos un cuadro en blanco sobre la imagen para tapar algo.");
+      return null;
     }
 
     // Validate that each box has a non-empty correct answer
     const emptyBox = boxes.find(b => !b.correctAnswer.trim());
     if (emptyBox) {
-      alert(`El cuadro ${emptyBox.label || 'en blanco'} no tiene respuesta asignada. Por favor escribe qué nombre o respuesta oculta ese cuadro.`);
+      if (onToast) onToast(`El cuadro ${emptyBox.label || 'en blanco'} no tiene respuesta asignada.`);
       setSelectedBoxId(emptyBox.id);
-      return;
+      return null;
     }
 
     const finalTopic = topic.trim() || 'Oclusión de Imagen';
     const cardsToSave: Flashcard[] = [];
+    const baseOrder = sessionCards.length + 1;
 
     if (mode === 'ONE_PER_BOX') {
-      // Create one flashcard per occlusion box (style)
       boxes.forEach((box, index) => {
         const cardId = crypto.randomUUID();
         const card: Flashcard = {
@@ -328,12 +340,11 @@ export const ImageOcclusionModal: React.FC<ImageOcclusionModalProps> = ({
           front: `Identifica la estructura oculta en el cuadro ${box.label || (index + 1)} (${finalTopic})`,
           back: box.correctAnswer.trim(),
           createdAt: Date.now() + index,
-          order: index + 1
+          order: baseOrder + index
         };
         cardsToSave.push(card);
       });
     } else {
-      // Create single flashcard with all boxes
       const cardId = crypto.randomUUID();
       const allAnswers = boxes.map((b, i) => `${b.label || `#${i+1}`}: ${b.correctAnswer.trim()}`).join('\n');
       const card: Flashcard = {
@@ -347,30 +358,62 @@ export const ImageOcclusionModal: React.FC<ImageOcclusionModalProps> = ({
         front: `Completa los nombres ocultos en los ${boxes.length} cuadros (${finalTopic})`,
         back: allAnswers,
         createdAt: Date.now(),
-        order: 1
+        order: baseOrder
       };
       cardsToSave.push(card);
     }
+    return cardsToSave;
+  };
 
-    onSaveFlashcards(cardsToSave);
+  // Save current image and clear workspace to add another image to the same deck
+  const handleSaveAndAddAnother = () => {
+    const cards = buildCurrentCards();
+    if (!cards) return;
+
+    onSaveFlashcards(cards);
+    setSessionCards(prev => [...prev, ...cards]);
+
+    // Keep course, subject, topic intact; clear image and boxes for the next card
+    setImageUrl('');
+    setUrlInput('');
+    setBoxes([]);
+    setSelectedBoxId(null);
+
     if (onToast) {
-      onToast(cardsToSave.length === 1 
-        ? "Tarjeta con imagen y oclusión creada exitosamente." 
-        : `¡${cardsToSave.length} tarjetas con imagen y oclusión creadas exitosamente!`
-      );
+      onToast(`¡${cards.length} ${cards.length === 1 ? 'tarjeta guardada' : 'tarjetas guardadas'}! Puedes agregar otra imagen para este tema.`);
     }
-    onClose();
+  };
+
+  // Save and finish (or finish if already saved session cards)
+  const handleSaveAndFinish = () => {
+    if (imageUrl && boxes.length > 0) {
+      const cards = buildCurrentCards();
+      if (!cards) return;
+      onSaveFlashcards(cards);
+      const totalCount = sessionCards.length + cards.length;
+      if (onToast) {
+        onToast(`¡Listo! Se guardaron ${totalCount} ${totalCount === 1 ? 'tarjeta' : 'tarjetas'} en el mazo.`);
+      }
+      onClose();
+    } else if (sessionCards.length > 0) {
+      if (onToast) {
+        onToast(`¡Listo! ${sessionCards.length} ${sessionCards.length === 1 ? 'tarjeta guardada' : 'tarjetas guardadas'} en total.`);
+      }
+      onClose();
+    } else {
+      buildCurrentCards();
+    }
   };
 
   if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 overflow-y-auto animate-fade-in">
-      <div className="bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800 rounded-3xl w-full max-w-4xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden my-auto">
+      <div className="bg-white dark:bg-[#000c19] border border-gray-100 dark:border-indigo-950/70 rounded-3xl w-full max-w-4xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden my-auto">
         {/* Modal Header */}
-        <div className="px-5 py-4 border-b border-gray-100 dark:border-slate-800 flex items-center justify-between shrink-0 bg-gray-50/50 dark:bg-slate-850">
+        <div className="px-5 py-4 border-b border-gray-100 dark:border-slate-800/80 flex items-center justify-between shrink-0 bg-gray-50/50 dark:bg-[#000a14]">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-indigo-600 text-white flex items-center justify-center shadow-md">
+            <div className="w-10 h-10 rounded-2xl bg-indigo-600 dark:bg-[#5950e7] text-white flex items-center justify-center shadow-md">
               <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
               </svg>
@@ -384,21 +427,78 @@ export const ImageOcclusionModal: React.FC<ImageOcclusionModalProps> = ({
               </p>
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-xl transition-all"
-            title="Cerrar"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
+          <div className="flex items-center gap-2">
+            {sessionCards.length > 0 && (
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setShowSessionCardsList(prev => !prev)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800/60 hover:bg-emerald-200 transition-all shadow-sm"
+                  title="Ver tarjetas agregadas en esta sesión"
+                >
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                  <span>{sessionCards.length} en mazo</span>
+                  <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5 ml-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+
+                {showSessionCardsList && (
+                  <div className="absolute right-0 mt-2 w-72 bg-white dark:bg-[#000c19] border border-gray-200 dark:border-indigo-950/80 rounded-2xl shadow-2xl p-3 z-50 text-xs animate-fade-in max-h-60 overflow-y-auto">
+                    <div className="font-bold text-gray-800 dark:text-gray-200 mb-2 flex items-center justify-between border-b pb-1 dark:border-slate-800">
+                      <span>Tarjetas guardadas ({sessionCards.length})</span>
+                      <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold">✓ En mazo</span>
+                    </div>
+                    <div className="space-y-1.5">
+                      {sessionCards.map((c, i) => (
+                        <div key={c.id || i} className="p-2 rounded-xl bg-gray-50 dark:bg-[#000a14] border border-gray-100 dark:border-slate-800/80 text-[11px]">
+                          <div className="font-medium text-gray-700 dark:text-gray-300 truncate">
+                            {c.front}
+                          </div>
+                          <div className="text-[10px] text-indigo-600 dark:text-indigo-400 font-bold truncate">
+                            R: {c.back}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <button
+              onClick={onClose}
+              className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-[#00142b] rounded-xl transition-all"
+              title="Cerrar"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
         </div>
 
         {/* Modal Body */}
         <div className="p-4 sm:p-6 overflow-y-auto space-y-5 flex-grow">
+          {/* Active Session Notification */}
+          {sessionCards.length > 0 && (
+            <div className="flex items-center justify-between px-3.5 py-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-800 dark:text-emerald-300 text-xs">
+              <div className="flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+                <span>
+                  Has guardado <strong>{sessionCards.length}</strong> {sessionCards.length === 1 ? 'tarjeta' : 'tarjetas'} en este mazo (<strong>{topic || 'Sin tema'}</strong>). Puedes añadir otra imagen a continuación.
+                </span>
+              </div>
+              <span className="text-[10px] uppercase font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-900/40 px-2 py-0.5 rounded-full">
+                Mazo Activo
+              </span>
+            </div>
+          )}
+
           {/* Metadata Form: Course, Subject, Topic */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-indigo-50/40 dark:bg-slate-800/40 p-3.5 rounded-2xl border border-indigo-100/50 dark:border-slate-800">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-indigo-50/40 dark:bg-[#000a14] p-3.5 rounded-2xl border border-indigo-100/50 dark:border-indigo-950/70">
             <div>
               <label className="block text-[10px] font-black uppercase text-indigo-700 dark:text-indigo-400 tracking-wider mb-1">
                 Curso
@@ -406,7 +506,7 @@ export const ImageOcclusionModal: React.FC<ImageOcclusionModalProps> = ({
               <select
                 value={course}
                 onChange={(e) => setCourse(e.target.value)}
-                className="w-full text-xs font-bold bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-xl p-2.5 outline-none text-gray-800 dark:text-gray-100"
+                className="w-full text-xs font-bold bg-white dark:bg-[#000c19] border border-gray-200 dark:border-slate-800 rounded-xl p-2.5 outline-none text-gray-800 dark:text-gray-100 focus:border-indigo-500"
               >
                 {academicStructure.map(c => (
                   <option key={c.name} value={c.name}>{c.name}</option>
@@ -421,7 +521,7 @@ export const ImageOcclusionModal: React.FC<ImageOcclusionModalProps> = ({
               <select
                 value={subject}
                 onChange={(e) => setSubject(e.target.value)}
-                className="w-full text-xs font-bold bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-xl p-2.5 outline-none text-gray-800 dark:text-gray-100"
+                className="w-full text-xs font-bold bg-white dark:bg-[#000c19] border border-gray-200 dark:border-slate-800 rounded-xl p-2.5 outline-none text-gray-800 dark:text-gray-100 focus:border-indigo-500"
               >
                 {availableSubjects.map(s => (
                   <option key={s} value={s}>{s}</option>
@@ -438,7 +538,7 @@ export const ImageOcclusionModal: React.FC<ImageOcclusionModalProps> = ({
                 value={topic}
                 onChange={(e) => setTopic(e.target.value)}
                 placeholder="Ej. Anatomía del Ojo, Célula animal..."
-                className="w-full text-xs font-medium bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-xl p-2.5 outline-none text-gray-800 dark:text-gray-100 focus:border-indigo-500"
+                className="w-full text-xs font-medium bg-white dark:bg-[#000c19] border border-gray-200 dark:border-slate-800 rounded-xl p-2.5 outline-none text-gray-800 dark:text-gray-100 focus:border-indigo-500"
               />
             </div>
           </div>
@@ -487,13 +587,13 @@ export const ImageOcclusionModal: React.FC<ImageOcclusionModalProps> = ({
                   value={urlInput}
                   onChange={(e) => setUrlInput(e.target.value)}
                   placeholder="O pega aquí el enlace URL de la imagen..."
-                  className="flex-grow text-xs bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-xl px-3 py-2 outline-none text-gray-800 dark:text-gray-100"
+                  className="flex-grow text-xs bg-white dark:bg-[#000a14] border border-gray-200 dark:border-slate-800 rounded-xl px-3 py-2 outline-none text-gray-800 dark:text-gray-100 focus:border-indigo-500"
                 />
                 <button
                   type="button"
                   disabled={!urlInput.trim() || isProcessingImage}
                   onClick={handleLoadFromUrl}
-                  className="px-3.5 py-2 bg-gray-100 dark:bg-slate-800 hover:bg-gray-200 dark:hover:bg-slate-700 text-gray-700 dark:text-gray-200 font-bold text-xs rounded-xl transition-all disabled:opacity-50"
+                  className="px-3.5 py-2 bg-gray-100 dark:bg-[#00142b] dark:border dark:border-indigo-900/50 hover:bg-gray-200 dark:hover:bg-[#001f3f] text-gray-700 dark:text-gray-200 font-bold text-xs rounded-xl transition-all disabled:opacity-50"
                 >
                   Cargar
                 </button>
@@ -502,9 +602,9 @@ export const ImageOcclusionModal: React.FC<ImageOcclusionModalProps> = ({
           ) : (
             <div className="space-y-4">
               {/* Toolbar above image */}
-              <div className="flex flex-wrap items-center justify-between gap-2.5 bg-gray-50 dark:bg-slate-850 p-3 rounded-2xl border border-gray-200 dark:border-slate-800">
+              <div className="flex flex-wrap items-center justify-between gap-2.5 bg-gray-50/80 dark:bg-[#000a14] p-3 rounded-2xl border border-gray-200 dark:border-indigo-950/80">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-xs font-bold text-indigo-700 dark:text-indigo-400 flex items-center gap-1.5 bg-indigo-50 dark:bg-indigo-950/50 px-3 py-1 rounded-xl">
+                  <span className="text-xs font-bold text-indigo-700 dark:text-indigo-300 flex items-center gap-1.5 bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200/50 dark:border-indigo-900/60 px-3 py-1.5 rounded-xl">
                     <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122" />
                     </svg>
@@ -514,7 +614,7 @@ export const ImageOcclusionModal: React.FC<ImageOcclusionModalProps> = ({
                   <button
                     type="button"
                     onClick={handleAddQuickBox}
-                    className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl transition-all shadow-sm active:scale-95 flex items-center gap-1"
+                    className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 dark:bg-[#5950e7] dark:hover:bg-[#4d44db] text-white font-bold text-xs rounded-xl transition-all shadow-sm active:scale-95 flex items-center gap-1"
                   >
                     <span>+ Añadir Cuadro</span>
                   </button>
@@ -523,7 +623,7 @@ export const ImageOcclusionModal: React.FC<ImageOcclusionModalProps> = ({
                     <button
                       type="button"
                       onClick={handleClearAllBoxes}
-                      className="px-2.5 py-1.5 bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 text-rose-600 dark:text-rose-400 font-bold text-xs rounded-xl transition-all"
+                      className="px-2.5 py-1.5 bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/50 text-rose-600 dark:text-rose-300 border border-rose-200/60 dark:border-rose-900/60 font-bold text-xs rounded-xl transition-all"
                     >
                       Limpiar Cuadros
                     </button>
@@ -531,7 +631,7 @@ export const ImageOcclusionModal: React.FC<ImageOcclusionModalProps> = ({
                 </div>
 
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-black text-gray-500 dark:text-gray-400 bg-white dark:bg-slate-900 px-3 py-1 rounded-xl border border-gray-200 dark:border-slate-800">
+                  <span className="text-xs font-black text-gray-500 dark:text-gray-300 bg-white dark:bg-[#000c19] px-3 py-1.5 rounded-xl border border-gray-200 dark:border-slate-800">
                     {boxes.length} {boxes.length === 1 ? 'cuadro colocado' : 'cuadros colocados'}
                   </span>
                   <button
@@ -543,7 +643,7 @@ export const ImageOcclusionModal: React.FC<ImageOcclusionModalProps> = ({
                         setSelectedBoxId(null);
                       }
                     }}
-                    className="text-xs font-bold text-gray-500 hover:text-gray-800 dark:hover:text-gray-200 hover:underline px-2 py-1"
+                    className="text-xs font-bold text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-indigo-300 hover:bg-gray-100 dark:hover:bg-[#00142b] px-2.5 py-1 rounded-lg transition-colors"
                   >
                     Cambiar Imagen
                   </button>
@@ -551,7 +651,7 @@ export const ImageOcclusionModal: React.FC<ImageOcclusionModalProps> = ({
               </div>
 
               {/* Interactive Canvas */}
-              <div className="relative border-2 border-indigo-200 dark:border-slate-700 rounded-3xl overflow-hidden bg-gray-900/5 select-none max-h-[500px] flex items-center justify-center">
+              <div className="relative border-2 border-indigo-200 dark:border-indigo-950/80 rounded-3xl overflow-hidden bg-gray-900/5 dark:bg-[#000711] select-none max-h-[500px] flex items-center justify-center">
                 <div
                   ref={containerRef}
                   onMouseDown={handlePointerDown}
@@ -563,13 +663,15 @@ export const ImageOcclusionModal: React.FC<ImageOcclusionModalProps> = ({
                   className="relative cursor-crosshair inline-block max-w-full"
                   style={{ touchAction: 'none' }}
                 >
-                  <img
-                    src={imageUrl}
-                    alt="Occlusion target"
-                    className="block max-h-[460px] w-auto max-w-full object-contain pointer-events-none rounded-2xl"
-                    referrerPolicy="no-referrer"
-                    draggable={false}
-                  />
+                  {imageUrl?.trim() ? (
+                    <img
+                      src={imageUrl.trim()}
+                      alt="Occlusion target"
+                      className="block max-h-[460px] w-auto max-w-full object-contain pointer-events-none rounded-2xl"
+                      referrerPolicy="no-referrer"
+                      draggable={false}
+                    />
+                  ) : null}
 
                   {/* Render Existing Occlusion Boxes (cuadros en blanco tapando el texto) */}
                   {boxes.map((b, idx) => {
@@ -648,10 +750,10 @@ export const ImageOcclusionModal: React.FC<ImageOcclusionModalProps> = ({
                 const activeIdx = boxes.findIndex(b => b.id === selectedBoxId);
 
                 return (
-                  <div className="p-4 bg-indigo-50 dark:bg-slate-800 rounded-2xl border-2 border-indigo-300 dark:border-indigo-600 animate-fade-in">
+                  <div className="p-4 bg-indigo-50/70 dark:bg-[#000a14] rounded-2xl border-2 border-indigo-300 dark:border-indigo-800/80 shadow-md animate-fade-in">
                     <div className="flex items-center justify-between mb-2">
                       <div className="flex items-center gap-2">
-                        <span className="bg-indigo-600 text-white text-xs font-black px-2.5 py-0.5 rounded-lg">
+                        <span className="bg-indigo-600 dark:bg-[#5950e7] text-white text-xs font-black px-2.5 py-0.5 rounded-lg">
                           Configurando Cuadro {activeBox.label || `#${activeIdx + 1}`}
                         </span>
                         <span className="text-xs text-indigo-700 dark:text-indigo-300 font-medium">
@@ -661,7 +763,7 @@ export const ImageOcclusionModal: React.FC<ImageOcclusionModalProps> = ({
                       <button
                         type="button"
                         onClick={() => handleDeleteBox(activeBox.id)}
-                        className="text-xs font-bold text-rose-600 hover:text-rose-700 dark:text-rose-400 hover:underline flex items-center gap-1"
+                        className="text-xs font-bold text-rose-600 hover:text-rose-700 dark:text-rose-400 dark:hover:text-rose-300 hover:underline flex items-center gap-1"
                       >
                         <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -680,7 +782,7 @@ export const ImageOcclusionModal: React.FC<ImageOcclusionModalProps> = ({
                           value={activeBox.correctAnswer}
                           onChange={(e) => handleUpdateBoxAnswer(activeBox.id, e.target.value)}
                           placeholder="Ej. Bulbo raquídeo, Ventrículo izquierdo, Fémur..."
-                          className="w-full text-sm font-bold bg-white dark:bg-slate-900 border-2 border-indigo-500 rounded-xl px-3 py-2 outline-none text-gray-800 dark:text-gray-100 shadow-sm"
+                          className="w-full text-sm font-bold bg-white dark:bg-[#000c19] border-2 border-indigo-500 dark:border-indigo-600 rounded-xl px-3 py-2 outline-none text-gray-800 dark:text-gray-100 shadow-sm focus:border-indigo-400"
                           autoFocus
                         />
                       </div>
@@ -697,7 +799,7 @@ export const ImageOcclusionModal: React.FC<ImageOcclusionModalProps> = ({
                             setBoxes(prev => prev.map(b => b.id === activeBox.id ? { ...b, label: val } : b));
                           }}
                           placeholder={`#${activeIdx + 1}`}
-                          className="w-full text-sm bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-xl px-3 py-2 outline-none text-gray-800 dark:text-gray-100"
+                          className="w-full text-sm bg-white dark:bg-[#000c19] border border-gray-200 dark:border-slate-800 rounded-xl px-3 py-2 outline-none text-gray-800 dark:text-gray-100 focus:border-indigo-500"
                         />
                       </div>
                     </div>
@@ -706,7 +808,7 @@ export const ImageOcclusionModal: React.FC<ImageOcclusionModalProps> = ({
               })()}
 
               {/* Generation Mode Selector */}
-              <div className="p-3.5 bg-gray-50 dark:bg-slate-800/60 rounded-2xl border border-gray-200 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="p-3.5 bg-gray-50/80 dark:bg-[#000a14] rounded-2xl border border-gray-200 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
                   <span className="text-xs font-black text-gray-800 dark:text-gray-200 uppercase tracking-wider">
                     Modo de Estudio al generar:
@@ -719,14 +821,14 @@ export const ImageOcclusionModal: React.FC<ImageOcclusionModalProps> = ({
                   </p>
                 </div>
 
-                <div className="flex items-center gap-1 bg-white dark:bg-slate-900 p-1 rounded-xl border border-gray-200 dark:border-slate-700 shrink-0">
+                <div className="flex items-center gap-1 bg-white dark:bg-[#000c19] p-1 rounded-xl border border-gray-200 dark:border-slate-800 shrink-0">
                   <button
                     type="button"
                     onClick={() => setMode('ONE_PER_BOX')}
                     className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
                       mode === 'ONE_PER_BOX'
-                        ? 'bg-indigo-600 text-white shadow-sm'
-                        : 'text-gray-600 dark:text-gray-400 hover:text-gray-900'
+                        ? 'bg-indigo-600 dark:bg-[#5950e7] text-white shadow-sm'
+                        : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-100/50 dark:hover:bg-[#00142b]'
                     }`}
                   >
                     1 Tarjeta por Cuadro ({boxes.length})
@@ -736,8 +838,8 @@ export const ImageOcclusionModal: React.FC<ImageOcclusionModalProps> = ({
                     onClick={() => setMode('ALL_IN_ONE')}
                     className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
                       mode === 'ALL_IN_ONE'
-                        ? 'bg-indigo-600 text-white shadow-sm'
-                        : 'text-gray-600 dark:text-gray-400 hover:text-gray-900'
+                        ? 'bg-indigo-600 dark:bg-[#5950e7] text-white shadow-sm'
+                        : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-100/50 dark:hover:bg-[#00142b]'
                     }`}
                   >
                     1 Tarjeta con Todo
@@ -749,31 +851,48 @@ export const ImageOcclusionModal: React.FC<ImageOcclusionModalProps> = ({
         </div>
 
         {/* Modal Footer */}
-        <div className="px-5 py-3.5 border-t border-gray-100 dark:border-slate-800 flex items-center justify-between shrink-0 bg-gray-50/50 dark:bg-slate-850">
+        <div className="px-5 py-3.5 border-t border-gray-100 dark:border-slate-800/80 flex flex-wrap items-center justify-between gap-3 shrink-0 bg-gray-50/50 dark:bg-[#000a14]">
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 text-xs font-bold text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
+            className="px-4 py-2 text-xs font-bold text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-[#00142b] rounded-xl transition-all"
           >
-            Cancelar
+            {sessionCards.length > 0 ? `Cerrar (${sessionCards.length} en mazo)` : 'Cancelar'}
           </button>
 
-          <button
-            type="button"
-            disabled={!imageUrl || boxes.length === 0}
-            onClick={handleSave}
-            className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs uppercase tracking-wider rounded-xl shadow-md transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-            </svg>
-            <span>
-              {mode === 'ONE_PER_BOX' 
-                ? `Guardar ${boxes.length > 0 ? boxes.length : ''} Flashcards` 
-                : 'Guardar Flashcard'
-              }
-            </span>
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              disabled={!imageUrl || boxes.length === 0}
+              onClick={handleSaveAndAddAnother}
+              className="px-4 py-2.5 bg-indigo-50 dark:bg-[#00142b] hover:bg-indigo-100 dark:hover:bg-[#001e40] text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800/60 font-bold text-xs rounded-xl shadow-sm transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2"
+              title="Guarda la imagen actual y limpia el lienzo para agregar otra imagen a este mismo tema"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 text-indigo-600 dark:text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
+              </svg>
+              <span>+ Guardar y Agregar Otra Imagen</span>
+            </button>
+
+            <button
+              type="button"
+              disabled={(!imageUrl || boxes.length === 0) && sessionCards.length === 0}
+              onClick={handleSaveAndFinish}
+              className="px-5 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 dark:from-[#5950e7] dark:to-purple-600 text-white font-black text-xs uppercase tracking-wider rounded-xl shadow-md hover:shadow-indigo-500/25 transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+              </svg>
+              <span>
+                {sessionCards.length > 0 && (!imageUrl || boxes.length === 0)
+                  ? `Finalizar (${sessionCards.length} en mazo)`
+                  : mode === 'ONE_PER_BOX'
+                    ? `Guardar y Finalizar (${boxes.length > 0 ? boxes.length : ''})`
+                    : 'Guardar y Finalizar'
+                }
+              </span>
+            </button>
+          </div>
         </div>
       </div>
     </div>

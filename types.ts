@@ -71,10 +71,14 @@ export interface Flashcard {
   difficulty?: 'EASY' | 'MEDIUM' | 'HARD';
   createdAt: number;
   order?: number;
-  type?: 'TEXT' | 'IMAGE_OCCLUSION';
+  type?: 'TEXT' | 'IMAGE_OCCLUSION' | 'FORMULA_BUILDER';
   imageUrl?: string;
   occlusionBoxes?: OcclusionBox[];
   activeBoxId?: string;
+  formulaTokens?: string[];
+  formulaDistractors?: string[];
+  formulaFull?: string;
+  formulaExplanation?: string;
 }
 
 export interface SavedExam {

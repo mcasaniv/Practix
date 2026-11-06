@@ -325,10 +325,10 @@ export const CustomDecksView: React.FC<CustomDecksViewProps> = ({
                 className="bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800 rounded-3xl shadow-sm hover:shadow-xl active:scale-[0.99] transition-all flex flex-col justify-between group overflow-hidden relative"
               >
                 {/* Deck Cover Banner */}
-                {coverToDisplay ? (
+                {coverToDisplay?.trim() ? (
                   <div className="h-32 w-full relative overflow-hidden bg-slate-800 shrink-0">
                     <img
-                      src={coverToDisplay}
+                      src={coverToDisplay.trim()}
                       alt={deck.title}
                       className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                       referrerPolicy="no-referrer"

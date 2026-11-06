@@ -4,6 +4,7 @@ import { Question, ReadingText, Flashcard, AcademicArea, TargetArea } from '../t
 import { ACADEMIC_STRUCTURE, ADMISSION_PROCESSES, DEFAULT_ADMISSION_PROCESS, CEPRE_BASE_TYPES } from '../constants';
 import { formatQuestionText, parseHTMLTags, getQuestionProcess, getProcessBadgeStyle, getProcessShortName, getAvailableProcesses, getOfficialSubjectWeight, ALL_ACADEMIC_SUBJECTS, getAreaBadgeStyle, ACADEMIC_AREAS, getQuestionArea, getQuestionAreas, matchesQuestionArea } from '../utils';
 import { ImageOcclusionModal } from '../components/ImageOcclusionModal';
+import { FormulaBuilderModal } from '../components/FormulaBuilderModal';
 
 interface AdminViewProps {
   questions: Question[];
@@ -94,6 +95,7 @@ const AdminView: React.FC<AdminViewProps> = ({
   const [activeTab, setActiveTab] = useState<'EDITOR' | 'MANAGE' | 'TEXTS' | 'FLASHCARDS_ADD' | 'FLASHCARDS_MANAGE'>('EDITOR');
   const [currentBatch, setCurrentBatch] = useState<Question[]>([]);
   const [showAdminOcclusionModal, setShowAdminOcclusionModal] = useState(false);
+  const [showAdminFormulaModal, setShowAdminFormulaModal] = useState(false);
 
   const [tempCovers, setTempCovers] = useState<Record<string, string>>({});
 
@@ -1327,29 +1329,89 @@ const AdminView: React.FC<AdminViewProps> = ({
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 animate-fade-in text-gray-800 dark:text-gray-100">
           {/* Individual Form */}
           <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-800 p-6 md:p-8">
-            {/* Banner for Image Occlusion */}
-            <div className="mb-6 p-4 bg-gradient-to-r from-indigo-500/10 via-purple-500/10 to-indigo-500/5 dark:bg-slate-800/60 border-2 border-dashed border-indigo-300 dark:border-indigo-700 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div>
-                <span className="text-[10px] font-black uppercase text-indigo-600 dark:text-indigo-400 tracking-wider">
-                  Nuevo • Diagramas y Esquemas
+            {/* Banner for Interactive Creation Tools */}
+            <div className="mb-6 p-4 sm:p-5 bg-gradient-to-br from-indigo-50/80 via-slate-50/40 to-indigo-50/20 dark:from-slate-800/80 dark:via-slate-800/50 dark:to-indigo-950/40 border border-indigo-200/90 dark:border-indigo-800/80 rounded-2xl shadow-sm space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-indigo-100/80 dark:border-slate-700/60 pb-3">
+                <div className="flex items-center gap-2">
+                  <span className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase text-indigo-700 dark:text-indigo-300 tracking-wider bg-indigo-100/80 dark:bg-indigo-950/80 border border-indigo-200 dark:border-indigo-800 px-2.5 py-0.5 rounded-full">
+                    <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse"></span>
+                    Formatos Especiales
+                  </span>
+                  <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 hidden sm:inline">
+                    • Ejercicios interactivos y diagramas
+                  </span>
+                </div>
+                <span className="text-[10px] font-bold text-gray-400 dark:text-gray-500 tracking-wide uppercase">
+                  Creador Avanzado
                 </span>
-                <h3 className="text-sm font-black text-gray-800 dark:text-gray-100">
-                  Subir Imagen con Oclusión (Tapar partes)
+              </div>
+
+              <div>
+                <h3 className="text-sm sm:text-base font-black text-gray-900 dark:text-gray-100 flex items-center gap-2">
+                  <span>✨</span>
+                  <span>Modos de Estudio Dinámicos</span>
                 </h3>
-                <p className="text-xs text-gray-500 dark:text-gray-400">
-                  Sube esquemas de anatomía, fórmulas o ciclos, tapa nombres con cuadros en blanco y define la respuesta a adivinar.
+                <p className="text-xs text-gray-650 dark:text-gray-350 mt-1 leading-relaxed">
+                  Crea ejercicios interactivos con bloques para armar fórmulas paso a paso o utiliza imágenes con oclusión para ocultar nombres en diagramas anatómicos, ciclos y esquemas.
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={() => setShowAdminOcclusionModal(true)}
-                className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs uppercase tracking-wider rounded-xl shadow-md transition-all active:scale-95 shrink-0 flex items-center gap-1.5"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                </svg>
-                <span>Abrir Editor de Imagen</span>
-              </button>
+
+              {/* Action Buttons Grid - Perfectly balanced on PC & Mobile */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setShowAdminFormulaModal(true)}
+                  className="group relative flex items-center gap-3 p-3 sm:p-3.5 bg-white dark:bg-[#000c19] hover:bg-amber-50/50 dark:hover:bg-[#00142b] border border-amber-200/80 dark:border-amber-900/50 hover:border-amber-400 dark:hover:border-amber-600 rounded-xl shadow-sm hover:shadow transition-all text-left active:scale-[0.98]"
+                >
+                  <div className="w-10 h-10 rounded-xl bg-amber-500/10 dark:bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center font-bold text-xl shrink-0 group-hover:scale-105 transition-transform shadow-sm">
+                    🧩
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs font-black text-gray-900 dark:text-gray-100 group-hover:text-amber-600 dark:group-hover:text-amber-400 transition-colors">
+                        Armar Fórmula
+                      </span>
+                      <span className="text-[9px] font-black uppercase tracking-wider text-amber-600 dark:text-amber-400 bg-amber-100/70 dark:bg-amber-950/70 px-1.5 py-0.2 rounded">
+                        Bloques
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-gray-500 dark:text-gray-400 truncate mt-0.5">
+                      Descomponer en fichas interactivas
+                    </p>
+                  </div>
+                  <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 text-gray-400 group-hover:text-amber-500 group-hover:translate-x-0.5 transition-all shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" />
+                  </svg>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setShowAdminOcclusionModal(true)}
+                  className="group relative flex items-center gap-3 p-3 sm:p-3.5 bg-white dark:bg-[#000c19] hover:bg-indigo-50/50 dark:hover:bg-[#00142b] border border-indigo-200/80 dark:border-indigo-900/50 hover:border-indigo-400 dark:hover:border-indigo-600 rounded-xl shadow-sm hover:shadow transition-all text-left active:scale-[0.98]"
+                >
+                  <div className="w-10 h-10 rounded-xl bg-indigo-500/10 dark:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-bold text-xl shrink-0 group-hover:scale-105 transition-transform shadow-sm">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5 text-indigo-600 dark:text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs font-black text-gray-900 dark:text-gray-100 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+                        Editor de Imagen
+                      </span>
+                      <span className="text-[9px] font-black uppercase tracking-wider text-indigo-600 dark:text-indigo-400 bg-indigo-100/70 dark:bg-indigo-950/70 px-1.5 py-0.2 rounded">
+                        Oclusión
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-gray-500 dark:text-gray-400 truncate mt-0.5">
+                      Tapar partes en esquemas y fotos
+                    </p>
+                  </div>
+                  <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 text-gray-400 group-hover:text-indigo-500 group-hover:translate-x-0.5 transition-all shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" />
+                  </svg>
+                </button>
+              </div>
             </div>
 
             <h2 className="text-2xl font-black text-gray-800 dark:text-gray-100 mb-6 flex items-center gap-3">
@@ -1833,6 +1895,21 @@ const AdminView: React.FC<AdminViewProps> = ({
         onSaveFlashcards={(newCards) => {
           onSaveFlashcardsBatch(newCards);
           showToast(`¡${newCards.length} tarjetas con imagen creadas con éxito!`);
+        }}
+        onToast={showToast}
+      />
+
+      {/* Formula Builder Modal */}
+      <FormulaBuilderModal
+        isOpen={showAdminFormulaModal}
+        onClose={() => setShowAdminFormulaModal(false)}
+        initialCourseName={fcCourse || undefined}
+        initialSubjectName={fcSubject || undefined}
+        initialTopicName={fcTopic || undefined}
+        academicStructure={ACADEMIC_STRUCTURE}
+        onSaveFlashcards={(newCards) => {
+          onSaveFlashcardsBatch(newCards);
+          showToast(`¡${newCards.length} tarjeta(s) de fórmula creadas con éxito!`);
         }}
         onToast={showToast}
       />
