@@ -79,6 +79,8 @@ export interface Flashcard {
   formulaDistractors?: string[];
   formulaFull?: string;
   formulaExplanation?: string;
+  multiAnswers?: string[];
+  hasMultipleAnswers?: boolean;
 }
 
 export interface SavedExam {
@@ -142,9 +144,25 @@ export interface AppDatabase {
   userProfile?: UserProfile;
   customDecks?: CustomDeck[];
   incorrectQuestionIds?: string[];
+  theoryNotes?: TheoryNote[];
 }
 
-export type ViewType = 'HOME' | 'SUBJECTS' | 'TOPICS' | 'QUIZ' | 'ADMIN' | 'MEGA_QUIZ' | 'MIXED_QUIZ' | 'EXAM_SETUP' | 'FLASHCARDS_HOME' | 'FLASHCARDS_SUBJECTS' | 'FLASHCARDS_PLAY' | 'STATS' | 'CUSTOM_DECKS' | 'PROFILE';
+export interface TheoryNote {
+  id: string;
+  course: string;
+  subject: string;
+  topic?: string;
+  title: string;
+  content: string;
+  imageUrl?: string;
+  tags?: string[];
+  createdAt: number;
+  updatedAt: number;
+}
+
+export type MemoryGameMode = 'FLASHCARDS' | 'MATCH' | 'QUIZ' | 'MULTI_SELECT';
+
+export type ViewType = 'HOME' | 'SUBJECTS' | 'TOPICS' | 'QUIZ' | 'ADMIN' | 'MEGA_QUIZ' | 'MIXED_QUIZ' | 'EXAM_SETUP' | 'FLASHCARDS_HOME' | 'FLASHCARDS_SUBJECTS' | 'FLASHCARDS_PLAY' | 'STATS' | 'CUSTOM_DECKS' | 'THEORY' | 'PROFILE';
 
 export type ExamMode = 'GENERAL' | 'CUSTOM';
 

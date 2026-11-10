@@ -62,8 +62,10 @@ const Navbar: React.FC<NavbarProps> = ({
     switch (currentView) {
       case 'HOME':
         return 'Inicio / Cursos';
+      case 'THEORY':
+        return 'Carpeta de Teoría';
       case 'CUSTOM_DECKS':
-        return 'Mis Mazos';
+        return 'Carpeta de Teoría';
       case 'STATS':
         return 'Estadísticas y Progreso';
       case 'SUBJECTS':
@@ -75,7 +77,11 @@ const Navbar: React.FC<NavbarProps> = ({
       case 'ADMIN':
         return 'Panel de Administración';
       case 'FLASHCARDS_HOME':
-        return navState.selectedCourse ? `Flashcards / ${navState.selectedCourse}` : 'Flashcards';
+        return navState.selectedCourse ? `Memory / ${navState.selectedCourse}` : 'Memory';
+      case 'FLASHCARDS_SUBJECTS':
+        return navState.selectedSubject ? `Memory / ${navState.selectedSubject}` : 'Memory';
+      case 'FLASHCARDS_PLAY':
+        return 'Memory / Práctica';
       case 'PROFILE':
         return 'Mi Perfil de Postulante';
       default:
@@ -84,8 +90,8 @@ const Navbar: React.FC<NavbarProps> = ({
   };
 
   const isCursosActive = ['HOME', 'SUBJECTS', 'TOPICS'].includes(currentView);
-  const isDecksActive = currentView === 'CUSTOM_DECKS';
-  const isFlashcardsActive = ['FLASHCARDS_HOME', 'FLASHCARDS_SUBJECTS'].includes(currentView);
+  const isTheoryActive = currentView === 'THEORY' || currentView === 'CUSTOM_DECKS';
+  const isFlashcardsActive = ['FLASHCARDS_HOME', 'FLASHCARDS_SUBJECTS', 'FLASHCARDS_PLAY'].includes(currentView);
   const isExamActive = currentView === 'EXAM_SETUP';
   const isStatsActive = currentView === 'STATS';
   const isAdminActive = currentView === 'ADMIN';
@@ -149,18 +155,18 @@ const Navbar: React.FC<NavbarProps> = ({
                   Práctica
                 </button>
                 <button 
-                  id="nav-btn-decks"
-                  onClick={() => onNavigate('CUSTOM_DECKS')}
-                  className={`px-2 xl:px-3 py-1.5 rounded-lg font-bold transition-all ${isDecksActive ? 'bg-indigo-600 dark:bg-indigo-800 text-white shadow-sm' : 'text-indigo-200 hover:text-white'}`}
+                  id="nav-btn-theory"
+                  onClick={() => onNavigate('THEORY')}
+                  className={`px-2 xl:px-3 py-1.5 rounded-lg font-bold transition-all ${isTheoryActive ? 'bg-indigo-600 dark:bg-indigo-800 text-white shadow-sm' : 'text-indigo-200 hover:text-white'}`}
                 >
-                  Mazos
+                  Teoría
                 </button>
                 <button 
-                  id="nav-btn-flashcards"
+                  id="nav-btn-memory"
                   onClick={() => onNavigate('FLASHCARDS_HOME')}
                   className={`px-2 xl:px-3 py-1.5 rounded-lg font-bold transition-all ${isFlashcardsActive ? 'bg-indigo-600 dark:bg-indigo-800 text-white shadow-sm' : 'text-indigo-200 hover:text-white'}`}
                 >
-                  Flashcards
+                  Memory
                 </button>
                 <button 
                   id="nav-btn-exam"
@@ -211,19 +217,19 @@ const Navbar: React.FC<NavbarProps> = ({
                 </button>
               </div>
 
-              {/* Contador de Flashcards */}
+              {/* Contador de Memory */}
               <div className="flex items-center gap-1.5 bg-indigo-800/50 dark:bg-indigo-900/50 px-2 xl:px-3 py-1.5 rounded-xl border border-indigo-400/20 backdrop-blur-sm group shrink-0">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-indigo-300 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-cyan-300 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
                 </svg>
                 <div className="flex flex-col leading-none">
-                  <span className="hidden xl:inline text-[9px] uppercase font-black text-indigo-300/85 tracking-tighter">Flashcards</span>
+                  <span className="hidden xl:inline text-[9px] uppercase font-black text-indigo-300/85 tracking-tighter">Memory</span>
                   <span className="text-sm xl:text-base font-black font-mono">{totalFlashcardsPracticed}</span>
                 </div>
                 <button 
                   onClick={() => setShowResetFlashcardsModal(true)}
                   className="ml-0.5 p-1 hover:bg-white/10 rounded-full text-indigo-300 hover:text-white transition-all opacity-0 group-hover:opacity-100 focus:opacity-100"
-                  title="Reiniciar contador de flashcards"
+                  title="Reiniciar contador de memory"
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -414,19 +420,19 @@ const Navbar: React.FC<NavbarProps> = ({
               <span className="text-[10px] mt-0.5 leading-none font-bold">Cursos</span>
             </button>
 
-            {/* Tab 2: Mazos Personalizados */}
+            {/* Tab 2: Teoría y Apuntes */}
             <button
-              onClick={() => onNavigate('CUSTOM_DECKS')}
+              onClick={() => onNavigate('THEORY')}
               className={`flex flex-col items-center justify-center py-1 rounded-xl transition-all min-h-[48px] ${
-                isDecksActive 
-                  ? 'text-purple-600 dark:text-purple-400 font-black' 
+                isTheoryActive 
+                  ? 'text-cyan-600 dark:text-cyan-400 font-black' 
                   : 'text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 font-medium'
               }`}
             >
-              <svg xmlns="http://www.w3.org/2000/svg" className={`h-5 w-5 transition-transform ${isDecksActive ? 'scale-110' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={isDecksActive ? 2.5 : 2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+              <svg xmlns="http://www.w3.org/2000/svg" className={`h-5 w-5 transition-transform ${isTheoryActive ? 'scale-110' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={isTheoryActive ? 2.5 : 2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
               </svg>
-              <span className="text-[10px] mt-0.5 leading-none font-bold">Mazos</span>
+              <span className="text-[10px] mt-0.5 leading-none font-bold">Teoría</span>
             </button>
 
             {/* Tab 3: Simulacro (Featured Center Action) */}
@@ -448,7 +454,7 @@ const Navbar: React.FC<NavbarProps> = ({
               </span>
             </button>
 
-            {/* Tab 4: Flashcards */}
+            {/* Tab 4: Memory */}
             <button
               onClick={() => onNavigate('FLASHCARDS_HOME')}
               className={`flex flex-col items-center justify-center py-1 rounded-xl transition-all min-h-[48px] ${
@@ -460,7 +466,7 @@ const Navbar: React.FC<NavbarProps> = ({
               <svg xmlns="http://www.w3.org/2000/svg" className={`h-5 w-5 transition-transform ${isFlashcardsActive ? 'scale-110' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={isFlashcardsActive ? 2.5 : 2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
               </svg>
-              <span className="text-[10px] mt-0.5 leading-none font-bold">Cards</span>
+              <span className="text-[10px] mt-0.5 leading-none font-bold">Memory</span>
             </button>
 
             {/* Tab 5: Progreso / Stats */}

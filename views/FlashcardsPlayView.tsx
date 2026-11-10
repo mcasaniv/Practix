@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Flashcard, OcclusionBox } from '../types';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { Flashcard, OcclusionBox, MemoryGameMode } from '../types';
 import { formatQuestionText, FormulaTokenRenderer } from '../utils';
 import { soundController } from '../utils/soundEffects';
 
@@ -72,14 +72,14 @@ const FlashcardsPlayView: React.FC<FlashcardsPlayViewProps> = ({
   const [ratings, setRatings] = useState<Record<string, 'EASY' | 'MEDIUM' | 'HARD'>>({});
 
   // Check if current deck has image occlusion cards
-  const hasOcclusionCards = flashcards.some(c => 
-    c.type === 'IMAGE_OCCLUSION' || Boolean(c.imageUrl && c.occlusionBoxes && c.occlusionBoxes.length > 0)
-  );
+  const hasOcclusionCards = useMemo(() => {
+    return currentCards.some(c => 
+      c.type === 'IMAGE_OCCLUSION' || Boolean(c.imageUrl && c.occlusionBoxes && c.occlusionBoxes.length > 0)
+    );
+  }, [currentCards]);
 
   // Image Occlusion states
   const [occlusionPlayMode, setOcclusionPlayMode] = useState<'REVEAL' | 'TYPE'>('REVEAL');
-  const [showOcclusionModalPrompt, setShowOcclusionModalPrompt] = useState<boolean>(() => hasOcclusionCards);
-  const [selectedModeInPrompt, setSelectedModeInPrompt] = useState<'REVEAL' | 'TYPE'>('REVEAL');
   const [userTypedAnswer, setUserTypedAnswer] = useState<string>('');
   const [evaluation, setEvaluation] = useState<{
     isCorrect: boolean;
@@ -102,8 +102,152 @@ const FlashcardsPlayView: React.FC<FlashcardsPlayViewProps> = ({
     expected: string;
   } | null>(null);
 
+  // Memory Game Modes
+  const [activeMemoryMode, setActiveMemoryMode] = useState<MemoryGameMode>('FLASHCARDS');
+
+  // Match Mode States
+  const [matchPool, setMatchPool] = useState<Flashcard[]>([]);
+  const [matchPoolOffset, setMatchPoolOffset] = useState<number>(0);
+  const [matchPairs, setMatchPairs] = useState<{ id: string; front: string; back: string }[]>([]);
+  const [matchLeftOrder, setMatchLeftOrder] = useState<string[]>([]);
+  const [matchRightOrder, setMatchRightOrder] = useState<string[]>([]);
+  const [matchedCardIds, setMatchedCardIds] = useState<Set<string>>(new Set());
+  const [selectedMatch, setSelectedMatch] = useState<{ cardId: string; side: 'LEFT' | 'RIGHT' } | null>(null);
+  const [matchMismatch, setMatchMismatch] = useState<{ leftId: string; rightId: string } | null>(null);
+  const [matchMistakes, setMatchMistakes] = useState<number>(0);
+  const [matchTotalMistakes, setMatchTotalMistakes] = useState<number>(0);
+
+  // Quiz Mode States
+  const [quizScore, setQuizScore] = useState<number>(0);
+  const [quizOptions, setQuizOptions] = useState<string[]>([]);
+  const [quizAnswered, setQuizAnswered] = useState<{ selectedOption: string; isCorrect: boolean } | null>(null);
+
+  // Multi-Select Mode States
+  const [multiCardIndex, setMultiCardIndex] = useState<number>(0);
+  const [multiTiles, setMultiTiles] = useState<string[]>([]);
+  const [multiCorrectSet, setMultiCorrectSet] = useState<Set<string>>(new Set());
+  const [selectedMultiTiles, setSelectedMultiTiles] = useState<Set<string>>(new Set());
+  const [multiEvaluated, setMultiEvaluated] = useState<boolean>(false);
+  const [multiScore, setMultiScore] = useState<number>(0);
+
   const cardRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Start a specific match round of up to 6 cards from the pool
+  const startMatchRound = (pool: Flashcard[], offset: number) => {
+    const roundCards = pool.slice(offset, offset + 6);
+    const pairs = roundCards.map(c => ({ id: c.id, front: c.front, back: c.back }));
+    setMatchPairs(pairs);
+    setMatchLeftOrder(pairs.map(p => p.id).sort(() => Math.random() - 0.5));
+    setMatchRightOrder(pairs.map(p => p.id).sort(() => Math.random() - 0.5));
+    setMatchedCardIds(new Set());
+    setSelectedMatch(null);
+    setMatchMismatch(null);
+    setMatchMistakes(0);
+  };
+
+  // Match Mode initializer: shuffles entire deck and starts round 1
+  const initMatchMode = (cards: Flashcard[]) => {
+    const validCards = cards.filter(c => c.front?.trim() && c.back?.trim());
+    const shuffledPool = [...validCards].sort(() => Math.random() - 0.5);
+    setMatchPool(shuffledPool);
+    setMatchPoolOffset(0);
+    setMatchTotalMistakes(0);
+    startMatchRound(shuffledPool, 0);
+  };
+
+  // Advance to next 6 cards (or remaining) without repetition
+  const handleNextMatchRound = () => {
+    const nextOffset = matchPoolOffset + 6;
+    if (nextOffset < matchPool.length) {
+      setMatchPoolOffset(nextOffset);
+      startMatchRound(matchPool, nextOffset);
+    }
+  };
+
+  // Helper generator for Quiz options
+  const generateQuizOptions = (card: Flashcard, allCards: Flashcard[]): string[] => {
+    let correctAnswer = card.back.trim();
+    let occlusionDistractors: string[] = [];
+
+    if (card.occlusionBoxes && card.occlusionBoxes.length > 0) {
+      const targetBox = card.occlusionBoxes.find(b => b.id === (card.activeBoxId || card.occlusionBoxes![0].id)) || card.occlusionBoxes[0];
+      if (targetBox?.correctAnswer?.trim()) {
+        correctAnswer = targetBox.correctAnswer.trim();
+      }
+      occlusionDistractors = card.occlusionBoxes
+        .filter(b => b.id !== targetBox?.id && b.correctAnswer?.trim() && b.correctAnswer.trim().toLowerCase() !== correctAnswer.toLowerCase())
+        .map(b => b.correctAnswer.trim());
+    }
+
+    const otherAnswers = Array.from(new Set([
+      ...occlusionDistractors,
+      ...allCards
+        .filter(c => c.id !== card.id && c.back?.trim() && c.back.trim().toLowerCase() !== correctAnswer.toLowerCase())
+        .map(c => c.back.trim()),
+      ...allCards.flatMap(c => c.occlusionBoxes ? c.occlusionBoxes.map(b => b.correctAnswer.trim()).filter(a => a && a.toLowerCase() !== correctAnswer.toLowerCase()) : [])
+    ]));
+
+    const shuffledOthers = [...otherAnswers].sort(() => Math.random() - 0.5).slice(0, 3);
+    
+    if (shuffledOthers.length < 3) {
+      const fallbacks = [
+        'Regula el intercambio de energía en reposo',
+        'Se relaciona directamente con el gradiente de concentración',
+        'Corresponde a la ley fundamental de conservación',
+        'Aplica exclusivamente en condiciones estándar de presión y temperatura'
+      ].filter(f => f.toLowerCase() !== correctAnswer.toLowerCase() && !shuffledOthers.includes(f));
+      
+      while (shuffledOthers.length < 3 && fallbacks.length > 0) {
+        shuffledOthers.push(fallbacks.pop()!);
+      }
+    }
+
+    return [correctAnswer, ...shuffledOthers].sort(() => Math.random() - 0.5);
+  };
+
+  // Helper generator for Multi-Select tiles
+  const generateMultiSelect = (card: Flashcard, allCards: Flashcard[]): { targets: Set<string>; tiles: string[] } => {
+    let targets: string[] = [];
+    if (card.hasMultipleAnswers && card.multiAnswers && card.multiAnswers.length > 1) {
+      targets = card.multiAnswers.map(a => a.trim()).filter(Boolean);
+    } else if (card.multiAnswers && card.multiAnswers.length > 0) {
+      targets = card.multiAnswers.map(a => a.trim()).filter(Boolean);
+    } else {
+      const raw = card.back.trim();
+      targets = raw.split(/[,;\n\/]/).map(s => s.trim().replace(/^[-•*]\s*/, '')).filter(Boolean);
+    }
+
+    const targetSet = new Set(targets);
+    const candidateDistractors: string[] = [];
+
+    allCards.forEach(c => {
+      if (c.id === card.id) return;
+      if (c.hasMultipleAnswers && c.multiAnswers) {
+        c.multiAnswers.forEach(a => candidateDistractors.push(a.trim()));
+      }
+      const split = c.back.split(/[,;\n\/]/).map(s => s.trim().replace(/^[-•*]\s*/, '')).filter(Boolean);
+      split.forEach(s => {
+        if (s.length <= 40) candidateDistractors.push(s);
+      });
+    });
+
+    const isValenceLike = targets.some(t => /^[+-]?\d+$/.test(t) || /^(\+|-)[1-7]$/.test(t) || /^[IVXLCDM]+$/i.test(t));
+    if (isValenceLike) {
+      ['+1', '+2', '+3', '+4', '+5', '+6', '+7', '-1', '-2', '-3', '-4'].forEach(v => {
+        if (!targetSet.has(v)) candidateDistractors.push(v);
+      });
+    }
+
+    const uniqueDistractors = Array.from(new Set(candidateDistractors.filter(d => !targetSet.has(d))));
+    const chosenDistractors = uniqueDistractors.sort(() => Math.random() - 0.5).slice(0, Math.max(4, 8 - targets.length));
+
+    const combined = Array.from(new Set([...targets, ...chosenDistractors])).sort(() => Math.random() - 0.5);
+    return {
+      targets: targetSet,
+      tiles: combined
+    };
+  };
 
   // Track filter key to only shuffle when course, subject, or topic changes
   const sessionKey = `${courseName}_${subjectName}_${topicName || ''}`;
@@ -127,14 +271,13 @@ const FlashcardsPlayView: React.FC<FlashcardsPlayViewProps> = ({
       setPlacedFormulaBlocks([]);
       setAvailableFormulaBlocks([]);
       setFormulaEvaluation(null);
-      if (hasOcclusionCards) {
-        setShowOcclusionModalPrompt(true);
-        setSelectedModeInPrompt('REVEAL');
-      }
+      setQuizScore(0);
+      setMultiScore(0);
+      initMatchMode(shuffled);
     }
   }, [sessionKey]);
 
-  // Reset occlusion input and formula builder bank when navigating cards
+  // Reset occlusion input, formula builder bank, quiz, and multi-select when navigating cards
   useEffect(() => {
     setUserTypedAnswer('');
     setEvaluation(null);
@@ -144,24 +287,62 @@ const FlashcardsPlayView: React.FC<FlashcardsPlayViewProps> = ({
     setPlacedFormulaBlocks([]);
 
     const card = currentCards[currentCardIndex];
-    if (card && card.type === 'FORMULA_BUILDER') {
-      const correctTokens = card.formulaTokens || [];
-      const distractors = card.formulaDistractors || [];
-      const combined = [...correctTokens, ...distractors];
-      const blocks = combined.map((text, idx) => ({
-        id: `${text}-${idx}-${Math.random().toString(36).slice(2, 7)}`,
-        text
-      }));
-      // Shuffle bank
-      setAvailableFormulaBlocks([...blocks].sort(() => Math.random() - 0.5));
-    } else {
-      setAvailableFormulaBlocks([]);
+    if (card) {
+      // Setup formula blocks if formula card
+      if (card.type === 'FORMULA_BUILDER') {
+        const correctTokens = card.formulaTokens || [];
+        const distractors = card.formulaDistractors || [];
+        const combined = [...correctTokens, ...distractors];
+        const blocks = combined.map((text, idx) => ({
+          id: `${text}-${idx}-${Math.random().toString(36).slice(2, 7)}`,
+          text
+        }));
+        setAvailableFormulaBlocks([...blocks].sort(() => Math.random() - 0.5));
+      } else {
+        setAvailableFormulaBlocks([]);
+      }
+
+      // Setup Quiz options
+      const qOptions = generateQuizOptions(card, currentCards);
+      setQuizOptions(qOptions);
+      setQuizAnswered(null);
     }
 
     if (inputRef.current) {
       setTimeout(() => inputRef.current?.focus(), 50);
     }
   }, [currentCardIndex, currentCards]);
+
+  // Filter only questions with multiple answers enabled for Selección Múltiple mode
+  const multiAnswerCards = useMemo(() => {
+    return currentCards.filter(c => Boolean(c.hasMultipleAnswers && c.multiAnswers && c.multiAnswers.length > 1));
+  }, [currentCards]);
+
+  // Dedicated effect for Multi-Select mode
+  useEffect(() => {
+    if (activeMemoryMode === 'MULTI_SELECT' && multiAnswerCards.length === 0) {
+      setActiveMemoryMode('FLASHCARDS');
+      return;
+    }
+
+    if (multiAnswerCards.length > 0) {
+      const card = multiAnswerCards[multiCardIndex] || multiAnswerCards[0];
+      if (card) {
+        const mResult = generateMultiSelect(card, currentCards);
+        setMultiCorrectSet(mResult.targets);
+        setMultiTiles(mResult.tiles);
+        setSelectedMultiTiles(new Set());
+        setMultiEvaluated(false);
+      }
+    }
+  }, [activeMemoryMode, multiCardIndex, multiAnswerCards, currentCards]);
+
+  // Auto-switch away from MATCH mode if playing image occlusion cards
+  useEffect(() => {
+    if (hasOcclusionCards && activeMemoryMode === 'MATCH') {
+      setActiveMemoryMode('FLASHCARDS');
+    }
+  }, [hasOcclusionCards, activeMemoryMode]);
 
   // Typeset math in KaTeX when the card is shown or flipped
   useEffect(() => {
@@ -224,14 +405,140 @@ const FlashcardsPlayView: React.FC<FlashcardsPlayViewProps> = ({
     const shuffled = [...flashcards].sort(() => Math.random() - 0.5);
     setCurrentCards(shuffled);
     setCurrentCardIndex(0);
+    setMultiCardIndex(0);
+    setQuizScore(0);
+    setMultiScore(0);
+    setQuizAnswered(null);
+    setSelectedMultiTiles(new Set());
+    setMultiEvaluated(false);
     setIsFlipped(false);
     setIsFinished(false);
     setIsTransitioning(false);
     setRatings({});
     setAnsweredBoxIds(new Set());
-    if (hasOcclusionCards) {
-      setShowOcclusionModalPrompt(true);
-      setSelectedModeInPrompt(occlusionPlayMode);
+  };
+
+  // Match Mode click handler
+  const handleMatchClick = (id: string, side: 'LEFT' | 'RIGHT') => {
+    if (matchedCardIds.has(id)) return;
+    if (!selectedMatch) {
+      setSelectedMatch({ cardId: id, side });
+      return;
+    }
+    if (selectedMatch.side === side) {
+      setSelectedMatch({ cardId: id, side });
+      return;
+    }
+    // Matching between opposite sides
+    if (selectedMatch.cardId === id) {
+      soundController.playSuccess();
+      const updated = new Set(matchedCardIds).add(id);
+      setMatchedCardIds(updated);
+      setSelectedMatch(null);
+      if (updated.size === matchPairs.length) {
+        soundController.playFanfare();
+      }
+    } else {
+      soundController.playIncorrect();
+      setMatchMismatch({
+        leftId: side === 'LEFT' ? id : selectedMatch.cardId,
+        rightId: side === 'RIGHT' ? id : selectedMatch.cardId
+      });
+      setMatchMistakes(prev => prev + 1);
+      setMatchTotalMistakes(prev => prev + 1);
+      setTimeout(() => {
+        setMatchMismatch(null);
+        setSelectedMatch(null);
+      }, 650);
+    }
+  };
+
+  // Quiz Mode Option handler
+  const handleQuizOptionClick = (opt: string) => {
+    if (quizAnswered || !activeCard) return;
+    let correctAnswer = activeCard.back.trim();
+    if (activeCard.occlusionBoxes && activeCard.occlusionBoxes.length > 0) {
+      const targetBox = activeCard.occlusionBoxes.find(b => b.id === (activeCard.activeBoxId || activeCard.occlusionBoxes![0].id)) || activeCard.occlusionBoxes[0];
+      if (targetBox?.correctAnswer?.trim()) {
+        correctAnswer = targetBox.correctAnswer.trim();
+      }
+    }
+    const isCorrect = opt.trim().toLowerCase() === correctAnswer.toLowerCase();
+    const diff = isCorrect ? 'EASY' : 'HARD';
+    if (isCorrect) {
+      soundController.playSuccess();
+      setQuizScore(prev => prev + 1);
+      onUpdateCardDifficulty(activeCard.id, 'EASY');
+    } else {
+      soundController.playIncorrect();
+      onUpdateCardDifficulty(activeCard.id, 'HARD');
+    }
+    setRatings(prev => ({
+      ...prev,
+      [activeCard.id]: diff
+    }));
+    setQuizAnswered({ selectedOption: opt, isCorrect });
+  };
+
+  const handleNextQuizCard = () => {
+    if (currentCardIndex + 1 < currentCards.length) {
+      setCurrentCardIndex(prev => prev + 1);
+      setQuizAnswered(null);
+    } else {
+      setIsFinished(true);
+    }
+  };
+
+  // Multi-Select Tile handler
+  const handleToggleMultiTile = (tile: string) => {
+    if (multiEvaluated) return;
+    setSelectedMultiTiles(prev => {
+      const next = new Set(prev);
+      if (next.has(tile)) {
+        next.delete(tile);
+      } else {
+        next.add(tile);
+      }
+      return next;
+    });
+  };
+
+  const handleCheckMultiSelect = () => {
+    const activeMultiCard = multiAnswerCards[multiCardIndex] || multiAnswerCards[0];
+    if (!activeMultiCard) return;
+    setMultiEvaluated(true);
+    let allTargetsPicked = true;
+    let anyDistractorPicked = false;
+
+    multiCorrectSet.forEach(t => {
+      if (!selectedMultiTiles.has(t)) allTargetsPicked = false;
+    });
+    selectedMultiTiles.forEach(s => {
+      if (!multiCorrectSet.has(s)) anyDistractorPicked = true;
+    });
+
+    const isSuccess = allTargetsPicked && !anyDistractorPicked;
+    if (isSuccess) {
+      soundController.playSuccess();
+      setMultiScore(prev => prev + 1);
+      onUpdateCardDifficulty(activeMultiCard.id, 'EASY');
+    } else {
+      soundController.playIncorrect();
+      onUpdateCardDifficulty(activeMultiCard.id, 'HARD');
+    }
+    setRatings(prev => ({
+      ...prev,
+      [activeMultiCard.id]: isSuccess ? 'EASY' : 'HARD'
+    }));
+  };
+
+  const handleNextMultiCard = () => {
+    if (multiCardIndex + 1 < multiAnswerCards.length) {
+      setMultiCardIndex(prev => prev + 1);
+      setSelectedMultiTiles(new Set());
+      setMultiEvaluated(false);
+    } else {
+      setIsFinished(true);
     }
   };
 
@@ -261,15 +568,6 @@ const FlashcardsPlayView: React.FC<FlashcardsPlayViewProps> = ({
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (isFinished || isTransitioning || !activeCard) return;
-
-      if (showOcclusionModalPrompt) {
-        if (e.key === 'Enter') {
-          e.preventDefault();
-          setOcclusionPlayMode(selectedModeInPrompt);
-          setShowOcclusionModalPrompt(false);
-        }
-        return;
-      }
 
       const targetTag = (e.target as HTMLElement)?.tagName;
       const isInput = targetTag === 'INPUT' || targetTag === 'TEXTAREA';
@@ -350,7 +648,7 @@ const FlashcardsPlayView: React.FC<FlashcardsPlayViewProps> = ({
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [currentCardIndex, isFlipped, isFinished, currentCards, isTransitioning, evaluation, formulaEvaluation, activeCard, isFormulaCard, isImageCard, showOcclusionModalPrompt, selectedModeInPrompt, occlusionPlayMode]);
+  }, [currentCardIndex, isFlipped, isFinished, currentCards, isTransitioning, evaluation, formulaEvaluation, activeCard, isFormulaCard, isImageCard, occlusionPlayMode]);
 
   if (flashcards.length === 0) {
     return (
@@ -386,13 +684,37 @@ const FlashcardsPlayView: React.FC<FlashcardsPlayViewProps> = ({
 
   // Render finish summary
   if (isFinished) {
-    const totalCount = currentCards.length;
-    const easyCount = Object.values(ratings).filter(r => r === 'EASY').length;
-    const mediumCount = Object.values(ratings).filter(r => r === 'MEDIUM').length;
-    const hardCount = Object.values(ratings).filter(r => r === 'HARD').length;
+    const totalCount = activeMemoryMode === 'MULTI_SELECT' ? multiAnswerCards.length : currentCards.length;
     
-    // Weighted mastery formula: (EASY * 100% + MEDIUM * 50% + HARD * 0%) / Total count
-    const percent = totalCount > 0 ? Math.round(((easyCount * 1.0 + mediumCount * 0.5) / totalCount) * 100) : 0;
+    let easyCount = 0;
+    let mediumCount = 0;
+    let hardCount = 0;
+
+    if (activeMemoryMode === 'QUIZ') {
+      easyCount = quizScore;
+      hardCount = Math.max(0, totalCount - quizScore);
+    } else if (activeMemoryMode === 'MULTI_SELECT') {
+      easyCount = multiScore;
+      hardCount = Math.max(0, totalCount - multiScore);
+    } else {
+      // Regular Flashcards / Image Occlusion / Formula mode
+      currentCards.forEach(c => {
+        const r = ratings[c.id] || (c.difficulty as 'EASY' | 'MEDIUM' | 'HARD');
+        if (r === 'EASY') easyCount++;
+        else if (r === 'MEDIUM') mediumCount++;
+        else if (r === 'HARD') hardCount++;
+      });
+
+      // Fallback if ratings were keyed otherwise
+      if (easyCount + mediumCount + hardCount === 0 && Object.keys(ratings).length > 0) {
+        easyCount = Object.values(ratings).filter(r => r === 'EASY').length;
+        mediumCount = Object.values(ratings).filter(r => r === 'MEDIUM').length;
+        hardCount = Object.values(ratings).filter(r => r === 'HARD').length;
+      }
+    }
+
+    const effectiveTotal = Math.max(1, totalCount);
+    const percent = Math.min(100, Math.max(0, Math.round(((easyCount * 1.0 + mediumCount * 0.5) / effectiveTotal) * 100)));
     
     // SVG Gauge calculations
     const size = 150;
@@ -417,18 +739,23 @@ const FlashcardsPlayView: React.FC<FlashcardsPlayViewProps> = ({
 
         {/* Circular Chart - Dominio Percentage */}
         <div className="flex flex-col items-center justify-center my-6">
-          <div className="relative" style={{ width: size, height: size }}>
-            <svg className="w-full h-full transform -rotate-90">
+          <div className="relative flex items-center justify-center" style={{ width: size, height: size }}>
+            <svg
+              width={size}
+              height={size}
+              viewBox={`0 0 ${size} ${size}`}
+              className="w-full h-full block"
+            >
               {/* Background track */}
               <circle
                 cx={center}
                 cy={center}
                 r={radius}
-                className="stroke-gray-100 dark:stroke-slate-800"
+                className="stroke-gray-200 dark:stroke-slate-800"
                 strokeWidth={strokeWidth}
-                fill="transparent"
+                fill="none"
               />
-              {/* Colored progress line */}
+              {/* Colored progress line with native SVG rotation around center */}
               <circle
                 cx={center}
                 cy={center}
@@ -441,16 +768,17 @@ const FlashcardsPlayView: React.FC<FlashcardsPlayViewProps> = ({
                       : 'stroke-rose-500'
                 }`}
                 strokeWidth={strokeWidth}
-                fill="transparent"
+                fill="none"
                 strokeDasharray={circumference}
                 strokeDashoffset={strokeDashoffset}
                 strokeLinecap="round"
+                transform={`rotate(-90 ${center} ${center})`}
               />
             </svg>
             {/* Inner text */}
-            <div className="absolute inset-0 flex flex-col items-center justify-center">
-              <span className="text-3xl font-black text-gray-800 dark:text-white font-mono">{percent}%</span>
-              <span className="text-[10px] uppercase font-black tracking-widest text-indigo-500 dark:text-indigo-400">Dominio</span>
+            <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+              <span className="text-3xl font-black text-gray-800 dark:text-white font-mono leading-none">{percent}%</span>
+              <span className="text-[10px] uppercase font-black tracking-widest text-indigo-500 dark:text-indigo-400 mt-1">Dominio</span>
             </div>
           </div>
           
@@ -538,114 +866,6 @@ const FlashcardsPlayView: React.FC<FlashcardsPlayViewProps> = ({
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-2 animate-fade-in relative">
-      {/* Modal: Preguntar al usuario cómo quiere jugar en Oclusión de Imagen */}
-      {showOcclusionModalPrompt && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 animate-fade-in">
-          <div className="bg-white dark:bg-[#000c19] border border-gray-100 dark:border-indigo-950/70 rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden p-6 text-center space-y-5 animate-scale-up my-auto">
-            {/* Header Icon & Title */}
-            <div className="w-14 h-14 mx-auto rounded-2xl bg-indigo-600 dark:bg-[#5950e7] text-white flex items-center justify-center shadow-lg shadow-indigo-500/30">
-              <svg xmlns="http://www.w3.org/2000/svg" className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-              </svg>
-            </div>
-
-            <div>
-              <h3 className="text-xl sm:text-2xl font-black text-gray-900 dark:text-white">
-                ¿Cómo deseas jugar en Oclusión de Imagen?
-              </h3>
-              <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 mt-1 max-w-sm mx-auto">
-                Este mazo incluye tarjetas con diagramas y partes ocultas. Selecciona tu modalidad favorita de repaso:
-              </p>
-            </div>
-
-            {/* Mode selection cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-left">
-              {/* Option 1: Solo Revelar y Calificar */}
-              <button
-                type="button"
-                onClick={() => setSelectedModeInPrompt('REVEAL')}
-                className={`p-4 rounded-2xl border-2 transition-all flex flex-col justify-between text-left relative cursor-pointer ${
-                  selectedModeInPrompt === 'REVEAL'
-                    ? 'border-indigo-600 dark:border-[#5950e7] bg-indigo-50/60 dark:bg-indigo-950/40 ring-4 ring-indigo-500/20 shadow-md'
-                    : 'border-gray-200 dark:border-slate-800 bg-white dark:bg-[#000a14] hover:border-gray-300 dark:hover:border-slate-700'
-                }`}
-              >
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-2xl">👁️</span>
-                    <span className="text-[10px] font-black uppercase tracking-wider bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 px-2 py-0.5 rounded-full">
-                      Recomendado
-                    </span>
-                  </div>
-                  <div>
-                    <div className="font-black text-sm text-gray-900 dark:text-white">
-                      Modo Revelar
-                    </div>
-                    <div className="text-[11px] text-gray-500 dark:text-gray-400 mt-1 leading-snug">
-                      Toca o presiona espacio para destapar la respuesta y califícate como <strong>Fácil</strong>, <strong>Casi</strong> o <strong>Difícil</strong>.
-                    </div>
-                  </div>
-                </div>
-                <div className="mt-3 pt-2 border-t border-gray-100 dark:border-slate-800/80 flex items-center gap-1.5 text-[10px] font-bold text-indigo-600 dark:text-indigo-400">
-                  <span>✓ Ágil, visual y sin teclado</span>
-                </div>
-              </button>
-
-              {/* Option 2: Escribir Respuesta */}
-              <button
-                type="button"
-                onClick={() => setSelectedModeInPrompt('TYPE')}
-                className={`p-4 rounded-2xl border-2 transition-all flex flex-col justify-between text-left relative cursor-pointer ${
-                  selectedModeInPrompt === 'TYPE'
-                    ? 'border-indigo-600 dark:border-[#5950e7] bg-indigo-50/60 dark:bg-indigo-950/40 ring-4 ring-indigo-500/20 shadow-md'
-                    : 'border-gray-200 dark:border-slate-800 bg-white dark:bg-[#000a14] hover:border-gray-300 dark:hover:border-slate-700'
-                }`}
-              >
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-2xl">✍️</span>
-                    <span className="text-[10px] font-black uppercase tracking-wider bg-indigo-100 dark:bg-indigo-950/80 text-indigo-800 dark:text-indigo-300 px-2 py-0.5 rounded-full">
-                      Teclado
-                    </span>
-                  </div>
-                  <div>
-                    <div className="font-black text-sm text-gray-900 dark:text-white">
-                      Modo Escribir
-                    </div>
-                    <div className="text-[11px] text-gray-500 dark:text-gray-400 mt-1 leading-snug">
-                      Escribe el nombre de la estructura con tu teclado para evaluar tu memoria y precisión ortográfica.
-                    </div>
-                  </div>
-                </div>
-                <div className="mt-3 pt-2 border-t border-gray-100 dark:border-slate-800/80 flex items-center gap-1.5 text-[10px] font-bold text-indigo-600 dark:text-indigo-400">
-                  <span>✓ Mayor exigencia y escritura</span>
-                </div>
-              </button>
-            </div>
-
-            <p className="text-[11px] text-gray-400 dark:text-gray-500">
-              Podrás alternar de modo en cualquier momento durante la partida con el interruptor superior.
-            </p>
-
-            {/* Start Button */}
-            <button
-              type="button"
-              onClick={() => {
-                setOcclusionPlayMode(selectedModeInPrompt);
-                setShowOcclusionModalPrompt(false);
-              }}
-              className="w-full py-3.5 px-6 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 dark:from-[#5950e7] dark:to-purple-600 text-white font-black text-xs sm:text-sm uppercase tracking-wider rounded-2xl shadow-lg hover:shadow-indigo-500/25 transition-all active:scale-95 flex items-center justify-center gap-2"
-            >
-              <span>Comenzar con Modo {selectedModeInPrompt === 'REVEAL' ? 'Revelar' : 'Escribir'}</span>
-              <kbd className="hidden sm:inline-block px-1.5 py-0.5 text-[10px] bg-black/25 rounded font-mono text-white">Enter ↵</kbd>
-              <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-              </svg>
-            </button>
-          </div>
-        </div>
-      )}
-
       {/* Header controls */}
       <div className="flex justify-between items-center mb-6">
         <div>
@@ -692,11 +912,626 @@ const FlashcardsPlayView: React.FC<FlashcardsPlayViewProps> = ({
         />
       </div>
 
-      {/* Formula Builder Player OR Image Occlusion Player OR Classic 3D Flashcard container */}
-      {(() => {
-        const isFormulaCard = Boolean(activeCard && activeCard.type === 'FORMULA_BUILDER');
+      {/* Memory Mode Switcher Tabs */}
+      <div className="flex items-center gap-1.5 p-1.5 bg-gray-100 dark:bg-[#000e20] border border-gray-200 dark:border-indigo-950/80 rounded-2xl mb-6 overflow-x-auto scrollbar-none shadow-sm">
+        <button
+          type="button"
+          onClick={() => setActiveMemoryMode('FLASHCARDS')}
+          className={`flex-1 min-w-[125px] py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+            activeMemoryMode === 'FLASHCARDS'
+              ? 'bg-indigo-600 text-white shadow-md'
+              : 'text-gray-600 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white'
+          }`}
+        >
+          <span>🗂️</span>
+          <span>Flashcards</span>
+        </button>
 
-        if (isFormulaCard && activeCard) {
+        {!hasOcclusionCards && (
+          <button
+            type="button"
+            onClick={() => {
+              setActiveMemoryMode('MATCH');
+              initMatchMode(currentCards);
+            }}
+            className={`flex-1 min-w-[125px] py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+              activeMemoryMode === 'MATCH'
+                ? 'bg-indigo-600 text-white shadow-md'
+                : 'text-gray-600 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white'
+            }`}
+          >
+            <span>🔗</span>
+            <span>Unir Parejas</span>
+          </button>
+        )}
+
+        <button
+          type="button"
+          onClick={() => setActiveMemoryMode('QUIZ')}
+          className={`flex-1 min-w-[130px] py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+            activeMemoryMode === 'QUIZ'
+              ? 'bg-indigo-600 text-white shadow-md'
+              : 'text-gray-600 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white'
+          }`}
+        >
+          <span>📝</span>
+          <span>Opción Múltiple</span>
+        </button>
+
+        {multiAnswerCards.length > 0 && (
+          <button
+            type="button"
+            onClick={() => {
+              setActiveMemoryMode('MULTI_SELECT');
+              setMultiCardIndex(0);
+              setSelectedMultiTiles(new Set());
+              setMultiEvaluated(false);
+            }}
+            className={`flex-1 min-w-[140px] py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+              activeMemoryMode === 'MULTI_SELECT'
+                ? 'bg-indigo-600 text-white shadow-md'
+                : 'text-gray-600 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white'
+            }`}
+          >
+            <span>✅</span>
+            <span>Selección Múltiple</span>
+            <span className="text-[10px] bg-purple-950 text-purple-300 px-1.5 py-0.2 rounded-full border border-purple-800">
+              {multiAnswerCards.length}
+            </span>
+          </button>
+        )}
+      </div>
+
+      {/* MATCH MODE BOARD */}
+      {activeMemoryMode === 'MATCH' ? (
+        (() => {
+          const matchTotalRounds = Math.max(1, Math.ceil(matchPool.length / 6));
+          const matchCurrentRound = Math.floor(matchPoolOffset / 6) + 1;
+          const matchCompletedInSession = matchPoolOffset + matchedCardIds.size;
+          const matchRemainingCards = Math.max(0, matchPool.length - (matchPoolOffset + matchPairs.length));
+          const matchNextRoundCount = Math.min(6, matchRemainingCards);
+
+          if (matchPairs.length === 0) {
+            return (
+              <div className="bg-[#001228] border border-indigo-950/90 rounded-3xl p-8 text-center max-w-xl mx-auto space-y-4">
+                <div className="w-12 h-12 rounded-2xl bg-cyan-950 border border-cyan-800 text-cyan-400 flex items-center justify-center mx-auto text-2xl">
+                  ℹ️
+                </div>
+                <h3 className="text-lg font-bold text-white">No hay tarjetas disponibles para emparejar</h3>
+                <p className="text-xs text-slate-400">
+                  Se requieren flashcards con anverso y reverso para jugar al modo de unir parejas.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setActiveMemoryMode('FLASHCARDS')}
+                  className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition-all"
+                >
+                  Volver a Flashcards
+                </button>
+              </div>
+            );
+          }
+
+          return (
+            <div className="space-y-6 animate-fade-in max-w-2xl mx-auto">
+              {/* Header banner with round & progress indicators */}
+              <div className="bg-[#001024] border border-cyan-800/40 rounded-2xl p-4 flex items-center justify-between shadow-md">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-xl bg-cyan-950 border border-cyan-800 text-cyan-400 flex items-center justify-center font-bold text-lg">
+                    🔗
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-white">Unir Palabras y sus Definiciones</h3>
+                    <p className="text-xs text-slate-400">
+                      Toca un concepto de la izquierda y luego su definición de la derecha.
+                    </p>
+                  </div>
+                </div>
+                <div className="text-right flex flex-col items-end gap-1">
+                  <div className="flex items-center gap-1.5">
+                    {matchTotalRounds > 1 && (
+                      <span className="text-[10px] uppercase font-bold text-cyan-300 bg-cyan-950/90 px-2 py-0.5 rounded border border-cyan-800/60">
+                        Ronda {matchCurrentRound} de {matchTotalRounds}
+                      </span>
+                    )}
+                    <span className="text-xs text-cyan-300 font-black font-mono px-2.5 py-0.5 rounded-lg bg-cyan-950/80 border border-cyan-800/60">
+                      {matchedCardIds.size} / {matchPairs.length} parejas
+                    </span>
+                  </div>
+                  {matchPool.length > 6 && (
+                    <span className="text-[10px] text-slate-400 font-medium">
+                      Total mazo: {matchCompletedInSession} / {matchPool.length}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Completion Banner if all matched in this round */}
+              {matchedCardIds.size === matchPairs.length && matchPairs.length > 0 ? (
+                matchRemainingCards > 0 ? (
+                  /* Option to continue playing remaining cards in next round without repetition */
+                  <div className="bg-[#001228] border-2 border-cyan-500/60 rounded-3xl p-6 sm:p-8 text-center space-y-5 shadow-xl animate-fade-in">
+                    <div className="w-16 h-16 rounded-2xl bg-cyan-950 border border-cyan-700 text-cyan-400 flex items-center justify-center mx-auto text-3xl shadow-lg">
+                      ⚡
+                    </div>
+                    <div>
+                      <div className="inline-block text-[10px] uppercase font-black text-cyan-400 bg-cyan-950/80 border border-cyan-800 px-3 py-1 rounded-full mb-2">
+                        Ronda {matchCurrentRound} de {matchTotalRounds} Completada
+                      </div>
+                      <h3 className="text-2xl font-black text-white">¡Ronda {matchCurrentRound} superada con éxito!</h3>
+                      <p className="text-sm text-slate-300 max-w-md mx-auto mt-1">
+                        Emparejaste las {matchPairs.length} fichas con <strong className="text-rose-400">{matchMistakes} {matchMistakes === 1 ? 'error' : 'errores'}</strong>.
+                      </p>
+                    </div>
+
+                    {/* Progress details */}
+                    <div className="bg-[#000a18] border border-cyan-900/60 rounded-2xl p-4 max-w-md mx-auto flex items-center justify-between text-left">
+                      <div>
+                        <div className="text-xs font-bold text-white">Tarjetas jugadas sin repetir</div>
+                        <div className="text-[11px] text-slate-400">
+                          Llevas {matchPoolOffset + matchPairs.length} de {matchPool.length} flashcards del mazo
+                        </div>
+                      </div>
+                      <span className="text-xs font-black font-mono text-cyan-300 bg-cyan-950 px-3 py-1.5 rounded-xl border border-cyan-800">
+                        Quedan {matchRemainingCards}
+                      </span>
+                    </div>
+
+                    {/* Action buttons */}
+                    <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
+                      <button
+                        type="button"
+                        onClick={handleNextMatchRound}
+                        className="w-full sm:w-auto px-6 py-3 bg-gradient-to-r from-cyan-600 to-indigo-600 hover:from-cyan-500 hover:to-indigo-500 text-white font-bold text-sm rounded-xl shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2"
+                      >
+                        <span>Jugar siguientes {matchNextRoundCount} {matchNextRoundCount === 1 ? 'ficha' : 'fichas'}</span>
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                        </svg>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => initMatchMode(currentCards)}
+                        className="w-full sm:w-auto px-5 py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-sm rounded-xl transition-all"
+                      >
+                        Reiniciar mazo
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setActiveMemoryMode('FLASHCARDS')}
+                        className="w-full sm:w-auto px-5 py-3 bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white font-bold text-sm rounded-xl transition-all"
+                      >
+                        Volver a Flashcards
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  /* All cards in the deck finished */
+                  <div className="bg-[#001228] border-2 border-emerald-500/60 rounded-3xl p-6 sm:p-8 text-center space-y-5 shadow-xl animate-fade-in">
+                    <div className="w-16 h-16 rounded-2xl bg-emerald-950 border border-emerald-700 text-emerald-400 flex items-center justify-center mx-auto text-3xl shadow-lg">
+                      🏆
+                    </div>
+                    <div>
+                      <h3 className="text-2xl font-black text-white">¡Mazo completado al 100%!</h3>
+                      <p className="text-sm text-slate-300 max-w-md mx-auto mt-1">
+                        Emparejaste todas las <strong className="text-emerald-400">{matchPool.length} flashcards</strong> de este mazo a lo largo de {matchTotalRounds} {matchTotalRounds === 1 ? 'ronda' : 'rondas'} sin repetir ninguna ficha.
+                      </p>
+                    </div>
+
+                    {/* Summary metrics */}
+                    <div className="grid grid-cols-3 gap-3 max-w-md mx-auto">
+                      <div className="p-3 bg-[#000a18] rounded-xl border border-indigo-950/80">
+                        <div className="text-lg sm:text-xl font-black text-cyan-400 font-mono">{matchPool.length}</div>
+                        <div className="text-[10px] uppercase font-bold text-slate-400">Parejas</div>
+                      </div>
+                      <div className="p-3 bg-[#000a18] rounded-xl border border-indigo-950/80">
+                        <div className="text-lg sm:text-xl font-black text-indigo-400 font-mono">{matchTotalRounds}</div>
+                        <div className="text-[10px] uppercase font-bold text-slate-400">Rondas</div>
+                      </div>
+                      <div className="p-3 bg-[#000a18] rounded-xl border border-indigo-950/80">
+                        <div className="text-lg sm:text-xl font-black text-rose-400 font-mono">{matchTotalMistakes}</div>
+                        <div className="text-[10px] uppercase font-bold text-slate-400">Errores</div>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
+                      <button
+                        type="button"
+                        onClick={() => initMatchMode(currentCards)}
+                        className="w-full sm:w-auto px-6 py-3 bg-gradient-to-r from-emerald-600 to-cyan-600 hover:from-emerald-500 hover:to-cyan-500 text-white font-bold text-sm rounded-xl shadow-lg active:scale-95 transition-all"
+                      >
+                        Jugar todo el mazo de nuevo
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setActiveMemoryMode('FLASHCARDS')}
+                        className="w-full sm:w-auto px-5 py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-sm rounded-xl transition-all"
+                      >
+                        Volver a Flashcards
+                      </button>
+                    </div>
+                  </div>
+                )
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {/* Left Column: Terms / Front */}
+              <div className="space-y-3">
+                <div className="text-xs font-bold text-cyan-400 uppercase tracking-wider px-1">
+                  Conceptos / Enunciados
+                </div>
+                {matchLeftOrder.map(cardId => {
+                  const pair = matchPairs.find(p => p.id === cardId);
+                  if (!pair) return null;
+                  const isMatched = matchedCardIds.has(cardId);
+                  const isSelected = selectedMatch?.cardId === cardId && selectedMatch.side === 'LEFT';
+                  const isMismatch = matchMismatch?.leftId === cardId;
+
+                  return (
+                    <button
+                      key={`left-${cardId}`}
+                      type="button"
+                      disabled={isMatched}
+                      onClick={() => handleMatchClick(cardId, 'LEFT')}
+                      className={`w-full text-left p-3.5 rounded-2xl border-2 transition-all duration-200 text-xs sm:text-sm font-semibold flex items-center justify-between min-h-[58px] ${
+                        isMatched
+                          ? 'bg-emerald-950/40 border-emerald-500/50 text-emerald-300 cursor-default opacity-85'
+                          : isMismatch
+                          ? 'bg-rose-950/60 border-rose-500 text-rose-200 animate-shake'
+                          : isSelected
+                          ? 'bg-cyan-950/80 border-cyan-400 text-cyan-200 ring-4 ring-cyan-500/20 shadow-lg scale-[1.02]'
+                          : 'bg-[#001228] border-indigo-950/80 hover:border-cyan-500/60 text-slate-200 hover:bg-[#001733]'
+                      }`}
+                    >
+                      <span className="line-clamp-2 leading-snug">{pair.front}</span>
+                      {isMatched && <span className="text-emerald-400 font-black ml-2">✓</span>}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Right Column: Definitions / Back */}
+              <div className="space-y-3">
+                <div className="text-xs font-bold text-indigo-400 uppercase tracking-wider px-1">
+                  Definiciones / Respuestas
+                </div>
+                {matchRightOrder.map(cardId => {
+                  const pair = matchPairs.find(p => p.id === cardId);
+                  if (!pair) return null;
+                  const isMatched = matchedCardIds.has(cardId);
+                  const isSelected = selectedMatch?.cardId === cardId && selectedMatch.side === 'RIGHT';
+                  const isMismatch = matchMismatch?.rightId === cardId;
+
+                  return (
+                    <button
+                      key={`right-${cardId}`}
+                      type="button"
+                      disabled={isMatched}
+                      onClick={() => handleMatchClick(cardId, 'RIGHT')}
+                      className={`w-full text-left p-3.5 rounded-2xl border-2 transition-all duration-200 text-xs sm:text-sm font-medium flex items-center justify-between min-h-[58px] ${
+                        isMatched
+                          ? 'bg-emerald-950/40 border-emerald-500/50 text-emerald-300 cursor-default opacity-85'
+                          : isMismatch
+                          ? 'bg-rose-950/60 border-rose-500 text-rose-200 animate-shake'
+                          : isSelected
+                          ? 'bg-indigo-950/80 border-indigo-400 text-indigo-200 ring-4 ring-indigo-500/20 shadow-lg scale-[1.02]'
+                          : 'bg-[#001228] border-indigo-950/80 hover:border-indigo-500/60 text-slate-200 hover:bg-[#001733]'
+                      }`}
+                    >
+                      <span className="line-clamp-2 leading-snug">{pair.back}</span>
+                      {isMatched && <span className="text-emerald-400 font-black ml-2">✓</span>}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    })()
+  ) : activeMemoryMode === 'QUIZ' ? (
+        /* QUIZ MODE */
+        (() => {
+          const boxes = activeCard?.occlusionBoxes || [];
+          const isOcclusion = Boolean(boxes.length > 0);
+          const targetBox = isOcclusion
+            ? (boxes.find(b => b.id === (activeCard?.activeBoxId || boxes[0].id)) || boxes[0])
+            : null;
+          const targetAnswer = targetBox?.correctAnswer?.trim() || activeCard?.back?.trim() || '';
+
+          return (
+            <div className="space-y-6 animate-fade-in max-w-2xl mx-auto">
+              <div className="bg-[#001228] border border-indigo-950/90 rounded-3xl p-6 sm:p-8 shadow-xl">
+                <div className="flex items-center justify-between text-xs text-slate-400 mb-4">
+                  <span className="font-bold uppercase tracking-wider text-cyan-400 bg-cyan-950/80 px-2.5 py-0.5 rounded-md border border-cyan-800/60">
+                    Pregunta {currentCardIndex + 1} de {currentCards.length}
+                  </span>
+                  <span className="font-mono text-emerald-400 font-semibold">
+                    Aciertos: {quizScore}
+                  </span>
+                </div>
+
+                {/* If card has an image (Diagram or Image Occlusion) */}
+                {activeCard?.imageUrl && (
+                  <div className="mb-5 relative border border-gray-200 dark:border-slate-800 rounded-2xl overflow-hidden bg-gray-950/5 dark:bg-black/20 flex items-center justify-center p-1 sm:p-2 select-none min-h-[220px]">
+                    <div className="relative inline-block max-w-full">
+                      <img
+                        src={activeCard.imageUrl.trim()}
+                        alt="Diagrama con oclusión"
+                        className="block max-h-[380px] w-auto max-w-full object-contain rounded-xl"
+                        referrerPolicy="no-referrer"
+                        draggable={false}
+                      />
+
+                      {/* Occlusion Boxes in Quiz Mode */}
+                      {isOcclusion && boxes.map((box) => {
+                        const isTarget = box.id === targetBox?.id;
+
+                        // Non-target boxes: solid neutral mask
+                        if (!isTarget) {
+                          return (
+                            <div
+                              key={box.id}
+                              style={{
+                                left: `${box.x}%`,
+                                top: `${box.y}%`,
+                                width: `${box.width}%`,
+                                height: `${box.height}%`
+                              }}
+                              className="absolute bg-slate-900/90 border border-slate-700/70 rounded pointer-events-none"
+                            />
+                          );
+                        }
+
+                        // Target Box:
+                        // BEFORE user answers (quizAnswered === null): MUST BE COMPLETELY COVERED / QUIETO (Sin emojis ni animaciones pulsantes)
+                        if (!quizAnswered) {
+                          return (
+                            <div
+                              key={box.id}
+                              style={{
+                                left: `${box.x}%`,
+                                top: `${box.y}%`,
+                                width: `${box.width}%`,
+                                height: `${box.height}%`
+                              }}
+                              className="absolute bg-[#001026] border-2 border-indigo-400 dark:border-cyan-400 rounded flex items-center justify-center shadow-lg z-30 select-none pointer-events-none"
+                            >
+                              <span className="bg-indigo-600 text-white text-[10px] sm:text-xs font-black px-2 py-0.5 rounded shadow-sm">
+                                {box.label ? box.label : '[ ? ]'}
+                              </span>
+                            </div>
+                          );
+                        }
+
+                        // AFTER user answers (quizAnswered !== null): REVEAL THE TARGET BOX!
+                        return (
+                          <div
+                            key={box.id}
+                            style={{
+                              left: `${box.x}%`,
+                              top: `${box.y}%`,
+                              width: `${box.width}%`,
+                              height: `${box.height}%`
+                            }}
+                            className={`absolute rounded pointer-events-none z-30 transition-all border-2 flex items-center justify-center ${
+                              quizAnswered.isCorrect
+                                ? 'border-emerald-500 bg-emerald-500/20 ring-2 ring-emerald-500/40'
+                                : 'border-rose-500 bg-rose-500/20 ring-2 ring-rose-500/40'
+                            }`}
+                          >
+                            <span
+                              className={`absolute -top-3 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded text-[10px] sm:text-xs font-black text-white shadow-xl flex items-center gap-1 whitespace-nowrap z-40 ${
+                                quizAnswered.isCorrect ? 'bg-emerald-600' : 'bg-rose-600'
+                              }`}
+                            >
+                              {quizAnswered.isCorrect ? '✓ ' : '✗ '}{targetBox?.correctAnswer}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                <h3 className="text-lg sm:text-xl font-black text-white leading-relaxed mb-6">
+                  {formatQuestionText(
+                    activeCard?.front?.trim()
+                      ? activeCard.front
+                      : targetBox
+                        ? '¿Qué concepto o estructura se encuentra en el recuadro tapado?'
+                        : 'Selecciona la opción correcta:'
+                  )}
+                </h3>
+
+                {/* Options A, B, C, D */}
+                <div className="space-y-3">
+                  {quizOptions.map((opt, idx) => {
+                    const letter = String.fromCharCode(65 + idx);
+                    const isSelected = quizAnswered?.selectedOption === opt;
+                    const isCorrectTarget = opt.trim().toLowerCase() === targetAnswer.toLowerCase();
+                    let optStyle = 'bg-[#000c19] border-indigo-950 hover:border-cyan-500/60 text-slate-200 hover:bg-[#00142e]';
+
+                    if (quizAnswered) {
+                      if (isCorrectTarget) {
+                        optStyle = 'bg-emerald-950/70 border-emerald-500 text-emerald-200 ring-2 ring-emerald-500/40';
+                      } else if (isSelected && !quizAnswered.isCorrect) {
+                        optStyle = 'bg-rose-950/70 border-rose-500 text-rose-200 ring-2 ring-rose-500/40';
+                      } else {
+                        optStyle = 'bg-[#000a14] border-indigo-950/40 text-slate-500 opacity-60';
+                      }
+                    }
+
+                    return (
+                      <button
+                        key={idx}
+                        type="button"
+                        disabled={quizAnswered !== null}
+                        onClick={() => handleQuizOptionClick(opt)}
+                        className={`w-full text-left p-4 rounded-2xl border-2 transition-all flex items-center gap-3 text-sm font-medium ${optStyle}`}
+                      >
+                        <span className={`w-8 h-8 rounded-xl font-bold flex items-center justify-center shrink-0 text-xs ${
+                          quizAnswered && isCorrectTarget
+                            ? 'bg-emerald-500 text-white'
+                            : quizAnswered && isSelected && !quizAnswered.isCorrect
+                            ? 'bg-rose-500 text-white'
+                            : 'bg-indigo-950/80 border border-indigo-800 text-indigo-300'
+                        }`}>
+                          {letter}
+                        </span>
+                        <span className="flex-1 leading-snug">{opt}</span>
+                        {quizAnswered && isCorrectTarget && (
+                          <span className="text-emerald-400 font-bold text-xs uppercase px-2 py-0.5 rounded bg-emerald-950/90 border border-emerald-700">
+                            Correcta
+                          </span>
+                        )}
+                        {quizAnswered && isSelected && !quizAnswered.isCorrect && (
+                          <span className="text-rose-400 font-bold text-xs uppercase px-2 py-0.5 rounded bg-rose-950/90 border border-rose-700">
+                            Incorrecta
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {quizAnswered && (
+                <div className="flex items-center justify-end gap-3 animate-fade-in">
+                  <button
+                    type="button"
+                    onClick={handleNextQuizCard}
+                    className="px-6 py-3 bg-gradient-to-r from-cyan-600 to-indigo-600 hover:from-cyan-500 hover:to-indigo-500 text-white font-bold text-sm rounded-2xl shadow-lg active:scale-95 transition-all flex items-center gap-2"
+                  >
+                    <span>{currentCardIndex + 1 < currentCards.length ? 'Siguiente Pregunta' : 'Finalizar Cuestionario'}</span>
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                    </svg>
+                  </button>
+                </div>
+              )}
+            </div>
+          );
+        })()
+      ) : activeMemoryMode === 'MULTI_SELECT' ? (
+        /* MULTI-SELECT MODE (ONLY for cards with multiple answers enabled) */
+        (() => {
+          const activeMultiCard = multiAnswerCards[multiCardIndex] || multiAnswerCards[0];
+          if (!activeMultiCard) {
+            return (
+              <div className="bg-[#001228] border border-indigo-950/90 rounded-3xl p-8 text-center max-w-xl mx-auto space-y-4">
+                <div className="w-12 h-12 rounded-2xl bg-purple-950/80 border border-purple-800 text-purple-300 flex items-center justify-center mx-auto text-2xl">
+                  ℹ️
+                </div>
+                <h3 className="text-lg font-bold text-white">Selección Múltiple no disponible</h3>
+                <p className="text-xs text-slate-400">
+                  Este modo solo está activo para flashcards donde se hayan habilitado varias respuestas en la creación o edición de tarjetas.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setActiveMemoryMode('FLASHCARDS')}
+                  className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition-all"
+                >
+                  Volver a Flashcards
+                </button>
+              </div>
+            );
+          }
+
+          return (
+            <div className="space-y-6 animate-fade-in max-w-2xl mx-auto">
+              <div className="bg-[#001228] border border-indigo-950/90 rounded-3xl p-6 sm:p-8 shadow-xl">
+                <div className="flex items-center justify-between text-xs text-slate-400 mb-3">
+                  <span className="font-bold uppercase tracking-wider text-purple-400 bg-purple-950/80 px-2.5 py-0.5 rounded-md border border-purple-800/60">
+                    Pregunta {multiCardIndex + 1} de {multiAnswerCards.length}
+                  </span>
+                  <span className="text-xs text-slate-400 font-medium">
+                    {multiCorrectSet.size} {multiCorrectSet.size === 1 ? 'opción correcta' : 'opciones correctas'}
+                  </span>
+                </div>
+
+                <h3 className="text-lg sm:text-xl font-black text-white leading-relaxed mb-2">
+                  {formatQuestionText(activeMultiCard.front || '')}
+                </h3>
+                <p className="text-xs text-slate-400 mb-6">
+                  Pulsa sobre <strong>todas las opciones que correspondan</strong> a este enunciado y luego pulsa "Comprobar Selección".
+                </p>
+
+                {/* Interactive Tiles */}
+                <div className="flex flex-wrap gap-2.5 mb-6">
+                  {multiTiles.map((tile, i) => {
+                    const isSelected = selectedMultiTiles.has(tile);
+                    const isTarget = multiCorrectSet.has(tile);
+                    let tileStyle = isSelected
+                      ? 'bg-cyan-950/80 border-cyan-400 text-cyan-200 ring-2 ring-cyan-500/30'
+                      : 'bg-[#000a14] border-indigo-950/80 hover:border-slate-600 text-slate-300';
+
+                    if (multiEvaluated) {
+                      if (isTarget && isSelected) {
+                        tileStyle = 'bg-emerald-950/80 border-emerald-500 text-emerald-200 ring-2 ring-emerald-500/40';
+                      } else if (isTarget && !isSelected) {
+                        tileStyle = 'bg-amber-950/50 border-amber-500/80 text-amber-200 border-dashed';
+                      } else if (!isTarget && isSelected) {
+                        tileStyle = 'bg-rose-950/80 border-rose-500 text-rose-200 line-through';
+                      } else {
+                        tileStyle = 'bg-[#000810] border-indigo-950/40 text-slate-600 opacity-50';
+                      }
+                    }
+
+                    return (
+                      <button
+                        key={i}
+                        type="button"
+                        disabled={multiEvaluated}
+                        onClick={() => handleToggleMultiTile(tile)}
+                        className={`px-4 py-2.5 rounded-xl border-2 font-bold text-xs sm:text-sm transition-all duration-150 flex items-center gap-2 ${tileStyle} active:scale-95`}
+                      >
+                        <span>{tile}</span>
+                        {multiEvaluated && isTarget && isSelected && <span className="text-emerald-400 text-xs">✓</span>}
+                        {multiEvaluated && isTarget && !isSelected && <span className="text-amber-400 text-[10px]">Faltó</span>}
+                        {multiEvaluated && !isTarget && isSelected && <span className="text-rose-400 text-xs">✗</span>}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Action Bar */}
+                <div className="flex items-center justify-between border-t border-indigo-950/60 pt-4">
+                  <span className="text-xs text-slate-400">
+                    {selectedMultiTiles.size} seleccionada{selectedMultiTiles.size === 1 ? '' : 's'}
+                  </span>
+
+                  {!multiEvaluated ? (
+                    <button
+                      type="button"
+                      disabled={selectedMultiTiles.size === 0}
+                      onClick={handleCheckMultiSelect}
+                      className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 disabled:opacity-40 text-white font-bold text-xs uppercase tracking-wider shadow-lg active:scale-95 transition-all"
+                    >
+                      Comprobar Selección
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={handleNextMultiCard}
+                      className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-bold text-xs uppercase tracking-wider shadow-lg active:scale-95 transition-all flex items-center gap-1.5"
+                    >
+                      <span>{multiCardIndex + 1 < multiAnswerCards.length ? 'Siguiente Pregunta' : 'Finalizar Sesión'}</span>
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                      </svg>
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        })()
+      ) : (
+        /* Formula Builder Player OR Image Occlusion Player OR Classic 3D Flashcard container */
+        (() => {
+          const isFormulaCard = Boolean(activeCard && activeCard.type === 'FORMULA_BUILDER');
+
+          if (isFormulaCard && activeCard) {
           const handleBlockClickBank = (block: { id: string; text: string }) => {
             if (formulaEvaluation !== null) return;
             setAvailableFormulaBlocks(prev => prev.filter(b => b.id !== block.id));
@@ -1141,24 +1976,9 @@ const FlashcardsPlayView: React.FC<FlashcardsPlayViewProps> = ({
                       </button>
                     </div>
 
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSelectedModeInPrompt(occlusionPlayMode);
-                        setShowOcclusionModalPrompt(true);
-                      }}
-                      className="p-1.5 text-gray-500 hover:text-indigo-600 dark:text-gray-400 dark:hover:text-indigo-300 hover:bg-gray-100 dark:hover:bg-[#00142b] rounded-xl transition-all"
-                      title="Configurar modo de juego"
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                      </svg>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => setShowUnmaskedImage(!showUnmaskedImage)}
+                      <button
+                        type="button"
+                        onClick={() => setShowUnmaskedImage(!showUnmaskedImage)}
                       className="text-xs font-bold text-indigo-600 dark:text-indigo-300 hover:underline flex items-center gap-1 bg-indigo-50/70 dark:bg-indigo-950/60 border border-indigo-200/50 dark:border-indigo-800/60 px-2.5 py-1 rounded-lg transition-colors"
                     >
                       <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1733,10 +2553,10 @@ const FlashcardsPlayView: React.FC<FlashcardsPlayViewProps> = ({
             </div>
           </div>
         );
-      })()}
+      })())}
 
       {/* Control buttons & Keyboard hotkeys representation (only for standard flip flashcards) */}
-      {!isFormulaCard && !isImageCard && (
+      {activeMemoryMode === 'FLASHCARDS' && !isFormulaCard && !isImageCard && (
         <>
           <div className="max-w-xl mx-auto space-y-5">
             {/* Toggle Flip button - always available and supports spacebar */}

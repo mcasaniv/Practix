@@ -129,13 +129,13 @@ const FlashcardsHomeView: React.FC<FlashcardsHomeViewProps> = ({
       <div className="space-y-6 sm:space-y-8 animate-fade-in">
         <div className="text-center max-w-2xl mx-auto px-2">
           <span className="bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 text-xs font-black px-4 py-1.5 rounded-full uppercase tracking-wider mb-2.5 inline-block">
-            Módulo de Autoaprendizaje
+            Módulo Memory • Memorización Activa
           </span>
           <h2 className="text-2xl sm:text-3xl md:text-4xl font-black text-gray-800 dark:text-white mb-2 tracking-tight">
-            Estudio con Flashcards
+            Memory: Tarjetas & Juegos de Memoria
           </h2>
           <p className="text-gray-500 dark:text-white/80 text-xs sm:text-sm">
-            Memoriza de forma efectiva usando el algoritmo de repetición espaciada. Selecciona un curso para comenzar a repasar.
+            Memoriza fórmulas, definiciones y conceptos con Flashcards 3D, Unir Parejas, Opción Múltiple y Selección Múltiple de propiedades y valencias.
           </p>
 
           <div className="flex flex-wrap items-center justify-center gap-3 mt-4">

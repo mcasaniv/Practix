@@ -5,9 +5,11 @@ import { CourseStructure, CustomDeck } from '../types';
 interface HomeViewProps {
   onSelectCourse: (course: string) => void;
   onStartMegaQuiz: (mode?: 'GENERAL' | 'CUSTOM') => void;
+  onNavigateToTheory?: () => void;
   onNavigateToCustomDecks?: () => void;
   onViewSavedExams?: () => void;
   savedExamsCount?: number;
+  theoryNotesCount?: number;
   customDecks?: CustomDeck[];
   academicStructure?: CourseStructure[];
 }
@@ -15,9 +17,11 @@ interface HomeViewProps {
 const HomeView: React.FC<HomeViewProps> = ({ 
   onSelectCourse, 
   onStartMegaQuiz,
+  onNavigateToTheory,
   onNavigateToCustomDecks,
   onViewSavedExams,
   savedExamsCount = 0,
+  theoryNotesCount = 0,
   customDecks = [],
   academicStructure = ACADEMIC_STRUCTURE
 }) => {
@@ -50,11 +54,11 @@ const HomeView: React.FC<HomeViewProps> = ({
           )}
         </div>
         
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
-          {/* Card 1: Generar Examen (Simulacro oficial y personalizado) */}
+        <div>
+          {/* Card: Generar Examen (Simulacro oficial y personalizado) */}
           <div 
             onClick={() => onStartMegaQuiz('CUSTOM')}
-            className="relative overflow-hidden group cursor-pointer bg-gradient-to-br from-indigo-600 via-indigo-700 to-indigo-900 rounded-3xl p-5 sm:p-7 shadow-xl hover:shadow-2xl active:scale-[0.99] transition-all border border-indigo-400/30 text-white flex flex-col justify-between min-h-[220px]"
+            className="relative overflow-hidden group cursor-pointer bg-gradient-to-br from-indigo-600 via-indigo-700 to-indigo-900 rounded-3xl p-5 sm:p-7 shadow-xl hover:shadow-2xl active:scale-[0.99] transition-all border border-indigo-400/30 text-white flex flex-col justify-between min-h-[200px]"
           >
             <div className="relative z-10 space-y-3">
               <div className="flex items-center gap-2">
@@ -68,7 +72,7 @@ const HomeView: React.FC<HomeViewProps> = ({
               <h3 className="text-xl sm:text-2xl md:text-3xl font-black text-white leading-tight">
                 Generar examen
               </h3>
-              <p className="text-indigo-100/90 text-xs sm:text-sm leading-relaxed">
+              <p className="text-indigo-100/90 text-xs sm:text-sm leading-relaxed max-w-2xl">
                 Configura simulacros oficiales de 80 preguntas por semanas o elige materias específicas. Filtra por procesos anteriores o puntajes ponderados oficiales.
               </p>
             </div>
@@ -86,59 +90,11 @@ const HomeView: React.FC<HomeViewProps> = ({
             </div>
 
             <div className="absolute -bottom-6 -right-6 text-white opacity-10 pointer-events-none select-none">
-              <svg xmlns="http://www.w3.org/2000/svg" className="w-36 h-36" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg xmlns="http://www.w3.org/2000/svg" className="w-40 h-40" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
             </div>
           </div>
-
-          {/* Card 2: Mis Mazos Personalizados (Sin Cepre) */}
-          {onNavigateToCustomDecks && (
-            <div 
-              onClick={onNavigateToCustomDecks}
-              className="cursor-pointer bg-gradient-to-br from-purple-900 via-indigo-900 to-slate-900 text-white rounded-3xl p-5 sm:p-7 shadow-lg hover:shadow-xl active:scale-[0.99] transition-all border border-purple-500/30 relative overflow-hidden group flex flex-col justify-between min-h-[220px]"
-            >
-              <div className="relative z-10 space-y-3">
-                <div className="flex items-center gap-2">
-                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-purple-500/30 text-purple-200 border border-purple-400/30">
-                    Libre • Sin Cepre
-                  </span>
-                  {customDecks.length > 0 && (
-                    <span className="text-xs font-bold text-purple-200">
-                      {customDecks.length} {customDecks.length === 1 ? 'mazo creado' : 'mazos creados'}
-                    </span>
-                  )}
-                </div>
-                <h3 className="text-xl sm:text-2xl font-black text-white flex items-center gap-2">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="w-6 h-6 text-purple-300 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
-                  </svg>
-                  <span>Mis Mazos de Preguntas</span>
-                </h3>
-                <p className="text-xs sm:text-sm text-purple-100/80 leading-relaxed">
-                  Crea tus propios bancos de preguntas independientes para repasar a tu ritmo. Agrupa preguntas difíciles de procesos o tus propios apuntes.
-                </p>
-              </div>
-
-              <div className="relative z-10 shrink-0 flex items-center justify-between pt-4 mt-2 border-t border-purple-400/20">
-                <span className="text-xs font-bold text-purple-200 uppercase tracking-wider">
-                  Bancos Propios
-                </span>
-                <span className="bg-purple-600 hover:bg-purple-500 text-white font-black text-xs sm:text-sm px-5 py-2.5 sm:py-3 rounded-2xl transition-all shadow-md flex items-center gap-2">
-                  <span>Explorar Mazos</span>
-                  <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M14 5l7 7m0 0l-7 7m7-7H3" />
-                  </svg>
-                </span>
-              </div>
-
-              <div className="absolute -bottom-6 -right-6 text-white opacity-10 pointer-events-none select-none">
-                <svg xmlns="http://www.w3.org/2000/svg" className="w-32 h-32" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-                </svg>
-              </div>
-            </div>
-          )}
         </div>
       </div>
 

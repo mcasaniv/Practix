@@ -141,6 +141,16 @@ function pruneDatabaseForLocalStorage(db: AppDatabase): Partial<AppDatabase> {
     });
   }
 
+  // 5. Strip base64 imageUrl from theoryNotes in emergency localStorage prune (IndexedDB retains full data)
+  if (cloned.theoryNotes) {
+    cloned.theoryNotes = cloned.theoryNotes.map(n => {
+      if (n.imageUrl?.startsWith('data:image')) {
+        return { ...n, imageUrl: undefined };
+      }
+      return n;
+    });
+  }
+
   return cloned;
 }
 

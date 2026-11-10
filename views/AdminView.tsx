@@ -252,6 +252,8 @@ const AdminView: React.FC<AdminViewProps> = ({
   const [fcTopic, setFcTopic] = useState('');
   const [fcFront, setFcFront] = useState('');
   const [fcBack, setFcBack] = useState('');
+  const [fcHasMultiAnswers, setFcHasMultiAnswers] = useState(false);
+  const [fcMultiAnswersText, setFcMultiAnswersText] = useState('');
   
   // Bulk upload of flashcards
   const [fcBulkText, setFcBulkText] = useState('');
@@ -491,6 +493,11 @@ const AdminView: React.FC<AdminViewProps> = ({
       showToast("Por favor completa todos los campos obligatorios: Curso, Materia, Tema (Título), Anverso y Reverso.");
       return;
     }
+
+    const multiAnswersArray = fcHasMultiAnswers && fcMultiAnswersText.trim()
+      ? fcMultiAnswersText.split(/[,;\n]/).map(s => s.trim().replace(/^[-•*]\s*/, '')).filter(Boolean)
+      : undefined;
+
     const newCard: Flashcard = {
       id: crypto.randomUUID(),
       course: fcCourse,
@@ -498,11 +505,15 @@ const AdminView: React.FC<AdminViewProps> = ({
       topic: fcTopic.trim(),
       front: fcFront.trim(),
       back: fcBack.trim(),
+      hasMultipleAnswers: fcHasMultiAnswers,
+      multiAnswers: multiAnswersArray && multiAnswersArray.length > 1 ? multiAnswersArray : undefined,
       createdAt: Date.now()
     };
     onSaveFlashcardsBatch([newCard]);
     setFcFront('');
     setFcBack('');
+    setFcHasMultiAnswers(false);
+    setFcMultiAnswersText('');
     showToast("Flashcard añadida con éxito!");
   };
 
@@ -1456,6 +1467,44 @@ const AdminView: React.FC<AdminViewProps> = ({
                 <textarea value={fcBack} onChange={(e) => setFcBack(e.target.value)} placeholder="$F_c = \frac{m \cdot v^2}{r}$" className="w-full bg-gray-50 dark:bg-slate-800 border dark:border-slate-700 rounded-xl p-4 min-h-[100px] outline-none dark:text-gray-200 whitespace-pre-wrap" />
               </div>
 
+              {/* Toggle Habilitar Varias Respuestas (Modo Selección Múltiple) */}
+              <div className="p-4 bg-indigo-50/60 dark:bg-slate-800/80 border border-indigo-150 dark:border-indigo-900/40 rounded-xl space-y-3">
+                <label className="flex items-center gap-3 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={fcHasMultiAnswers}
+                    onChange={(e) => setFcHasMultiAnswers(e.target.checked)}
+                    className="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500 border-gray-300 dark:border-slate-700"
+                  />
+                  <div>
+                    <span className="text-xs font-bold text-gray-800 dark:text-gray-200 block">
+                      Habilitar varias respuestas (Modo Selección Múltiple)
+                    </span>
+                    <span className="text-[11px] text-gray-500 dark:text-gray-400 block font-normal">
+                      Activa el juego de pulsar todas las respuestas correspondientes a esta pregunta.
+                    </span>
+                  </div>
+                </label>
+
+                {fcHasMultiAnswers && (
+                  <div className="pt-2 border-t border-indigo-100 dark:border-indigo-900/30 space-y-1.5 animate-fade-in">
+                    <label className="block text-xs font-bold text-indigo-600 dark:text-indigo-400">
+                      Respuestas válidas (separadas por comas, punto y coma o saltos de línea):
+                    </label>
+                    <textarea
+                      value={fcMultiAnswersText}
+                      onChange={(e) => setFcMultiAnswersText(e.target.value)}
+                      placeholder="Ej: +1, +3, +5, +7 (o una opción por línea)"
+                      rows={3}
+                      className="w-full bg-white dark:bg-slate-900 border border-indigo-200 dark:border-indigo-900/60 rounded-xl p-3 text-xs outline-none dark:text-gray-200 focus:border-indigo-500"
+                    />
+                    <p className="text-[10px] text-gray-400 dark:text-gray-500">
+                      Consejo: Si dejas el campo vacío, se usará el Reverso como respuesta única.
+                    </p>
+                  </div>
+                )}
+              </div>
+
               {/* Dynamic Preview face recto-verso */}
               <div className="p-4 bg-gray-50 dark:bg-slate-800 border dark:border-slate-700 rounded-xl">
                 <h4 className="text-xs font-black text-indigo-500 uppercase mb-2">Vista Previa de Tarjeta</h4>
@@ -1761,6 +1810,58 @@ const AdminView: React.FC<AdminViewProps> = ({
                   placeholder="$F_c = \frac{m \cdot v^2}{r}$" 
                   className="w-full bg-gray-50 dark:bg-slate-850 border border-gray-200 dark:border-slate-700 rounded-xl p-3 min-h-[100px] outline-none dark:text-gray-205 focus:border-indigo-500 whitespace-pre-wrap" 
                 />
+              </div>
+
+              {/* Multi-answers toggle in Edit modal */}
+              <div className="p-3 bg-indigo-50/60 dark:bg-slate-800/80 border border-indigo-150 dark:border-indigo-900/40 rounded-xl space-y-2.5">
+                <label className="flex items-center gap-3 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={fcEditing.hasMultipleAnswers || false}
+                    onChange={(e) => {
+                      const checked = e.target.checked;
+                      setFcEditing({
+                        ...fcEditing,
+                        hasMultipleAnswers: checked,
+                        multiAnswers: checked
+                          ? (fcEditing.multiAnswers && fcEditing.multiAnswers.length > 0
+                              ? fcEditing.multiAnswers
+                              : fcEditing.back.split(/[,;\n]/).map(s => s.trim()).filter(Boolean))
+                          : undefined
+                      });
+                    }}
+                    className="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500 border-gray-300 dark:border-slate-700"
+                  />
+                  <div>
+                    <span className="text-xs font-bold text-gray-800 dark:text-gray-200 block">
+                      Habilitar varias respuestas (Modo Selección Múltiple)
+                    </span>
+                    <span className="text-[11px] text-gray-500 dark:text-gray-400 block font-normal">
+                      Permite que esta tarjeta aparezca en el modo de pulsar todas las respuestas válidas.
+                    </span>
+                  </div>
+                </label>
+
+                {fcEditing.hasMultipleAnswers && (
+                  <div className="pt-2 border-t border-indigo-100 dark:border-indigo-900/30 space-y-1 animate-fade-in">
+                    <label className="block text-[11px] font-bold text-indigo-600 dark:text-indigo-400">
+                      Respuestas válidas (separadas por comas o saltos de línea):
+                    </label>
+                    <textarea
+                      value={(fcEditing.multiAnswers || []).join(', ')}
+                      onChange={(e) => {
+                        const parsed = e.target.value.split(/[,;\n]/).map(s => s.trim().replace(/^[-•*]\s*/, '')).filter(Boolean);
+                        setFcEditing({
+                          ...fcEditing,
+                          multiAnswers: parsed
+                        });
+                      }}
+                      placeholder="Ej: +1, +3, +5, +7"
+                      rows={2}
+                      className="w-full bg-white dark:bg-slate-900 border border-indigo-200 dark:border-indigo-900/60 rounded-lg p-2 text-xs outline-none dark:text-gray-200 focus:border-indigo-500"
+                    />
+                  </div>
+                )}
               </div>
 
               <div>

@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Question, AppDatabase, ViewType, NavigationState, TopicResult, ReadingText, Flashcard, SavedExam, UserProfile, CustomDeck } from './types';
+import { Question, AppDatabase, ViewType, NavigationState, TopicResult, ReadingText, Flashcard, SavedExam, UserProfile, CustomDeck, TheoryNote } from './types';
 import { ACADEMIC_STRUCTURE, DB_STORAGE_KEY } from './constants';
 import { getQuestionProcess, parseAndNormalizeImport, matchesQuestionArea } from './utils';
 import { saveAppDatabase, loadAppDatabase } from './utils/dbStorage';
@@ -15,6 +15,7 @@ import ExamSetupView from './views/ExamSetupView';
 import FlashcardsHomeView from './views/FlashcardsHomeView';
 import FlashcardsPlayView from './views/FlashcardsPlayView';
 import { CustomDecksView } from './views/CustomDecksView';
+import { TheoryView } from './views/TheoryView';
 import { StatsView } from './views/StatsView';
 import { ProfileView } from './views/ProfileView';
 
@@ -185,6 +186,21 @@ const sanitizeDatabase = (data: AppDatabase): AppDatabase => {
     sanitizedIncorrect = Array.from(seeded);
   }
 
+  const sanitizedTheoryNotes = Array.isArray(data.theoryNotes) ? [...data.theoryNotes] : [];
+  if (sanitizedTheoryNotes.length === 0) {
+    sanitizedTheoryNotes.push({
+      id: 'sample-note-newton',
+      course: 'Ciencias',
+      subject: 'Física',
+      topic: 'Dinámica Lineal',
+      title: 'Leyes del Movimiento de Newton y Fórmulas Clave',
+      content: `• Primera Ley (Inercia): Todo cuerpo preserva su estado de reposo o movimiento rectilíneo uniforme a menos que una fuerza externa neta actúe sobre él.\n\n• Segunda Ley (Fuerza y Aceleración): La fuerza resultante aplicada es proporcional a la aceleración producida.\n📐 F = m · a (donde m es masa en kg y a aceleración en m/s²)\n\n• Tercera Ley (Acción y Reacción): A toda acción corresponde una reacción de igual magnitud y sentido opuesto.\n\n📌 NOTA PARA EXAMEN: Si la velocidad es constante, la aceleración es 0 y la fuerza neta es 0.`,
+      tags: ['física', 'leyes de newton', 'fórmulas', 'dinámica'],
+      createdAt: 1700000000000,
+      updatedAt: 1700000000000
+    });
+  }
+
   return {
     ...data,
     questions: sanitizedQuestions,
@@ -192,7 +208,8 @@ const sanitizeDatabase = (data: AppDatabase): AppDatabase => {
     flashcards: sanitizedFlashcards,
     results: migratedResults,
     customDecks: sanitizedCustomDecks,
-    incorrectQuestionIds: sanitizedIncorrect
+    incorrectQuestionIds: sanitizedIncorrect,
+    theoryNotes: sanitizedTheoryNotes
   };
 };
 
@@ -748,6 +765,27 @@ const App: React.FC = () => {
     }));
   }, []);
 
+  const handleSaveTheoryNote = useCallback((newNote: TheoryNote) => {
+    setDb(prev => ({
+      ...prev,
+      theoryNotes: [newNote, ...(prev.theoryNotes || [])]
+    }));
+  }, []);
+
+  const handleUpdateTheoryNote = useCallback((updatedNote: TheoryNote) => {
+    setDb(prev => ({
+      ...prev,
+      theoryNotes: (prev.theoryNotes || []).map(n => n.id === updatedNote.id ? updatedNote : n)
+    }));
+  }, []);
+
+  const handleDeleteTheoryNote = useCallback((noteId: string) => {
+    setDb(prev => ({
+      ...prev,
+      theoryNotes: (prev.theoryNotes || []).filter(n => n.id !== noteId)
+    }));
+  }, []);
+
   const moveFlashcardTopic = useCallback((topicName: string, subjectName: string, courseName: string, direction: 'UP' | 'DOWN') => {
     setDb(prev => {
       const allFlashcards = prev.flashcards ? [...prev.flashcards] : [];
@@ -806,7 +844,7 @@ const App: React.FC = () => {
 
   const handleBack = useCallback(() => {
     setNav(prev => {
-      if (prev.view === 'ADMIN' || prev.view === 'MEGA_QUIZ' || prev.view === 'EXAM_SETUP' || prev.view === 'STATS' || prev.view === 'PROFILE' || prev.view === 'CUSTOM_DECKS') return { ...prev, view: 'HOME', examMode: undefined, selectedExamSubjects: undefined, selectedExamWeeks: undefined, retakeExam: undefined };
+      if (prev.view === 'ADMIN' || prev.view === 'MEGA_QUIZ' || prev.view === 'EXAM_SETUP' || prev.view === 'STATS' || prev.view === 'PROFILE' || prev.view === 'CUSTOM_DECKS' || prev.view === 'THEORY') return { ...prev, view: 'HOME', examMode: undefined, selectedExamSubjects: undefined, selectedExamWeeks: undefined, retakeExam: undefined };
       if (prev.view === 'QUIZ' || prev.view === 'MIXED_QUIZ') return { ...prev, view: 'TOPICS', mixedQuestions: undefined };
       if (prev.view === 'TOPICS') return { ...prev, view: 'SUBJECTS', selectedTopic: undefined };
       if (prev.view === 'SUBJECTS') return { ...prev, view: 'HOME', selectedSubject: undefined };
@@ -835,7 +873,9 @@ const App: React.FC = () => {
             }}
             onViewSavedExams={() => handleNavigate('TOPICS', { selectedCourse: 'Exámenes', selectedSubject: 'Exámenes Rendidos' })}
             savedExamsCount={db.savedExams?.length || 0}
+            onNavigateToTheory={() => handleNavigate('THEORY')}
             onNavigateToCustomDecks={() => handleNavigate('CUSTOM_DECKS')}
+            theoryNotesCount={db.theoryNotes?.length || 0}
             customDecks={db.customDecks || []}
           />
         );
@@ -1044,6 +1084,17 @@ const App: React.FC = () => {
             academicStructure={academicStructure}
             onToast={showToast}
             onNavigateToHome={() => handleNavigate('HOME')}
+          />
+        );
+      case 'THEORY':
+        return (
+          <TheoryView 
+            theoryNotes={db.theoryNotes || []}
+            onSaveNote={handleSaveTheoryNote}
+            onUpdateNote={handleUpdateTheoryNote}
+            onDeleteNote={handleDeleteTheoryNote}
+            onNavigateHome={() => handleNavigate('HOME')}
+            onToast={showToast}
           />
         );
       case 'CUSTOM_DECKS':

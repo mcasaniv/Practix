@@ -100,6 +100,14 @@ class SoundController {
     } catch {}
   }
 
+  playIncorrect() {
+    this.playError();
+  }
+
+  playFanfare() {
+    this.playCelebration();
+  }
+
   playClick() {
     if (!this.enabled) return;
     const ctx = this.getContext();
