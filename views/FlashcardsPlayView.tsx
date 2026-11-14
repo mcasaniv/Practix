@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Flashcard, OcclusionBox, MemoryGameMode } from '../types';
-import { formatQuestionText, FormulaTokenRenderer } from '../utils';
+import { formatQuestionText, FormulaTokenRenderer, renderMathAndHtml } from '../utils';
 import { soundController } from '../utils/soundEffects';
 
 interface FlashcardsPlayViewProps {
@@ -108,7 +108,7 @@ const FlashcardsPlayView: React.FC<FlashcardsPlayViewProps> = ({
   // Match Mode States
   const [matchPool, setMatchPool] = useState<Flashcard[]>([]);
   const [matchPoolOffset, setMatchPoolOffset] = useState<number>(0);
-  const [matchPairs, setMatchPairs] = useState<{ id: string; front: string; back: string }[]>([]);
+  const [matchPairs, setMatchPairs] = useState<{ id: string; front: string; back: string; frontImageUrl?: string; backImageUrl?: string }[]>([]);
   const [matchLeftOrder, setMatchLeftOrder] = useState<string[]>([]);
   const [matchRightOrder, setMatchRightOrder] = useState<string[]>([]);
   const [matchedCardIds, setMatchedCardIds] = useState<Set<string>>(new Set());
@@ -116,6 +116,7 @@ const FlashcardsPlayView: React.FC<FlashcardsPlayViewProps> = ({
   const [matchMismatch, setMatchMismatch] = useState<{ leftId: string; rightId: string } | null>(null);
   const [matchMistakes, setMatchMistakes] = useState<number>(0);
   const [matchTotalMistakes, setMatchTotalMistakes] = useState<number>(0);
+  const [matchZoomImageUrl, setMatchZoomImageUrl] = useState<string | null>(null);
 
   // Quiz Mode States
   const [quizScore, setQuizScore] = useState<number>(0);
@@ -136,7 +137,13 @@ const FlashcardsPlayView: React.FC<FlashcardsPlayViewProps> = ({
   // Start a specific match round of up to 6 cards from the pool
   const startMatchRound = (pool: Flashcard[], offset: number) => {
     const roundCards = pool.slice(offset, offset + 6);
-    const pairs = roundCards.map(c => ({ id: c.id, front: c.front, back: c.back }));
+    const pairs = roundCards.map(c => ({
+      id: c.id,
+      front: c.front,
+      back: c.back,
+      frontImageUrl: c.frontImageUrl || (c.type !== 'IMAGE_OCCLUSION' ? c.imageUrl : undefined),
+      backImageUrl: c.backImageUrl
+    }));
     setMatchPairs(pairs);
     setMatchLeftOrder(pairs.map(p => p.id).sort(() => Math.random() - 0.5));
     setMatchRightOrder(pairs.map(p => p.id).sort(() => Math.random() - 0.5));
@@ -144,11 +151,17 @@ const FlashcardsPlayView: React.FC<FlashcardsPlayViewProps> = ({
     setSelectedMatch(null);
     setMatchMismatch(null);
     setMatchMistakes(0);
+    setMatchZoomImageUrl(null);
   };
 
   // Match Mode initializer: shuffles entire deck and starts round 1
   const initMatchMode = (cards: Flashcard[]) => {
-    const validCards = cards.filter(c => c.front?.trim() && c.back?.trim());
+    const validCards = cards.filter(c => {
+      if (c.type === 'IMAGE_OCCLUSION' || (c.occlusionBoxes && c.occlusionBoxes.length > 0)) return false;
+      const hasFront = Boolean(c.front?.trim() || c.frontImageUrl || c.imageUrl);
+      const hasBack = Boolean(c.back?.trim() || c.backImageUrl);
+      return hasFront && hasBack;
+    });
     const shuffledPool = [...validCards].sort(() => Math.random() - 0.5);
     setMatchPool(shuffledPool);
     setMatchPoolOffset(0);
@@ -1167,24 +1180,58 @@ const FlashcardsPlayView: React.FC<FlashcardsPlayViewProps> = ({
                   const isMismatch = matchMismatch?.leftId === cardId;
 
                   return (
-                    <button
+                    <div
                       key={`left-${cardId}`}
-                      type="button"
-                      disabled={isMatched}
-                      onClick={() => handleMatchClick(cardId, 'LEFT')}
-                      className={`w-full text-left p-3.5 rounded-2xl border-2 transition-all duration-200 text-xs sm:text-sm font-semibold flex items-center justify-between min-h-[58px] ${
+                      role="button"
+                      tabIndex={isMatched ? -1 : 0}
+                      aria-disabled={isMatched}
+                      onClick={() => !isMatched && handleMatchClick(cardId, 'LEFT')}
+                      onKeyDown={(e) => {
+                        if (!isMatched && (e.key === 'Enter' || e.key === ' ')) {
+                          e.preventDefault();
+                          handleMatchClick(cardId, 'LEFT');
+                        }
+                      }}
+                      className={`w-full text-left p-3.5 rounded-2xl border-2 transition-all duration-200 text-xs sm:text-sm font-semibold flex items-center justify-between min-h-[62px] gap-2 select-none ${
                         isMatched
                           ? 'bg-emerald-950/40 border-emerald-500/50 text-emerald-300 cursor-default opacity-85'
                           : isMismatch
-                          ? 'bg-rose-950/60 border-rose-500 text-rose-200 animate-shake'
+                          ? 'bg-rose-950/60 border-rose-500 text-rose-200 animate-shake cursor-pointer'
                           : isSelected
-                          ? 'bg-cyan-950/80 border-cyan-400 text-cyan-200 ring-4 ring-cyan-500/20 shadow-lg scale-[1.02]'
-                          : 'bg-[#001228] border-indigo-950/80 hover:border-cyan-500/60 text-slate-200 hover:bg-[#001733]'
+                          ? 'bg-cyan-950/80 border-cyan-400 text-cyan-200 ring-4 ring-cyan-500/20 shadow-lg scale-[1.02] cursor-pointer'
+                          : 'bg-[#001228] border-indigo-950/80 hover:border-cyan-500/60 text-slate-200 hover:bg-[#001733] cursor-pointer'
                       }`}
                     >
-                      <span className="line-clamp-2 leading-snug">{pair.front}</span>
-                      {isMatched && <span className="text-emerald-400 font-black ml-2">✓</span>}
-                    </button>
+                      <div className="flex-1 min-w-0 leading-snug break-words space-y-2 overflow-x-auto [scrollbar-width:none]">
+                        {pair.frontImageUrl && (
+                          <div className="relative group/img inline-block max-w-full">
+                            <img
+                              src={pair.frontImageUrl}
+                              alt="Imagen de la pregunta"
+                              className="max-h-28 w-auto max-w-full object-contain rounded-xl border border-indigo-800/50 bg-black/25"
+                              referrerPolicy="no-referrer"
+                            />
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setMatchZoomImageUrl(pair.frontImageUrl || null);
+                              }}
+                              className="absolute top-1.5 right-1.5 w-6 h-6 rounded-lg bg-slate-950/80 hover:bg-cyan-600 text-white border border-white/20 flex items-center justify-center opacity-85 hover:opacity-100 transition-all shadow"
+                              title="Ampliar imagen"
+                            >
+                              <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.2} d="M21 21l-4.35-4.35M11 18a7 7 0 100-14 7 7 0 000 14zm0-10v6m-3-3h6" />
+                              </svg>
+                            </button>
+                          </div>
+                        )}
+                        {pair.front?.trim() && (
+                          <div>{renderMathAndHtml(pair.front)}</div>
+                        )}
+                      </div>
+                      {isMatched && <span className="text-emerald-400 font-black ml-2 shrink-0">✓</span>}
+                    </div>
                   );
                 })}
               </div>
@@ -1202,26 +1249,87 @@ const FlashcardsPlayView: React.FC<FlashcardsPlayViewProps> = ({
                   const isMismatch = matchMismatch?.rightId === cardId;
 
                   return (
-                    <button
+                    <div
                       key={`right-${cardId}`}
-                      type="button"
-                      disabled={isMatched}
-                      onClick={() => handleMatchClick(cardId, 'RIGHT')}
-                      className={`w-full text-left p-3.5 rounded-2xl border-2 transition-all duration-200 text-xs sm:text-sm font-medium flex items-center justify-between min-h-[58px] ${
+                      role="button"
+                      tabIndex={isMatched ? -1 : 0}
+                      aria-disabled={isMatched}
+                      onClick={() => !isMatched && handleMatchClick(cardId, 'RIGHT')}
+                      onKeyDown={(e) => {
+                        if (!isMatched && (e.key === 'Enter' || e.key === ' ')) {
+                          e.preventDefault();
+                          handleMatchClick(cardId, 'RIGHT');
+                        }
+                      }}
+                      className={`w-full text-left p-3.5 rounded-2xl border-2 transition-all duration-200 text-xs sm:text-sm font-medium flex items-center justify-between min-h-[62px] gap-2 select-none ${
                         isMatched
                           ? 'bg-emerald-950/40 border-emerald-500/50 text-emerald-300 cursor-default opacity-85'
                           : isMismatch
-                          ? 'bg-rose-950/60 border-rose-500 text-rose-200 animate-shake'
+                          ? 'bg-rose-950/60 border-rose-500 text-rose-200 animate-shake cursor-pointer'
                           : isSelected
-                          ? 'bg-indigo-950/80 border-indigo-400 text-indigo-200 ring-4 ring-indigo-500/20 shadow-lg scale-[1.02]'
-                          : 'bg-[#001228] border-indigo-950/80 hover:border-indigo-500/60 text-slate-200 hover:bg-[#001733]'
+                          ? 'bg-indigo-950/80 border-indigo-400 text-indigo-200 ring-4 ring-indigo-500/20 shadow-lg scale-[1.02] cursor-pointer'
+                          : 'bg-[#001228] border-indigo-950/80 hover:border-indigo-500/60 text-slate-200 hover:bg-[#001733] cursor-pointer'
                       }`}
                     >
-                      <span className="line-clamp-2 leading-snug">{pair.back}</span>
-                      {isMatched && <span className="text-emerald-400 font-black ml-2">✓</span>}
-                    </button>
+                      <div className="flex-1 min-w-0 leading-snug break-words space-y-2 overflow-x-auto [scrollbar-width:none]">
+                        {pair.backImageUrl && (
+                          <div className="relative group/img inline-block max-w-full">
+                            <img
+                              src={pair.backImageUrl}
+                              alt="Imagen de la respuesta"
+                              className="max-h-28 w-auto max-w-full object-contain rounded-xl border border-amber-800/50 bg-black/25"
+                              referrerPolicy="no-referrer"
+                            />
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setMatchZoomImageUrl(pair.backImageUrl || null);
+                              }}
+                              className="absolute top-1.5 right-1.5 w-6 h-6 rounded-lg bg-slate-950/80 hover:bg-indigo-600 text-white border border-white/20 flex items-center justify-center opacity-85 hover:opacity-100 transition-all shadow"
+                              title="Ampliar imagen"
+                            >
+                              <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.2} d="M21 21l-4.35-4.35M11 18a7 7 0 100-14 7 7 0 000 14zm0-10v6m-3-3h6" />
+                              </svg>
+                            </button>
+                          </div>
+                        )}
+                        {pair.back?.trim() && (
+                          <div>{renderMathAndHtml(pair.back)}</div>
+                        )}
+                      </div>
+                      {isMatched && <span className="text-emerald-400 font-black ml-2 shrink-0">✓</span>}
+                    </div>
                   );
                 })}
+              </div>
+            </div>
+          )}
+
+          {/* Lightbox zoom modal for images inside Match mode */}
+          {matchZoomImageUrl && (
+            <div
+              onClick={() => setMatchZoomImageUrl(null)}
+              className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in"
+            >
+              <div
+                onClick={(e) => e.stopPropagation()}
+                className="relative max-w-3xl w-full bg-slate-950 border border-slate-800 rounded-2xl p-3 shadow-2xl"
+              >
+                <button
+                  type="button"
+                  onClick={() => setMatchZoomImageUrl(null)}
+                  className="absolute top-3 right-3 px-3 py-1.5 rounded-xl bg-slate-900/90 hover:bg-slate-800 text-slate-200 text-xs font-bold border border-slate-700 z-10"
+                >
+                  ✕ Cerrar
+                </button>
+                <img
+                  src={matchZoomImageUrl}
+                  alt="Vista ampliada"
+                  className="w-full max-h-[80vh] object-contain rounded-xl mx-auto"
+                  referrerPolicy="no-referrer"
+                />
               </div>
             </div>
           )}
@@ -1250,8 +1358,8 @@ const FlashcardsPlayView: React.FC<FlashcardsPlayViewProps> = ({
                   </span>
                 </div>
 
-                {/* If card has an image (Diagram or Image Occlusion) */}
-                {activeCard?.imageUrl && (
+                {/* If card has an image (Diagram or Image Occlusion) — render once */}
+                {isOcclusion && activeCard?.imageUrl ? (
                   <div className="mb-5 relative border border-gray-200 dark:border-slate-800 rounded-2xl overflow-hidden bg-gray-950/5 dark:bg-black/20 flex items-center justify-center p-1 sm:p-2 select-none min-h-[220px]">
                     <div className="relative inline-block max-w-full">
                       <img
@@ -1263,7 +1371,7 @@ const FlashcardsPlayView: React.FC<FlashcardsPlayViewProps> = ({
                       />
 
                       {/* Occlusion Boxes in Quiz Mode */}
-                      {isOcclusion && boxes.map((box) => {
+                      {boxes.map((box) => {
                         const isTarget = box.id === targetBox?.id;
 
                         // Non-target boxes: solid neutral mask
@@ -1324,14 +1432,24 @@ const FlashcardsPlayView: React.FC<FlashcardsPlayViewProps> = ({
                                 quizAnswered.isCorrect ? 'bg-emerald-600' : 'bg-rose-600'
                               }`}
                             >
-                              {quizAnswered.isCorrect ? '✓ ' : '✗ '}{targetBox?.correctAnswer}
+                              <span>{quizAnswered.isCorrect ? '✓ ' : '✗ '}</span>
+                              <span>{renderMathAndHtml(targetBox?.correctAnswer || '')}</span>
                             </span>
                           </div>
                         );
                       })}
                     </div>
                   </div>
-                )}
+                ) : (activeCard?.frontImageUrl || (activeCard?.type !== 'IMAGE_OCCLUSION' && activeCard?.imageUrl)) ? (
+                  <div className="mb-5 flex items-center justify-center max-h-[220px]">
+                    <img
+                      src={activeCard.frontImageUrl || activeCard.imageUrl}
+                      alt="Imagen de la pregunta"
+                      className="max-h-[200px] max-w-full object-contain rounded-2xl border border-indigo-900/60 shadow-lg bg-black/40 p-1"
+                      referrerPolicy="no-referrer"
+                    />
+                  </div>
+                ) : null}
 
                 <h3 className="text-lg sm:text-xl font-black text-white leading-relaxed mb-6">
                   {formatQuestionText(
@@ -1378,7 +1496,9 @@ const FlashcardsPlayView: React.FC<FlashcardsPlayViewProps> = ({
                         }`}>
                           {letter}
                         </span>
-                        <span className="flex-1 leading-snug">{opt}</span>
+                        <div className="flex-1 leading-snug overflow-x-auto [scrollbar-width:none]">
+                          {renderMathAndHtml(opt)}
+                        </div>
                         {quizAnswered && isCorrectTarget && (
                           <span className="text-emerald-400 font-bold text-xs uppercase px-2 py-0.5 rounded bg-emerald-950/90 border border-emerald-700">
                             Correcta
@@ -1393,6 +1513,24 @@ const FlashcardsPlayView: React.FC<FlashcardsPlayViewProps> = ({
                     );
                   })}
                 </div>
+
+                {/* Explicación / Imagen de Reverso al responder */}
+                {quizAnswered && activeCard?.backImageUrl && (
+                  <div className="mt-5 p-3.5 bg-indigo-950/40 border border-indigo-800/40 rounded-2xl flex items-center gap-4 animate-fade-in">
+                    <img
+                      src={activeCard.backImageUrl}
+                      alt="Imagen de la respuesta"
+                      className="max-h-24 w-auto object-contain rounded-xl border border-indigo-700/50 bg-black/40 p-1 shrink-0"
+                      referrerPolicy="no-referrer"
+                    />
+                    <div className="text-xs text-slate-300">
+                      <span className="font-bold text-amber-400 block mb-0.5 uppercase text-[10px] tracking-wider">
+                        Resolución / Imagen de Respuesta:
+                      </span>
+                      <span className="line-clamp-2 text-slate-200">{activeCard.back}</span>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {quizAnswered && (
@@ -1449,6 +1587,17 @@ const FlashcardsPlayView: React.FC<FlashcardsPlayViewProps> = ({
                   </span>
                 </div>
 
+                {(activeMultiCard.frontImageUrl || (activeMultiCard.type !== 'IMAGE_OCCLUSION' && activeMultiCard.imageUrl)) && (
+                  <div className="mb-4 flex items-center justify-center max-h-[200px]">
+                    <img
+                      src={activeMultiCard.frontImageUrl || activeMultiCard.imageUrl}
+                      alt="Imagen de la pregunta"
+                      className="max-h-[180px] max-w-full object-contain rounded-2xl border border-purple-900/60 shadow-lg bg-black/40 p-1"
+                      referrerPolicy="no-referrer"
+                    />
+                  </div>
+                )}
+
                 <h3 className="text-lg sm:text-xl font-black text-white leading-relaxed mb-2">
                   {formatQuestionText(activeMultiCard.front || '')}
                 </h3>
@@ -1485,7 +1634,9 @@ const FlashcardsPlayView: React.FC<FlashcardsPlayViewProps> = ({
                         onClick={() => handleToggleMultiTile(tile)}
                         className={`px-4 py-2.5 rounded-xl border-2 font-bold text-xs sm:text-sm transition-all duration-150 flex items-center gap-2 ${tileStyle} active:scale-95`}
                       >
-                        <span>{tile}</span>
+                        <span className="inline-block overflow-x-auto [scrollbar-width:none]">
+                          {renderMathAndHtml(tile)}
+                        </span>
                         {multiEvaluated && isTarget && isSelected && <span className="text-emerald-400 text-xs">✓</span>}
                         {multiEvaluated && isTarget && !isSelected && <span className="text-amber-400 text-[10px]">Faltó</span>}
                         {multiEvaluated && !isTarget && isSelected && <span className="text-rose-400 text-xs">✗</span>}
@@ -1573,9 +1724,16 @@ const FlashcardsPlayView: React.FC<FlashcardsPlayViewProps> = ({
             const expectedFull = activeCard.formulaFull || activeCard.back || expectedTokensStr;
 
             const cleanStr = (s: string) => {
-              let res = s.replace(/\s+/g, '').toLowerCase().replace(/·|×/g, '*');
-              // Normalize \frac{a}{b} -> a/b
-              res = res.replace(/\\frac\{([^{}]+)\}\{([^{}]+)\}/g, '$1/$2');
+              let res = s
+                .replace(/\$/g, '')
+                .replace(/\s+/g, '')
+                .toLowerCase()
+                .replace(/\\cdot|\\times|·|×/g, '*')
+                .replace(/\\div|÷/g, '/')
+                // Normalize single-char braces on subscripts/superscripts like x_{2} -> x_2
+                .replace(/([_^])\{([a-z0-9])\}/g, '$1$2');
+              // Normalize \frac{a}{b}, \dfrac{a}{b}, \tfrac{a}{b} -> a/b
+              res = res.replace(/\\(?:d|t)?frac\{([^{}]+)\}\{([^{}]+)\}/g, '$1/$2');
               // Normalize unicode fractions to standard division
               const unicodeFracs: Record<string, string> = {
                 '½': '1/2', '⅓': '1/3', '¼': '1/4', '¾': '3/4', '⅔': '2/3',
@@ -1834,7 +1992,7 @@ const FlashcardsPlayView: React.FC<FlashcardsPlayViewProps> = ({
                                     </span>
                                   ))
                                 ) : (
-                                  <strong className="text-emerald-700 dark:text-emerald-400 font-mono font-bold">{formulaEvaluation.expected}</strong>
+                                  <strong className="text-emerald-700 dark:text-emerald-400 font-bold">{renderMathAndHtml(formulaEvaluation.expected)}</strong>
                                 )}
                               </div>
                             </div>
@@ -2482,8 +2640,12 @@ const FlashcardsPlayView: React.FC<FlashcardsPlayViewProps> = ({
         }
 
         // Standard 3D Flip Card for Text Flashcards
+        const frontImg = activeCard?.frontImageUrl || (activeCard?.type === 'TEXT' || !activeCard?.type ? activeCard?.imageUrl : undefined);
+        const backImg = activeCard?.backImageUrl;
+        const hasAnyImage = !!(frontImg || backImg);
+
         return (
-          <div className="perspective-1000 w-full max-w-xl mx-auto min-h-[350px] h-[370px] sm:h-[400px] mb-8 relative">
+          <div className={`perspective-1000 w-full max-w-xl mx-auto ${hasAnyImage ? 'min-h-[460px] h-[480px] sm:h-[520px]' : 'min-h-[350px] h-[370px] sm:h-[400px]'} mb-8 relative`}>
             <div 
               ref={cardRef}
               onClick={() => {
@@ -2507,7 +2669,17 @@ const FlashcardsPlayView: React.FC<FlashcardsPlayViewProps> = ({
                   )}
                 </div>
 
-                <div className="flex-grow min-h-0 flex items-center justify-center py-2 px-1 text-center my-auto overflow-y-auto overscroll-contain max-h-[250px] [scrollbar-width:thin] [scrollbar-color:rgba(99,102,241,0.3)_transparent]">
+                <div className="flex-grow min-h-0 flex flex-col items-center justify-center py-2 px-1 text-center my-auto overflow-y-auto overscroll-contain max-h-[350px] [scrollbar-width:thin] [scrollbar-color:rgba(99,102,241,0.3)_transparent] gap-3">
+                  {frontImg && (
+                    <div className="shrink-0 max-h-[190px] w-full flex items-center justify-center">
+                      <img
+                        src={frontImg}
+                        alt="Imagen de la pregunta"
+                        className="max-h-[180px] max-w-full object-contain rounded-xl border border-indigo-150 dark:border-indigo-900/60 shadow-sm bg-black/5 dark:bg-black/20 p-1"
+                        referrerPolicy="no-referrer"
+                      />
+                    </div>
+                  )}
                   <div className={`w-full max-w-full font-bold text-gray-800 dark:text-gray-100 break-words whitespace-pre-wrap selection:bg-indigo-100 ${getFrontFontSize(activeCard?.front || '')}`}>
                     {formatQuestionText(activeCard?.front || '')}
                   </div>
@@ -2540,7 +2712,17 @@ const FlashcardsPlayView: React.FC<FlashcardsPlayViewProps> = ({
                   </span>
                 </div>
 
-                <div className="flex-grow min-h-0 flex items-center justify-center py-2 px-1 text-center my-auto overflow-y-auto overscroll-contain max-h-[250px] [scrollbar-width:thin] [scrollbar-color:rgba(99,102,241,0.3)_transparent]">
+                <div className="flex-grow min-h-0 flex flex-col items-center justify-center py-2 px-1 text-center my-auto overflow-y-auto overscroll-contain max-h-[350px] [scrollbar-width:thin] [scrollbar-color:rgba(99,102,241,0.3)_transparent] gap-3">
+                  {backImg && (
+                    <div className="shrink-0 max-h-[190px] w-full flex items-center justify-center">
+                      <img
+                        src={backImg}
+                        alt="Imagen de la respuesta"
+                        className="max-h-[180px] max-w-full object-contain rounded-xl border border-amber-200/60 dark:border-amber-900/50 shadow-sm bg-black/5 dark:bg-black/20 p-1"
+                        referrerPolicy="no-referrer"
+                      />
+                    </div>
+                  )}
                   <div className={`w-full max-w-full font-semibold text-indigo-950 dark:text-slate-100 break-words whitespace-pre-wrap select-text ${getBackFontSize(activeCard?.back || '')}`}>
                     {formatQuestionText(activeCard?.back || '')}
                   </div>

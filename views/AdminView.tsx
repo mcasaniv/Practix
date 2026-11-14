@@ -2,9 +2,9 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Question, ReadingText, Flashcard, AcademicArea, TargetArea } from '../types';
 import { ACADEMIC_STRUCTURE, ADMISSION_PROCESSES, DEFAULT_ADMISSION_PROCESS, CEPRE_BASE_TYPES } from '../constants';
-import { formatQuestionText, parseHTMLTags, getQuestionProcess, getProcessBadgeStyle, getProcessShortName, getAvailableProcesses, getOfficialSubjectWeight, ALL_ACADEMIC_SUBJECTS, getAreaBadgeStyle, ACADEMIC_AREAS, getQuestionArea, getQuestionAreas, matchesQuestionArea } from '../utils';
+import { formatQuestionText, parseHTMLTags, getQuestionProcess, getProcessBadgeStyle, getProcessShortName, getAvailableProcesses, getOfficialSubjectWeight, ALL_ACADEMIC_SUBJECTS, getAreaBadgeStyle, ACADEMIC_AREAS, getQuestionArea, getQuestionAreas, matchesQuestionArea, FormulaTokenRenderer, renderMathAndHtml } from '../utils';
 import { ImageOcclusionModal } from '../components/ImageOcclusionModal';
-import { FormulaBuilderModal } from '../components/FormulaBuilderModal';
+import { FormulaBuilderModal, decomposeFormula } from '../components/FormulaBuilderModal';
 
 interface AdminViewProps {
   questions: Question[];
@@ -74,6 +74,242 @@ const TextFormatterBar: React.FC<{
         <span className="font-bold underline text-[12px] tracking-tight">U</span>
         <span className="text-[8px] opacity-30 no-underline font-mono font-normal">{'<u>'}</span>
       </button>
+    </div>
+  );
+};
+
+interface FlashcardImageFieldProps {
+  label: string;
+  sublabel?: string;
+  imageUrl: string;
+  onChange: (url: string) => void;
+  accent: 'indigo' | 'amber';
+}
+
+const FlashcardImageField: React.FC<FlashcardImageFieldProps> = ({
+  label,
+  sublabel,
+  imageUrl,
+  onChange,
+  accent
+}) => {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [inputUrl, setInputUrl] = useState('');
+  const [showUrlInput, setShowUrlInput] = useState(false);
+
+  const handleFile = (file: File) => {
+    if (!file.type.startsWith('image/')) {
+      alert("Por favor selecciona un archivo de imagen válido.");
+      return;
+    }
+    if (file.size > 8 * 1024 * 1024) {
+      alert("La imagen seleccionada supera los 8MB. Por favor elige una imagen más ligera.");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      if (typeof e.target?.result === 'string') {
+        onChange(e.target.result);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const isAmber = accent === 'amber';
+  const badgeClasses = isAmber
+    ? 'text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/50 border-amber-200 dark:border-amber-800/60'
+    : 'text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/50 border-indigo-200 dark:border-indigo-800/60';
+
+  return (
+    <div className="p-3 bg-gray-50/70 dark:bg-slate-800/50 border border-gray-200/80 dark:border-slate-700/70 rounded-xl space-y-2.5">
+      <div className="flex items-center justify-between">
+        <label className="text-xs font-black text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+          {label}
+        </label>
+        <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${badgeClasses}`}>
+          {isAmber ? 'Reverso / Respuesta' : 'Anverso / Pregunta'}
+        </span>
+      </div>
+      {sublabel && (
+        <p className="text-[11px] text-gray-400 dark:text-gray-500">{sublabel}</p>
+      )}
+
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) {
+            handleFile(file);
+            e.target.value = '';
+          }
+        }}
+        className="hidden"
+      />
+
+      {imageUrl ? (
+        <div className="space-y-2">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3 p-2.5 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-xl">
+            <img
+              src={imageUrl}
+              alt="Preview"
+              className="w-20 h-20 object-contain rounded-lg border border-gray-200 dark:border-slate-700 bg-black/5 dark:bg-white/5 shrink-0"
+              referrerPolicy="no-referrer"
+            />
+            <div className="flex-grow min-w-0 text-xs space-y-1.5">
+              <div>
+                <span className="font-bold text-gray-800 dark:text-slate-100 block truncate">
+                  {imageUrl.startsWith('data:') ? 'Imagen local cargada' : imageUrl}
+                </span>
+                <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1 mt-0.5">
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                  </svg>
+                  Imagen adjuntada correctamente
+                </span>
+              </div>
+              <div className="flex flex-wrap items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="px-2.5 py-1 text-[11px] font-bold text-indigo-600 dark:text-indigo-300 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/60 dark:hover:bg-indigo-900/60 border border-indigo-200 dark:border-indigo-800/60 rounded-lg transition-colors flex items-center gap-1"
+                  title="Reemplazar con otra imagen desde tu dispositivo"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                  Cambiar imagen
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!showUrlInput) {
+                      setInputUrl(imageUrl.startsWith('data:') ? '' : imageUrl);
+                    }
+                    setShowUrlInput(!showUrlInput);
+                  }}
+                  className="px-2.5 py-1 text-[11px] font-bold text-slate-600 dark:text-slate-300 bg-gray-100 hover:bg-gray-200 dark:bg-slate-800 dark:hover:bg-slate-700 border border-gray-200 dark:border-slate-700 rounded-lg transition-colors flex items-center gap-1"
+                  title="Cambiar o editar enlace URL de la imagen"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                  </svg>
+                  {showUrlInput ? 'Cerrar URL' : 'Cambiar URL'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onChange('');
+                    setInputUrl('');
+                    setShowUrlInput(false);
+                    if (fileInputRef.current) fileInputRef.current.value = '';
+                  }}
+                  className="px-2.5 py-1 text-[11px] font-bold text-rose-600 dark:text-rose-400 hover:text-white bg-rose-50 hover:bg-rose-600 dark:bg-rose-950/40 dark:hover:bg-rose-600 border border-rose-200 dark:border-rose-900/50 rounded-lg transition-colors flex items-center gap-1"
+                  title="Quitar imagen"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
+                  </svg>
+                  Quitar
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {showUrlInput && (
+            <div className="flex gap-2 animate-fade-in">
+              <input
+                type="url"
+                value={inputUrl}
+                onChange={(e) => setInputUrl(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    if (inputUrl.trim()) {
+                      onChange(inputUrl.trim());
+                      setShowUrlInput(false);
+                    }
+                  }
+                }}
+                placeholder="https://ejemplo.com/nueva-imagen.png"
+                className="flex-grow bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none text-gray-900 dark:text-slate-100 placeholder:text-gray-400 dark:placeholder:text-slate-500 focus:border-indigo-500"
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  if (inputUrl.trim()) {
+                    onChange(inputUrl.trim());
+                    setShowUrlInput(false);
+                  }
+                }}
+                className="px-3 py-2 text-xs font-bold bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors shrink-0"
+              >
+                Aplicar
+              </button>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="space-y-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="px-3 py-1.5 text-xs font-bold rounded-xl bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 text-gray-700 dark:text-slate-200 hover:border-indigo-500 dark:hover:border-indigo-400 hover:bg-indigo-50/30 dark:hover:bg-slate-800 transition-all flex items-center gap-1.5 shadow-sm active:scale-95"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+              <span>Subir Archivo de Imagen</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setShowUrlInput(!showUrlInput)}
+              className="px-3 py-1.5 text-xs font-semibold rounded-xl bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-slate-300 hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors flex items-center gap-1"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+              </svg>
+              <span>{showUrlInput ? 'Cerrar URL' : 'O pegar enlace URL'}</span>
+            </button>
+          </div>
+
+          {showUrlInput && (
+            <div className="flex gap-2 animate-fade-in pt-1">
+              <input
+                type="url"
+                value={inputUrl}
+                onChange={(e) => setInputUrl(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    if (inputUrl.trim()) {
+                      onChange(inputUrl.trim());
+                      setShowUrlInput(false);
+                    }
+                  }
+                }}
+                placeholder="https://ejemplo.com/diagrama.png"
+                className="flex-grow bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs outline-none text-gray-900 dark:text-slate-100 placeholder:text-gray-400 dark:placeholder:text-slate-500 focus:border-indigo-500"
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  if (inputUrl.trim()) {
+                    onChange(inputUrl.trim());
+                    setShowUrlInput(false);
+                  }
+                }}
+                className="px-3 py-2 text-xs font-bold bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors shrink-0"
+              >
+                Adjuntar
+              </button>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 };
@@ -252,6 +488,8 @@ const AdminView: React.FC<AdminViewProps> = ({
   const [fcTopic, setFcTopic] = useState('');
   const [fcFront, setFcFront] = useState('');
   const [fcBack, setFcBack] = useState('');
+  const [fcFrontImageUrl, setFcFrontImageUrl] = useState('');
+  const [fcBackImageUrl, setFcBackImageUrl] = useState('');
   const [fcHasMultiAnswers, setFcHasMultiAnswers] = useState(false);
   const [fcMultiAnswersText, setFcMultiAnswersText] = useState('');
   
@@ -263,6 +501,9 @@ const AdminView: React.FC<AdminViewProps> = ({
   const [fcBulkFormat, setFcBulkFormat] = useState<'SEMICOLON' | 'JSON'>('SEMICOLON');
   const [fcDeleteId, setFcDeleteId] = useState<string | null>(null);
   const [fcEditing, setFcEditing] = useState<Flashcard | null>(null);
+  const [fcEditNewToken, setFcEditNewToken] = useState('');
+  const [fcEditNewDistractor, setFcEditNewDistractor] = useState('');
+  const [editingOcclusionFlashcard, setEditingOcclusionFlashcard] = useState<Flashcard | null>(null);
 
   // LaTeX preview effect for Flashcards
   useEffect(() => {
@@ -275,7 +516,7 @@ const AdminView: React.FC<AdminViewProps> = ({
         throwOnError: false
       });
     }
-  }, [fcFront, fcBack, activeTab]);
+  }, [fcFront, fcBack, fcFrontImageUrl, fcBackImageUrl, activeTab]);
 
   // Form State ReadingText
   const [editingTextId, setEditingTextId] = useState<string | null>(null);
@@ -505,6 +746,10 @@ const AdminView: React.FC<AdminViewProps> = ({
       topic: fcTopic.trim(),
       front: fcFront.trim(),
       back: fcBack.trim(),
+      frontImageUrl: fcFrontImageUrl.trim() || undefined,
+      backImageUrl: fcBackImageUrl.trim() || undefined,
+      imageUrl: fcFrontImageUrl.trim() || undefined,
+      type: 'TEXT',
       hasMultipleAnswers: fcHasMultiAnswers,
       multiAnswers: multiAnswersArray && multiAnswersArray.length > 1 ? multiAnswersArray : undefined,
       createdAt: Date.now()
@@ -512,6 +757,8 @@ const AdminView: React.FC<AdminViewProps> = ({
     onSaveFlashcardsBatch([newCard]);
     setFcFront('');
     setFcBack('');
+    setFcFrontImageUrl('');
+    setFcBackImageUrl('');
     setFcHasMultiAnswers(false);
     setFcMultiAnswersText('');
     showToast("Flashcard añadida con éxito!");
@@ -537,6 +784,8 @@ const AdminView: React.FC<AdminViewProps> = ({
             const front = item.front || item.anverso || item.pregunta || item.q || '';
             const back = item.back || item.reverso || item.respuesta || item.a || '';
             const topic = item.topic || item.tema || fcBulkTopic.trim() || '';
+            const frontImg = item.frontImageUrl || item.imagenPregunta || item.imagenAnverso || item.frontImage || item.imageUrl || '';
+            const backImg = item.backImageUrl || item.imagenRespuesta || item.imagenReverso || item.backImage || '';
             if (front && back) {
               cards.push({
                 id: crypto.randomUUID(),
@@ -545,6 +794,10 @@ const AdminView: React.FC<AdminViewProps> = ({
                 topic: topic.trim() || undefined,
                 front: front.trim(),
                 back: back.trim(),
+                frontImageUrl: frontImg.trim() || undefined,
+                backImageUrl: backImg.trim() || undefined,
+                imageUrl: frontImg.trim() || undefined,
+                type: 'TEXT',
                 createdAt: Date.now()
               });
             }
@@ -1462,10 +1715,28 @@ const AdminView: React.FC<AdminViewProps> = ({
                 <textarea value={fcFront} onChange={(e) => setFcFront(e.target.value)} placeholder="Fórmula de la fuerza centrípeta..." className="w-full bg-gray-50 dark:bg-slate-800 border dark:border-slate-700 rounded-xl p-4 min-h-[100px] outline-none dark:text-gray-200 whitespace-pre-wrap" />
               </div>
 
+              {/* Imagen para el Anverso */}
+              <FlashcardImageField
+                label="Imagen para el Anverso (Opcional)"
+                sublabel="Adjunta un gráfico, diagrama o esquema que acompañará a la pregunta"
+                imageUrl={fcFrontImageUrl}
+                onChange={setFcFrontImageUrl}
+                accent="indigo"
+              />
+
               <div>
                 <label className="block text-xs font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-2">Reverso / Respuesta (Soporta LaTeX)</label>
                 <textarea value={fcBack} onChange={(e) => setFcBack(e.target.value)} placeholder="$F_c = \frac{m \cdot v^2}{r}$" className="w-full bg-gray-50 dark:bg-slate-800 border dark:border-slate-700 rounded-xl p-4 min-h-[100px] outline-none dark:text-gray-200 whitespace-pre-wrap" />
               </div>
+
+              {/* Imagen para el Reverso */}
+              <FlashcardImageField
+                label="Imagen para el Reverso (Opcional)"
+                sublabel="Adjunta una resolución gráfica, esquema o imagen explicativa para la respuesta"
+                imageUrl={fcBackImageUrl}
+                onChange={setFcBackImageUrl}
+                accent="amber"
+              />
 
               {/* Toggle Habilitar Varias Respuestas (Modo Selección Múltiple) */}
               <div className="p-4 bg-indigo-50/60 dark:bg-slate-800/80 border border-indigo-150 dark:border-indigo-900/40 rounded-xl space-y-3">
@@ -1509,13 +1780,37 @@ const AdminView: React.FC<AdminViewProps> = ({
               <div className="p-4 bg-gray-50 dark:bg-slate-800 border dark:border-slate-700 rounded-xl">
                 <h4 className="text-xs font-black text-indigo-500 uppercase mb-2">Vista Previa de Tarjeta</h4>
                 <div className="grid grid-cols-2 gap-3 text-xs" ref={fcPreviewRef}>
-                  <div className="p-3 bg-white dark:bg-slate-900 border rounded-lg min-h-[80px]">
-                    <span className="font-bold block text-[10px] text-gray-400 uppercase mb-1">Anverso:</span>
-                    <div className="whitespace-pre-wrap font-medium">{fcFront || 'Vacío'}</div>
+                  <div className="p-3 bg-white dark:bg-slate-900 border rounded-lg min-h-[80px] flex flex-col justify-between">
+                    <div>
+                      <span className="font-bold block text-[10px] text-gray-400 uppercase mb-1">Anverso:</span>
+                      {fcFrontImageUrl && (
+                        <div className="mb-2">
+                          <img
+                            src={fcFrontImageUrl}
+                            alt="Preview Anverso"
+                            className="max-h-24 w-auto object-contain rounded-md border border-gray-200 dark:border-slate-700 bg-black/5 dark:bg-white/5"
+                            referrerPolicy="no-referrer"
+                          />
+                        </div>
+                      )}
+                      <div className="whitespace-pre-wrap font-medium">{fcFront || 'Vacío'}</div>
+                    </div>
                   </div>
-                  <div className="p-3 bg-white dark:bg-slate-900 border rounded-lg min-h-[80px]">
-                    <span className="font-bold block text-[10px] text-amber-500 uppercase mb-1">Reverso:</span>
-                    <div className="whitespace-pre-wrap font-medium">{fcBack || 'Vacío'}</div>
+                  <div className="p-3 bg-white dark:bg-slate-900 border rounded-lg min-h-[80px] flex flex-col justify-between">
+                    <div>
+                      <span className="font-bold block text-[10px] text-amber-500 uppercase mb-1">Reverso:</span>
+                      {fcBackImageUrl && (
+                        <div className="mb-2">
+                          <img
+                            src={fcBackImageUrl}
+                            alt="Preview Reverso"
+                            className="max-h-24 w-auto object-contain rounded-md border border-gray-200 dark:border-slate-700 bg-black/5 dark:bg-white/5"
+                            referrerPolicy="no-referrer"
+                          />
+                        </div>
+                      )}
+                      <div className="whitespace-pre-wrap font-medium">{fcBack || 'Vacío'}</div>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1642,6 +1937,11 @@ const AdminView: React.FC<AdminViewProps> = ({
                             {fc.topic}
                           </span>
                         )}
+                        {fc.type === 'FORMULA_BUILDER' && (
+                          <span className="bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 text-[9px] font-black px-2 py-0.5 rounded uppercase border border-amber-200/60 dark:border-amber-800/50">
+                            🧩 Fórmula
+                          </span>
+                        )}
                         {fc.difficulty && (
                           <span className={`text-[9px] font-black px-2.5 py-0.5 rounded uppercase ${
                             fc.difficulty === 'EASY' ? 'bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400' :
@@ -1656,6 +1956,8 @@ const AdminView: React.FC<AdminViewProps> = ({
                         <button 
                           onClick={() => {
                             setFcEditing({ ...fc });
+                            setFcEditNewToken('');
+                            setFcEditNewDistractor('');
                           }} 
                           className="text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 p-1 hover:bg-gray-100 dark:hover:bg-slate-700 rounded transition-colors"
                           title="Editar Flashcard"
@@ -1676,13 +1978,66 @@ const AdminView: React.FC<AdminViewProps> = ({
                       </div>
                     </div>
 
+                    {/* Visual badges for images */}
+                    {((fc.frontImageUrl || (fc.type !== 'IMAGE_OCCLUSION' && fc.imageUrl)) || fc.backImageUrl) && (
+                      <div className="flex flex-wrap gap-1 mb-2">
+                        {(fc.frontImageUrl || (fc.type !== 'IMAGE_OCCLUSION' && fc.imageUrl)) && (
+                          <span className="inline-flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 border border-indigo-200/50 dark:border-indigo-800/50">
+                            🖼️ Img Frente
+                          </span>
+                        )}
+                        {fc.backImageUrl && (
+                          <span className="inline-flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 border border-amber-200/50 dark:border-amber-800/50">
+                            🖼️ Img Reverso
+                          </span>
+                        )}
+                      </div>
+                    )}
+
                     <div className="mb-2">
                       <span className="text-[10px] font-bold text-gray-400 block uppercase">Frente:</span>
-                      <p className="text-sm font-semibold text-gray-800 dark:text-gray-100 line-clamp-3 whitespace-pre-wrap">{fc.front}</p>
+                      {(fc.frontImageUrl || (fc.type !== 'IMAGE_OCCLUSION' && fc.imageUrl)) && (
+                        <div className="my-1">
+                          <img
+                            src={fc.frontImageUrl || fc.imageUrl}
+                            alt="Frente"
+                            className="max-h-20 w-auto object-contain rounded-lg border border-gray-200 dark:border-slate-700 bg-black/5 dark:bg-white/5"
+                            referrerPolicy="no-referrer"
+                          />
+                        </div>
+                      )}
+                      <div className="text-sm font-semibold text-gray-800 dark:text-gray-100 line-clamp-3 whitespace-pre-wrap">
+                        {renderMathAndHtml(fc.front)}
+                      </div>
                     </div>
                     <div>
                       <span className="text-[10px] font-bold text-gray-400 block uppercase">Atrás:</span>
-                      <p className="text-sm text-gray-600 dark:text-gray-300 line-clamp-3 whitespace-pre-wrap italic">{fc.back}</p>
+                      {fc.backImageUrl && (
+                        <div className="my-1">
+                          <img
+                            src={fc.backImageUrl}
+                            alt="Atrás"
+                            className="max-h-20 w-auto object-contain rounded-lg border border-gray-200 dark:border-slate-700 bg-black/5 dark:bg-white/5"
+                            referrerPolicy="no-referrer"
+                          />
+                        </div>
+                      )}
+                      {fc.type === 'FORMULA_BUILDER' && fc.formulaTokens && fc.formulaTokens.length > 0 ? (
+                        <div className="mt-1 flex flex-wrap gap-1">
+                          {fc.formulaTokens.map((tok, tIdx) => (
+                            <span
+                              key={tIdx}
+                              className="inline-flex items-center px-2 py-1 rounded-lg bg-amber-50 dark:bg-amber-950/40 border border-amber-200/70 dark:border-amber-800/60 text-xs font-bold text-amber-800 dark:text-amber-200"
+                            >
+                              <FormulaTokenRenderer text={tok} size="sm" />
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="text-sm text-gray-600 dark:text-gray-300 line-clamp-3 whitespace-pre-wrap italic">
+                          {renderMathAndHtml(fc.back)}
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -1724,7 +2079,7 @@ const AdminView: React.FC<AdminViewProps> = ({
 
       {/* Edit Flashcard Modal */}
       {fcEditing && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-y-auto animate-fade-in text-gray-800 dark:text-gray-150 animate-fade-in">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-y-auto animate-fade-in text-gray-800 dark:text-slate-100">
           <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 md:p-8 max-w-xl w-full shadow-2xl border border-gray-100 dark:border-slate-800 my-8">
             <div className="flex justify-between items-center mb-6">
               <h3 className="text-xl md:text-2xl font-black text-gray-900 dark:text-white flex items-center gap-2">
@@ -1737,7 +2092,7 @@ const AdminView: React.FC<AdminViewProps> = ({
               </h3>
               <button 
                 onClick={() => setFcEditing(null)}
-                className="text-gray-400 hover:text-gray-650 dark:hover:text-gray-200 transition-colors"
+                className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
                 type="button"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1749,7 +2104,7 @@ const AdminView: React.FC<AdminViewProps> = ({
             <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-1">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-1.5">Curso</label>
+                  <label className="block text-xs font-black text-gray-400 dark:text-slate-400 uppercase tracking-widest mb-1.5">Curso</label>
                   <select 
                     value={fcEditing.course} 
                     onChange={(e) => {
@@ -1759,18 +2114,18 @@ const AdminView: React.FC<AdminViewProps> = ({
                         subject: '' // Reset subject when course changes
                       });
                     }} 
-                    className="w-full bg-gray-50 dark:bg-slate-850 border border-gray-200 dark:border-slate-700 rounded-xl p-3 outline-none dark:text-gray-200 focus:border-indigo-500"
+                    className="w-full bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl p-3 outline-none text-gray-900 dark:text-slate-100 focus:border-indigo-500"
                   >
                     <option value="">Selecciona curso...</option>
                     {ACADEMIC_STRUCTURE.map(c => <option key={c.name} value={c.name}>{c.name}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-1.5">Materia</label>
+                  <label className="block text-xs font-black text-gray-400 dark:text-slate-400 uppercase tracking-widest mb-1.5">Materia</label>
                   <select 
                     value={fcEditing.subject} 
                     onChange={(e) => setFcEditing({ ...fcEditing, subject: e.target.value })} 
-                    className="w-full bg-gray-50 dark:bg-slate-850 border border-gray-200 dark:border-slate-700 rounded-xl p-3 outline-none dark:text-gray-200 focus:border-indigo-500"
+                    className="w-full bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl p-3 outline-none text-gray-900 dark:text-slate-100 focus:border-indigo-500"
                   >
                     <option value="">Selecciona materia...</option>
                     {(ACADEMIC_STRUCTURE.find(c => c.name === fcEditing.course)?.subjects || []).map(s => (
@@ -1781,39 +2136,373 @@ const AdminView: React.FC<AdminViewProps> = ({
               </div>
 
               <div>
-                <label className="block text-xs font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-1.5">Tema / Título (Obligatorio)</label>
+                <label className="block text-xs font-black text-gray-400 dark:text-slate-400 uppercase tracking-widest mb-1.5">Tema / Título (Obligatorio)</label>
                 <input 
                   type="text" 
                   value={fcEditing.topic || ''} 
                   onChange={(e) => setFcEditing({ ...fcEditing, topic: e.target.value })} 
                   placeholder="Ej. Segunda ley de Newton" 
-                  className="w-full bg-gray-50 dark:bg-slate-850 border border-gray-200 dark:border-slate-700 rounded-xl p-3 outline-none dark:text-gray-205 focus:border-indigo-500" 
+                  className="w-full bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl p-3 outline-none text-gray-900 dark:text-slate-100 placeholder:text-gray-400 dark:placeholder:text-slate-500 focus:border-indigo-500" 
                   required 
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-1.5">Anverso / Pregunta (Soporta LaTeX)</label>
+                <label className="block text-xs font-black text-gray-400 dark:text-slate-400 uppercase tracking-widest mb-1.5">Anverso / Pregunta (Soporta LaTeX)</label>
                 <textarea 
                   value={fcEditing.front} 
                   onChange={(e) => setFcEditing({ ...fcEditing, front: e.target.value })} 
                   placeholder="Fórmula de la fuerza centrípeta..." 
-                  className="w-full bg-gray-50 dark:bg-slate-850 border border-gray-200 dark:border-slate-700 rounded-xl p-3 min-h-[100px] outline-none dark:text-gray-205 focus:border-indigo-500 whitespace-pre-wrap" 
+                  className="w-full bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl p-3 min-h-[100px] outline-none text-gray-900 dark:text-slate-100 placeholder:text-gray-400 dark:placeholder:text-slate-500 focus:border-indigo-500 whitespace-pre-wrap" 
                 />
               </div>
 
+              {/* Imagen con Oclusión en Edición */}
+              {fcEditing.type === 'IMAGE_OCCLUSION' ? (
+                <div className="p-3.5 bg-indigo-50/50 dark:bg-slate-800/70 border border-indigo-200/80 dark:border-indigo-800/60 rounded-xl space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <span className="text-xs font-black text-indigo-700 dark:text-indigo-300 uppercase tracking-wider block">
+                        🖼️ Imagen con Oclusión Adjunta
+                      </span>
+                      <span className="text-[11px] text-gray-500 dark:text-slate-400">
+                        Cambia la imagen o ajusta los cuadros ocultos y sus respuestas.
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setEditingOcclusionFlashcard({ ...fcEditing })}
+                      className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition-colors shadow-sm flex items-center gap-1.5"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                      </svg>
+                      Editar imagen y cuadros
+                    </button>
+                  </div>
+
+                  {fcEditing.imageUrl && (
+                    <div className="relative rounded-xl overflow-hidden border border-gray-200 dark:border-slate-700 bg-black/5 dark:bg-slate-900">
+                      <img
+                        src={fcEditing.imageUrl}
+                        alt="Oclusión"
+                        className="w-full max-h-56 object-contain mx-auto"
+                        referrerPolicy="no-referrer"
+                      />
+                      {(fcEditing.occlusionBoxes || []).map((box, bIdx) => {
+                        const isTarget = fcEditing.activeBoxId ? box.id === fcEditing.activeBoxId : true;
+                        return (
+                          <div
+                            key={box.id}
+                            style={{
+                              left: `${box.x}%`,
+                              top: `${box.y}%`,
+                              width: `${box.width}%`,
+                              height: `${box.height}%`
+                            }}
+                            className={`absolute rounded border-2 flex items-center justify-center text-[10px] font-black pointer-events-none ${
+                              isTarget
+                                ? 'bg-amber-400/75 border-amber-500 text-slate-950'
+                                : 'bg-indigo-500/45 border-indigo-400 text-white'
+                            }`}
+                          >
+                            {box.label || `#${bIdx + 1}`}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  <FlashcardImageField
+                    label="Cambiar Imagen Base de Oclusión"
+                    imageUrl={fcEditing.imageUrl || ''}
+                    onChange={(url) => {
+                      setFcEditing({
+                        ...fcEditing,
+                        imageUrl: url || undefined
+                      });
+                    }}
+                    accent="indigo"
+                  />
+
+                  {(fcEditing.occlusionBoxes || []).length > 0 && (
+                    <div className="space-y-1.5 pt-1">
+                      <span className="text-[11px] font-bold text-gray-600 dark:text-slate-300 block">
+                        Respuestas de los cuadros ({fcEditing.occlusionBoxes?.length}):
+                      </span>
+                      {fcEditing.occlusionBoxes!.map((box, bIdx) => {
+                        const isTarget = fcEditing.activeBoxId === box.id;
+                        return (
+                          <div key={box.id} className="flex items-center gap-2">
+                            <span className={`text-[10px] font-black px-2 py-1 rounded-lg shrink-0 ${
+                              isTarget
+                                ? 'bg-amber-500/20 text-amber-600 dark:text-amber-300 border border-amber-500/40'
+                                : 'bg-gray-200/70 dark:bg-slate-700 text-gray-600 dark:text-slate-300'
+                            }`}>
+                              {box.label || `#${bIdx + 1}`}
+                            </span>
+                            <input
+                              type="text"
+                              value={box.correctAnswer}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                const updatedBoxes = fcEditing.occlusionBoxes!.map(b =>
+                                  b.id === box.id ? { ...b, correctAnswer: val } : b
+                                );
+                                setFcEditing({
+                                  ...fcEditing,
+                                  occlusionBoxes: updatedBoxes,
+                                  back: isTarget ? val : fcEditing.back
+                                });
+                              }}
+                              placeholder="Respuesta correcta del cuadro..."
+                              className="flex-1 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-xs outline-none text-gray-900 dark:text-slate-100 focus:border-indigo-500"
+                            />
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                /* Imagen del Anverso en Edición para flashcards normales / fórmula */
+                <FlashcardImageField
+                  label="Imagen del Anverso (Opcional)"
+                  sublabel="Acompaña a la pregunta de la tarjeta"
+                  imageUrl={fcEditing.frontImageUrl || fcEditing.imageUrl || ''}
+                  onChange={(url) => {
+                    setFcEditing({
+                      ...fcEditing,
+                      frontImageUrl: url || undefined,
+                      imageUrl: url || undefined
+                    });
+                  }}
+                  accent="indigo"
+                />
+              )}
+
               <div>
-                <label className="block text-xs font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-1.5">Reverso / Respuesta (Soporta LaTeX)</label>
+                <label className="block text-xs font-black text-gray-400 dark:text-slate-400 uppercase tracking-widest mb-1.5">Reverso / Respuesta (Soporta LaTeX)</label>
                 <textarea 
                   value={fcEditing.back} 
                   onChange={(e) => setFcEditing({ ...fcEditing, back: e.target.value })} 
                   placeholder="$F_c = \frac{m \cdot v^2}{r}$" 
-                  className="w-full bg-gray-50 dark:bg-slate-850 border border-gray-200 dark:border-slate-700 rounded-xl p-3 min-h-[100px] outline-none dark:text-gray-205 focus:border-indigo-500 whitespace-pre-wrap" 
+                  className="w-full bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl p-3 min-h-[100px] outline-none text-gray-900 dark:text-slate-100 placeholder:text-gray-400 dark:placeholder:text-slate-500 focus:border-indigo-500 whitespace-pre-wrap" 
                 />
               </div>
 
-              {/* Multi-answers toggle in Edit modal */}
-              <div className="p-3 bg-indigo-50/60 dark:bg-slate-800/80 border border-indigo-150 dark:border-indigo-900/40 rounded-xl space-y-2.5">
+              {/* Imagen del Reverso en Edición */}
+              <FlashcardImageField
+                label="Imagen del Reverso (Opcional)"
+                sublabel="Acompaña a la respuesta de la tarjeta"
+                imageUrl={fcEditing.backImageUrl || ''}
+                onChange={(url) => {
+                  setFcEditing({
+                    ...fcEditing,
+                    backImageUrl: url || undefined
+                  });
+                }}
+                accent="amber"
+              />
+
+              {/* Formula Builder blocks editor when editing a FORMULA_BUILDER flashcard */}
+              {fcEditing.type === 'FORMULA_BUILDER' && (
+                <div className="p-4 bg-amber-50/70 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/50 rounded-xl space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <span className="text-xs font-black text-amber-700 dark:text-amber-400 uppercase tracking-wider block">
+                        🧩 Bloques de la Fórmula ({(fcEditing.formulaTokens || []).length})
+                      </span>
+                      <span className="text-[11px] text-gray-500 dark:text-gray-400">
+                        Puedes añadir bloques en LaTeX como <code className="px-1 rounded bg-white/80 dark:bg-slate-800">$x_2$</code> o <code className="px-1 rounded bg-white/80 dark:bg-slate-800">\widehat{'{abc}'}</code> como una sola pieza.
+                      </span>
+                    </div>
+                    <div className="flex gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const nextTokens = decomposeFormula(fcEditing.back || '', 'LATEX_BLOCKS');
+                          setFcEditing({ ...fcEditing, formulaTokens: nextTokens });
+                        }}
+                        className="px-2.5 py-1 rounded-lg bg-white dark:bg-slate-800 border border-amber-300 dark:border-amber-700 text-[10px] font-bold text-amber-700 dark:text-amber-300 hover:bg-amber-100/60 dark:hover:bg-amber-900/40 transition-colors"
+                        title="Cada $...$ queda como un solo bloque intacto"
+                      >
+                        Auto: Bloques $...$
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const nextTokens = decomposeFormula(fcEditing.back || '', 'SMART');
+                          setFcEditing({ ...fcEditing, formulaTokens: nextTokens });
+                        }}
+                        className="px-2.5 py-1 rounded-lg bg-white dark:bg-slate-800 border border-amber-300 dark:border-amber-700 text-[10px] font-bold text-amber-700 dark:text-amber-300 hover:bg-amber-100/60 dark:hover:bg-amber-900/40 transition-colors"
+                        title="Descomposición inteligente de la fórmula"
+                      >
+                        Auto: Inteligente
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Current Tokens */}
+                  <div className="flex flex-wrap gap-1.5 p-2.5 bg-white/80 dark:bg-slate-900/70 rounded-xl border border-amber-200/70 dark:border-amber-800/40 min-h-[48px]">
+                    {(fcEditing.formulaTokens || []).length === 0 ? (
+                      <span className="text-xs text-gray-400 italic self-center">Sin bloques aún. Añade bloques abajo o usa Auto.</span>
+                    ) : (
+                      (fcEditing.formulaTokens || []).map((tok, idx, arr) => (
+                        <div
+                          key={`${tok}-${idx}`}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-100/80 dark:bg-amber-900/40 border border-amber-300/80 dark:border-amber-700/60 text-xs font-bold text-amber-900 dark:text-amber-100"
+                        >
+                          <FormulaTokenRenderer text={tok} size="sm" />
+                          {idx > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const next = [...arr];
+                                [next[idx - 1], next[idx]] = [next[idx], next[idx - 1]];
+                                setFcEditing({ ...fcEditing, formulaTokens: next, back: next.join(' ') });
+                              }}
+                              className="text-amber-600 dark:text-amber-300 hover:text-amber-900 px-0.5 text-[10px]"
+                              title="Mover a la izquierda"
+                            >
+                              ←
+                            </button>
+                          )}
+                          {idx < arr.length - 1 && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const next = [...arr];
+                                [next[idx], next[idx + 1]] = [next[idx + 1], next[idx]];
+                                setFcEditing({ ...fcEditing, formulaTokens: next, back: next.join(' ') });
+                              }}
+                              className="text-amber-600 dark:text-amber-300 hover:text-amber-900 px-0.5 text-[10px]"
+                              title="Mover a la derecha"
+                            >
+                              →
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const next = arr.filter((_, i) => i !== idx);
+                              setFcEditing({ ...fcEditing, formulaTokens: next, back: next.join(' ') });
+                            }}
+                            className="text-rose-500 hover:text-rose-700 font-black ml-0.5"
+                            title="Quitar bloque"
+                          >
+                            ×
+                          </button>
+                        </div>
+                      ))
+                    )}
+                  </div>
+
+                  {/* Add Custom Block */}
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <input
+                      type="text"
+                      value={fcEditNewToken}
+                      onChange={(e) => setFcEditNewToken(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          const val = fcEditNewToken.trim();
+                          if (!val) return;
+                          const next = [...(fcEditing.formulaTokens || []), val];
+                          setFcEditing({ ...fcEditing, formulaTokens: next, back: next.join(' ') });
+                          setFcEditNewToken('');
+                        }
+                      }}
+                      placeholder="Nuevo bloque LaTeX (ej: $x_2$, \widehat{abc}, \frac{a}{b})"
+                      className="flex-1 bg-white dark:bg-slate-900 border border-amber-200 dark:border-amber-800/60 rounded-lg px-3 py-1.5 text-xs outline-none dark:text-gray-200 focus:border-amber-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const val = fcEditNewToken.trim();
+                        if (!val) return;
+                        const next = [...(fcEditing.formulaTokens || []), val];
+                        setFcEditing({ ...fcEditing, formulaTokens: next, back: next.join(' ') });
+                        setFcEditNewToken('');
+                      }}
+                      className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold transition-colors whitespace-nowrap"
+                    >
+                      + Añadir Bloque
+                    </button>
+                  </div>
+                  {fcEditNewToken.trim() && (
+                    <div className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-300 bg-white/70 dark:bg-slate-900/60 px-3 py-1.5 rounded-lg border border-amber-200/50 dark:border-amber-800/40">
+                      <span className="text-[10px] font-bold uppercase text-amber-600 dark:text-amber-400">Vista previa:</span>
+                      <FormulaTokenRenderer text={fcEditNewToken.trim()} size="sm" />
+                    </div>
+                  )}
+
+                  {/* Formula Distractors */}
+                  <div className="pt-2 border-t border-amber-200/70 dark:border-amber-800/40 space-y-2">
+                    <span className="text-[11px] font-bold text-amber-700 dark:text-amber-400 block uppercase">
+                      Distractores ({(fcEditing.formulaDistractors || []).length})
+                    </span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {(fcEditing.formulaDistractors || []).map((dist, idx) => (
+                        <span
+                          key={`${dist}-${idx}`}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800/60 text-xs font-bold text-rose-700 dark:text-rose-300"
+                        >
+                          <FormulaTokenRenderer text={dist} size="sm" />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const next = (fcEditing.formulaDistractors || []).filter((_, i) => i !== idx);
+                              setFcEditing({ ...fcEditing, formulaDistractors: next });
+                            }}
+                            className="text-rose-500 hover:text-rose-700 font-black"
+                            title="Quitar distractor"
+                          >
+                            ×
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                    <div className="flex flex-col sm:flex-row gap-2">
+                      <input
+                        type="text"
+                        value={fcEditNewDistractor}
+                        onChange={(e) => setFcEditNewDistractor(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            const val = fcEditNewDistractor.trim();
+                            if (!val) return;
+                            const next = [...(fcEditing.formulaDistractors || []), val];
+                            setFcEditing({ ...fcEditing, formulaDistractors: next });
+                            setFcEditNewDistractor('');
+                          }
+                        }}
+                        placeholder="Añadir distractor (ej: $x_1$, $x^2$)"
+                        className="flex-1 bg-white dark:bg-slate-900 border border-amber-200 dark:border-amber-800/60 rounded-lg px-3 py-1.5 text-xs outline-none dark:text-gray-200 focus:border-amber-500"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const val = fcEditNewDistractor.trim();
+                          if (!val) return;
+                          const next = [...(fcEditing.formulaDistractors || []), val];
+                          setFcEditing({ ...fcEditing, formulaDistractors: next });
+                          setFcEditNewDistractor('');
+                        }}
+                        className="px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition-colors whitespace-nowrap"
+                      >
+                        + Distractor
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Multi-answers toggle in Edit modal (for standard flashcards) */}
+              {fcEditing.type !== 'FORMULA_BUILDER' && fcEditing.type !== 'IMAGE_OCCLUSION' && (
+              <div className="p-3 bg-indigo-50/60 dark:bg-slate-800/80 border border-indigo-200 dark:border-indigo-900/40 rounded-xl space-y-2.5">
                 <label className="flex items-center gap-3 cursor-pointer select-none">
                   <input
                     type="checkbox"
@@ -1858,14 +2547,15 @@ const AdminView: React.FC<AdminViewProps> = ({
                       }}
                       placeholder="Ej: +1, +3, +5, +7"
                       rows={2}
-                      className="w-full bg-white dark:bg-slate-900 border border-indigo-200 dark:border-indigo-900/60 rounded-lg p-2 text-xs outline-none dark:text-gray-200 focus:border-indigo-500"
+                      className="w-full bg-white dark:bg-slate-900 border border-indigo-200 dark:border-indigo-900/60 rounded-lg p-2 text-xs outline-none text-gray-900 dark:text-slate-100 placeholder:text-gray-400 dark:placeholder:text-slate-500 focus:border-indigo-500"
                     />
                   </div>
                 )}
               </div>
+              )}
 
               <div>
-                <label className="block text-xs font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-1.5">Dificultad</label>
+                <label className="block text-xs font-black text-gray-400 dark:text-slate-400 uppercase tracking-widest mb-1.5">Dificultad</label>
                 <div className="grid grid-cols-3 gap-2">
                   {(['EASY', 'MEDIUM', 'HARD'] as const).map((diff) => (
                     <button
@@ -1877,7 +2567,7 @@ const AdminView: React.FC<AdminViewProps> = ({
                           ? diff === 'EASY' ? 'bg-emerald-50 border-emerald-500 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400'
                             : diff === 'MEDIUM' ? 'bg-amber-50 border-amber-500 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400'
                             : 'bg-rose-50 border-rose-500 text-rose-700 dark:bg-rose-950/40 dark:text-rose-400'
-                          : 'bg-gray-50 dark:bg-slate-850 border-gray-200 dark:border-slate-700 text-gray-650 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-slate-800'
+                          : 'bg-gray-50 dark:bg-slate-800 border-gray-200 dark:border-slate-700 text-gray-600 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-700'
                       }`}
                     >
                       {diff === 'EASY' ? 'Fácil' : diff === 'MEDIUM' ? 'Medio' : 'Difícil'}
@@ -1891,7 +2581,7 @@ const AdminView: React.FC<AdminViewProps> = ({
               <button
                 type="button"
                 onClick={() => setFcEditing(null)}
-                className="px-5 py-2.5 text-gray-600 dark:text-gray-405 font-medium hover:bg-gray-100 dark:hover:bg-slate-800 rounded-xl transition-colors"
+                className="px-5 py-2.5 text-gray-600 dark:text-slate-400 font-medium hover:bg-gray-100 dark:hover:bg-slate-800 rounded-xl transition-colors"
               >
                 Cancelar
               </button>
@@ -1988,14 +2678,24 @@ const AdminView: React.FC<AdminViewProps> = ({
 
       {/* Image Occlusion Modal */}
       <ImageOcclusionModal
-        isOpen={showAdminOcclusionModal}
-        onClose={() => setShowAdminOcclusionModal(false)}
+        isOpen={showAdminOcclusionModal || Boolean(editingOcclusionFlashcard)}
+        onClose={() => {
+          setShowAdminOcclusionModal(false);
+          setEditingOcclusionFlashcard(null);
+        }}
         initialCourseName={fcCourse || undefined}
         initialSubjectName={fcSubject || undefined}
         academicStructure={ACADEMIC_STRUCTURE}
+        editingFlashcard={editingOcclusionFlashcard}
         onSaveFlashcards={(newCards) => {
           onSaveFlashcardsBatch(newCards);
-          showToast(`¡${newCards.length} tarjetas con imagen creadas con éxito!`);
+          if (editingOcclusionFlashcard && newCards[0]) {
+            setFcEditing(newCards[0]);
+            setEditingOcclusionFlashcard(null);
+            showToast("¡Imagen y cuadros actualizados con éxito!");
+          } else {
+            showToast(`¡${newCards.length} tarjetas con imagen creadas con éxito!`);
+          }
         }}
         onToast={showToast}
       />

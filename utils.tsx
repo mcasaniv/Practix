@@ -11,7 +11,18 @@ export function renderLatexToString(mathStr: string, isBlock: boolean = false): 
 
   // Clean and normalize escaped backslashes commonly found in JSON data or input (e.g., \\frac -> \frac)
   let normalized = mathStr.trim();
-  normalized = normalized.replace(/\\\\([a-zA-Z]+)/g, '\\$1');
+  normalized = normalized.replace(/\\\\([a-zA-Z]+|\{|\}|\[|\]|\(|\)|\\|,|;|!|\^|_)/g, '\\$1');
+
+  // Strip outer $, $$, \( \), \[ \] delimiters so KaTeX renders properly in math mode
+  if (normalized.startsWith('$$') && normalized.endsWith('$$') && normalized.length > 3) {
+    normalized = normalized.slice(2, -2).trim();
+  } else if (normalized.startsWith('$') && normalized.endsWith('$') && normalized.length > 1) {
+    normalized = normalized.slice(1, -1).trim();
+  } else if (normalized.startsWith('\\(') && normalized.endsWith('\\)') && normalized.length > 3) {
+    normalized = normalized.slice(2, -2).trim();
+  } else if (normalized.startsWith('\\[') && normalized.endsWith('\\]') && normalized.length > 3) {
+    normalized = normalized.slice(2, -2).trim();
+  }
 
   try {
     return katex.renderToString(normalized, {
@@ -30,6 +41,67 @@ export function renderLatexToString(mathStr: string, isBlock: boolean = false): 
       return null;
     }
   }
+}
+
+/**
+ * Automatically detects raw LaTeX / KaTeX expressions and wraps them in `$`
+ * if they are not already enclosed in standard math delimiters ($$, \[, $, \().
+ */
+const wrapPlainSegment = (segment: string): string => {
+  if (!segment || !segment.trim()) return segment;
+
+  // Check if segment contains LaTeX command patterns
+  const latexCommandRegex = /\\(?:frac|dfrac|tfrac|sqrt|cdot|times|pm|mp|sum|prod|int|oint|lim|alpha|beta|gamma|delta|epsilon|zeta|eta|theta|iota|kappa|lambda|mu|nu|xi|pi|rho|sigma|tau|upsilon|phi|chi|psi|omega|Delta|Gamma|Theta|Lambda|Xi|Pi|Sigma|Phi|Psi|Omega|partial|nabla|infty|leq|geq|neq|approx|equiv|propto|sim|rightarrow|leftarrow|Rightarrow|Leftarrow|leftrightarrow|to|text|mathbf|mathit|mathrm|mathbb|vec|bar|hat|widehat|widecheck|dot|ddot|over|binom|left|right|begin|end|sin|cos|tan|sec|csc|cot|arcsin|arccos|arctan|log|ln|exp|circ|degree|parallel|perp|angle|in|notin|subset|cup|cap|emptyset|forall|exists|neg|underline|underbar|overline|triangle|cong)\b/i;
+
+  const hasLatexCommands = latexCommandRegex.test(segment) || /\\([a-zA-Z]+)\{/.test(segment);
+
+  if (!hasLatexCommands) {
+    // Check if it's a pure short math formula like "x^2 + y^2 = r^2", "E = mc^2", or "H_2O"
+    const isPureMathExpr = /^[a-zA-Z0-9\s()+\-*/=^_.,]*[\^_]\{?[a-zA-Z0-9]+\}?[a-zA-Z0-9\s()+\-*/=^_.,]*$/.test(segment.trim()) &&
+      !/[¿?¡!]|\b(el|la|los|las|de|en|un|una|es|por|para|con|del|al|si|y|o|hallar|calcular|mide|vale)\b/i.test(segment) &&
+      /[\^_=]/.test(segment);
+
+    if (isPureMathExpr) {
+      return `$${segment.trim()}$`;
+    }
+    return segment;
+  }
+
+  // Strip LaTeX commands & balanced args to detect whether surrounding text has Spanish prose
+  const strippedOfLatex = segment.replace(/\\[a-zA-Z]+(?:\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}|\[[^[\]]*\])*/g, ' ');
+  const hasProsePunctuation = /[¿?¡!]/.test(segment);
+  const proseWordRegex = /\b(cu[aá]l|qu[eé]|c[oó]mo|d[oó]nde|por qu[eé]|cu[aá]ndo|indica|se[ñn]ala|selecciona|calcula(?:r)?|halla(?:r)?|determina(?:r)?|encuentra|mide|vale|cumple|verifica|sabiendo|siendo|respectivamente|entonces|luego|adem[aá]s|donde|cuando|como|entre|hasta|desde|cada|todo|todos|uno|una|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez|son|es|el|la|los|las|de|del|en|al|un|una|por|para|con|sin|sobre|seg[uú]n|corresponde|funci[oó]n|concepto|definici[oó]n|enunciado|figura|gr[aá]fico|tri[aá]ngulo|cuadril[aá]tero|segmento|recta|[aá]ngulo|si|y|o|e|u|a|se|su|sus|nos|que)\b/i;
+  const hasProseWords = proseWordRegex.test(strippedOfLatex);
+
+  if (!hasProsePunctuation && !hasProseWords) {
+    // The entire segment is a mathematical expression/formula (e.g. "(\overline{AB}) + (\overline{BC}) = 12")
+    return segment.replace(/^(\s*)([\s\S]*?)(\s*)$/, '$1$$$2$$$3');
+  }
+
+  // Mixed Spanish prose + raw LaTeX commands -> wrap each LaTeX expression (including optional enclosing parens like (\overline{AB})) in $...$
+  const latexAtom = String.raw`(?:\\[a-zA-Z]+(?:\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}|\[[^[\]]*\])*(?:[\^_](?:\{[^{}]+\}|[a-zA-Z0-9]))*)`;
+  const latexOrParenAtom = String.raw`(?:\(\s*${latexAtom}(?:\s*[+\-*/=^_]\s*(?:[a-zA-Z0-9_.]+|${latexAtom}))*\s*\)|${latexAtom})`;
+  const inlineExprRegex = new RegExp(
+    `((?:[a-zA-Z0-9_()^.+\\-*/]+\\s*=\\s*)?${latexOrParenAtom}(?:[\\^_](?:\\{[^{}]+\\}|[a-zA-Z0-9]))*(?:\\s*[+\\-*/=<>≤≥]\\s*(?:[a-zA-Z0-9_.()]+|${latexOrParenAtom}))*)`,
+    'g'
+  );
+
+  return segment.replace(inlineExprRegex, '$$$1$$');
+};
+
+export function autoWrapRawLatex(input: string): string {
+  if (!input || typeof input !== 'string') return '';
+  const text = input.trim();
+  if (!text) return '';
+
+  // Split by existing math delimiters ($$...$$, \[...\], $...$, \(...\)) so delimited math stays intact
+  // while raw LaTeX outside delimiters (e.g. "Si $x=2$, hallar (\overline{AB})") still gets wrapped.
+  const delimiterRegex = /(\$\$[\s\S]+?\$\$|\\\[[\s\S]+?\\\]|\$[^\$\n]+?\$|\\\([\s\S]+?\\\))/g;
+  const parts = text.split(delimiterRegex);
+
+  return parts
+    .map((part, idx) => (idx % 2 === 1 ? part : wrapPlainSegment(part)))
+    .join('');
 }
 
 /**
@@ -109,8 +181,11 @@ function parseBasicFormatting(plainText: string, keyPrefix: string | number): Re
  * Renders both LaTeX mathematical formulas ($...$, $$...$$, \[...\], \(...\))
  * and text formatting (bold, italic, underline) cleanly without mutating the real DOM.
  */
-export function renderMathAndHtml(text: string): React.ReactNode {
-  if (!text) return "";
+export function renderMathAndHtml(rawText: string): React.ReactNode {
+  if (!rawText) return "";
+
+  // Auto-wrap raw LaTeX commands and standalone formulas in math delimiters
+  const text = autoWrapRawLatex(rawText);
 
   // Regex to detect LaTeX formula delimiters:
   // 1: $$...$$ (Display)
@@ -841,10 +916,15 @@ export const parseFractionToken = (text: string): { numerator: string; denominat
   if (!text) return null;
   const trimmed = text.trim();
 
-  // Case 1: LaTeX \frac{num}{den}
+  // Case 1: Simple LaTeX \frac{num}{den} without nested LaTeX commands/subscripts/superscripts
   const fracMatch = /^\\frac\{([^{}]+)\}\{([^{}]+)\}$/.exec(trimmed);
   if (fracMatch) {
-    return { numerator: fracMatch[1].trim(), denominator: fracMatch[2].trim() };
+    const num = fracMatch[1].trim();
+    const den = fracMatch[2].trim();
+    if (!/[\\^_${}]/.test(num) && !/[\\^_${}]/.test(den)) {
+      return { numerator: num, denominator: den };
+    }
+    return null;
   }
 
   // Case 2: Unicode fractions
@@ -871,7 +951,10 @@ export const parseFractionToken = (text: string): { numerator: string; denominat
   }
 
   // Case 3: Simple division A/B (e.g. "5/2", "1/2", "3/4", "v/t", "m/s", "(a+b)/2")
-  // Must have exactly one '/' and neither side is empty
+  // Avoid matching entire equations or LaTeX expressions containing '=' or '$' or '\' or space-padded operators
+  if (/[=$\\<>]/.test(trimmed) || /\s[+\-*·×÷]\s/.test(trimmed)) {
+    return null;
+  }
   const slashParts = trimmed.split('/');
   if (slashParts.length === 2 && slashParts[0].trim().length > 0 && slashParts[1].trim().length > 0) {
     return { numerator: slashParts[0].trim(), denominator: slashParts[1].trim() };
@@ -883,7 +966,7 @@ export const parseFractionToken = (text: string): { numerator: string; denominat
 /**
  * Visual token renderer for formula blocks:
  * Renders fractions vertically with numerator over denominator and horizontal vinculum bar,
- * avoiding flat representations like "5/2".
+ * and renders LaTeX/KaTeX expressions (including $x_2$, \widehat{abc}, \frac, etc.).
  */
 export const FormulaTokenRenderer: React.FC<{
   text: string;
@@ -909,11 +992,19 @@ export const FormulaTokenRenderer: React.FC<{
     );
   }
 
-  // Render LaTeX if contains LaTeX backslash commands
-  if (text.includes('\\') || text.includes('^') || text.includes('_')) {
-    const html = renderLatexToString(text);
+  const trimmed = text.trim();
+  const dollarCount = (trimmed.match(/\$/g) || []).length;
+
+  // Multi-span math like "$x_2$ + $y_1$" or mixed text/math -> use renderMathAndHtml
+  if (dollarCount > 2 || (dollarCount >= 1 && !(trimmed.startsWith('$') && trimmed.endsWith('$')))) {
+    return <span className={`inline-block align-middle select-none ${className}`}>{renderMathAndHtml(trimmed)}</span>;
+  }
+
+  // Render LaTeX if contains LaTeX backslash commands, superscripts, subscripts, braces, or math $ delimiters
+  if (trimmed.includes('\\') || trimmed.includes('^') || trimmed.includes('_') || trimmed.includes('$') || trimmed.includes('{')) {
+    const html = renderLatexToString(trimmed);
     if (html) {
-      return <span className={`inline-block align-middle ${className}`} dangerouslySetInnerHTML={{ __html: html }} />;
+      return <span className={`inline-block align-middle select-none ${className}`} dangerouslySetInnerHTML={{ __html: html }} />;
     }
   }
 

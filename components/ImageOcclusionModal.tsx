@@ -11,6 +11,7 @@ interface ImageOcclusionModalProps {
   initialTopicName?: string | null;
   academicStructure?: CourseStructure[];
   onToast?: (msg: string) => void;
+  editingFlashcard?: Flashcard | null;
 }
 
 // Helper to compress image down to max dimension 1200px and 0.85 quality for crisp, lightweight base64 storage
@@ -76,7 +77,8 @@ export const ImageOcclusionModal: React.FC<ImageOcclusionModalProps> = ({
   initialSubjectName,
   initialTopicName,
   academicStructure = ACADEMIC_STRUCTURE,
-  onToast
+  onToast,
+  editingFlashcard = null
 }) => {
   const [course, setCourse] = useState<string>(initialCourseName || 'Ciencias');
   const [subject, setSubject] = useState<string>(initialSubjectName || '');
@@ -103,17 +105,30 @@ export const ImageOcclusionModal: React.FC<ImageOcclusionModalProps> = ({
 
   useEffect(() => {
     if (isOpen) {
-      if (initialCourseName) setCourse(initialCourseName);
-      if (initialSubjectName) setSubject(initialSubjectName);
-      if (initialTopicName !== undefined) setTopic(initialTopicName || '');
-      setSessionCards([]);
-      setShowSessionCardsList(false);
-      setImageUrl('');
-      setUrlInput('');
-      setBoxes([]);
-      setSelectedBoxId(null);
+      if (editingFlashcard) {
+        setCourse(editingFlashcard.course || initialCourseName || 'Ciencias');
+        setSubject(editingFlashcard.subject || initialSubjectName || '');
+        setTopic(editingFlashcard.topic || '');
+        setImageUrl(editingFlashcard.imageUrl || '');
+        setUrlInput(editingFlashcard.imageUrl && !editingFlashcard.imageUrl.startsWith('data:') ? editingFlashcard.imageUrl : '');
+        setBoxes(editingFlashcard.occlusionBoxes ? editingFlashcard.occlusionBoxes.map(b => ({ ...b })) : []);
+        setSelectedBoxId(editingFlashcard.activeBoxId || editingFlashcard.occlusionBoxes?.[0]?.id || null);
+        setMode(editingFlashcard.activeBoxId ? 'ONE_PER_BOX' : 'ALL_IN_ONE');
+        setSessionCards([]);
+        setShowSessionCardsList(false);
+      } else {
+        if (initialCourseName) setCourse(initialCourseName);
+        if (initialSubjectName) setSubject(initialSubjectName);
+        if (initialTopicName !== undefined) setTopic(initialTopicName || '');
+        setSessionCards([]);
+        setShowSessionCardsList(false);
+        setImageUrl('');
+        setUrlInput('');
+        setBoxes([]);
+        setSelectedBoxId(null);
+      }
     }
-  }, [isOpen, initialCourseName, initialSubjectName, initialTopicName]);
+  }, [isOpen, initialCourseName, initialSubjectName, initialTopicName, editingFlashcard]);
 
   useEffect(() => {
     if (availableSubjects.length > 0 && (!subject || !availableSubjects.includes(subject))) {
@@ -386,6 +401,51 @@ export const ImageOcclusionModal: React.FC<ImageOcclusionModalProps> = ({
 
   // Save and finish (or finish if already saved session cards)
   const handleSaveAndFinish = () => {
+    if (editingFlashcard) {
+      if (!course || !subject) {
+        if (onToast) onToast("Por favor selecciona curso y materia.");
+        return;
+      }
+      if (!imageUrl) {
+        if (onToast) onToast("Por favor sube o proporciona una imagen.");
+        return;
+      }
+      if (boxes.length === 0) {
+        if (onToast) onToast("Debes colocar al menos un cuadro en blanco sobre la imagen.");
+        return;
+      }
+      const emptyBox = boxes.find(b => !b.correctAnswer.trim());
+      if (emptyBox) {
+        if (onToast) onToast(`El cuadro ${emptyBox.label || 'en blanco'} no tiene respuesta asignada.`);
+        setSelectedBoxId(emptyBox.id);
+        return;
+      }
+
+      const finalTopic = topic.trim() || editingFlashcard.topic || 'Oclusión de Imagen';
+      const targetBox = boxes.find(b => b.id === (editingFlashcard.activeBoxId || selectedBoxId)) || boxes[0];
+      const updatedCard: Flashcard = {
+        ...editingFlashcard,
+        course,
+        subject,
+        topic: finalTopic,
+        type: 'IMAGE_OCCLUSION',
+        imageUrl,
+        occlusionBoxes: boxes,
+        activeBoxId: mode === 'ONE_PER_BOX' ? targetBox.id : undefined,
+        front: mode === 'ONE_PER_BOX'
+          ? (editingFlashcard.front || `Identifica la estructura oculta en el cuadro ${targetBox.label || 1} (${finalTopic})`)
+          : `Completa los nombres ocultos en los ${boxes.length} cuadros (${finalTopic})`,
+        back: mode === 'ONE_PER_BOX'
+          ? targetBox.correctAnswer.trim()
+          : boxes.map((b, i) => `${b.label || `#${i + 1}`}: ${b.correctAnswer.trim()}`).join('\n')
+      };
+
+      onSaveFlashcards([updatedCard]);
+      if (onToast) onToast("Tarjeta con imagen actualizada con éxito.");
+      onClose();
+      return;
+    }
+
     if (imageUrl && boxes.length > 0) {
       const cards = buildCurrentCards();
       if (!cards) return;
@@ -420,10 +480,12 @@ export const ImageOcclusionModal: React.FC<ImageOcclusionModalProps> = ({
             </div>
             <div>
               <h2 className="text-lg sm:text-xl font-black text-gray-800 dark:text-gray-100 leading-tight">
-                Flashcards con Imagen (Oclusión)
+                {editingFlashcard ? 'Editar Imagen y Oclusión' : 'Flashcards con Imagen (Oclusión)'}
               </h2>
               <p className="text-xs text-gray-500 dark:text-gray-400">
-                Tapa nombres de estructuras, fórmulas o esquemas con cuadros en blanco para escribir y calificar
+                {editingFlashcard
+                  ? 'Cambia la imagen o ajusta los cuadros en blanco y sus respuestas'
+                  : 'Tapa nombres de estructuras, fórmulas o esquemas con cuadros en blanco para escribir y calificar'}
               </p>
             </div>
           </div>
@@ -861,18 +923,20 @@ export const ImageOcclusionModal: React.FC<ImageOcclusionModalProps> = ({
           </button>
 
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              disabled={!imageUrl || boxes.length === 0}
-              onClick={handleSaveAndAddAnother}
-              className="px-4 py-2.5 bg-indigo-50 dark:bg-[#00142b] hover:bg-indigo-100 dark:hover:bg-[#001e40] text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800/60 font-bold text-xs rounded-xl shadow-sm transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2"
-              title="Guarda la imagen actual y limpia el lienzo para agregar otra imagen a este mismo tema"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 text-indigo-600 dark:text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
-              </svg>
-              <span>+ Guardar y Agregar Otra Imagen</span>
-            </button>
+            {!editingFlashcard && (
+              <button
+                type="button"
+                disabled={!imageUrl || boxes.length === 0}
+                onClick={handleSaveAndAddAnother}
+                className="px-4 py-2.5 bg-indigo-50 dark:bg-[#00142b] hover:bg-indigo-100 dark:hover:bg-[#001e40] text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800/60 font-bold text-xs rounded-xl shadow-sm transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2"
+                title="Guarda la imagen actual y limpia el lienzo para agregar otra imagen a este mismo tema"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 text-indigo-600 dark:text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
+                </svg>
+                <span>+ Guardar y Agregar Otra Imagen</span>
+              </button>
+            )}
 
             <button
               type="button"
@@ -884,11 +948,13 @@ export const ImageOcclusionModal: React.FC<ImageOcclusionModalProps> = ({
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
               </svg>
               <span>
-                {sessionCards.length > 0 && (!imageUrl || boxes.length === 0)
-                  ? `Finalizar (${sessionCards.length} en mazo)`
-                  : mode === 'ONE_PER_BOX'
-                    ? `Guardar y Finalizar (${boxes.length > 0 ? boxes.length : ''})`
-                    : 'Guardar y Finalizar'
+                {editingFlashcard
+                  ? 'Guardar Cambios'
+                  : sessionCards.length > 0 && (!imageUrl || boxes.length === 0)
+                    ? `Finalizar (${sessionCards.length} en mazo)`
+                    : mode === 'ONE_PER_BOX'
+                      ? `Guardar y Finalizar (${boxes.length > 0 ? boxes.length : ''})`
+                      : 'Guardar y Finalizar'
                 }
               </span>
             </button>

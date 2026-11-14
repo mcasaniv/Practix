@@ -23,10 +23,10 @@
       }
     </script>
     <!-- KaTeX CSS -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.18.9/dist/katex.min.css">
     <!-- KaTeX JS -->
-    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js"></script>
-    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/contrib/auto-render.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.18.9/dist/katex.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.18.9/dist/contrib/auto-render.min.js"></script>
     
     <style>
       @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
@@ -142,12 +142,45 @@
         text-decoration-color: currentColor !important;
       }
 
-      /* KaTeX math formulas containing \underline */
+      /* KaTeX math formulas containing \overline, \underline, \frac */
+      .katex .katex-overline .overline-line,
+      .katex .overline .overline-line {
+        border-bottom-style: solid !important;
+        border-bottom-color: currentColor !important;
+        display: inline-block !important;
+        width: 100% !important;
+        min-height: 1px !important;
+      }
+      .katex .katex-underline .underline-line,
+      .katex .underline .underline-line {
+        border-bottom-style: solid !important;
+        border-bottom-color: currentColor !important;
+        display: inline-block !important;
+        width: 100% !important;
+        min-height: 1px !important;
+      }
+      .katex .mfrac .frac-line {
+        border-bottom-style: solid !important;
+        border-bottom-color: currentColor !important;
+        display: inline-block !important;
+        width: 100% !important;
+        min-height: 1px !important;
+      }
       .katex .underline,
       .katex-html .underline {
         border-bottom: 2px solid currentColor !important;
         background-color: transparent !important;
         padding: 0 !important;
+      }
+
+      /* KaTeX sizing and line layout in cards & quiz buttons */
+      .katex {
+        font-size: 1.05em;
+        line-height: normal;
+        text-rendering: auto;
+      }
+      .katex-html {
+        white-space: normal;
       }
 
       /* 3D Flip Card Styles */

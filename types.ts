@@ -73,6 +73,8 @@ export interface Flashcard {
   order?: number;
   type?: 'TEXT' | 'IMAGE_OCCLUSION' | 'FORMULA_BUILDER';
   imageUrl?: string;
+  frontImageUrl?: string;
+  backImageUrl?: string;
   occlusionBoxes?: OcclusionBox[];
   activeBoxId?: string;
   formulaTokens?: string[];

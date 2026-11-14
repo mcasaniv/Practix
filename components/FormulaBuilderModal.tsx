@@ -14,8 +14,93 @@ interface FormulaBuilderModalProps {
   onToast?: (msg: string) => void;
 }
 
-// Decomposition algorithm: parses mathematical formulas, variables, operators, superscripts, subscripts, and fractions
-export const decomposeFormula = (input: string, mode: 'SMART' | 'CHARS' | 'WORDS' = 'SMART'): string[] => {
+// Helper to extract balanced braces {...}
+const extractBalancedBraces = (str: string, startIdx: number): { content: string; nextIdx: number } | null => {
+  if (str[startIdx] !== '{') return null;
+  let depth = 0;
+  for (let idx = startIdx; idx < str.length; idx++) {
+    if (str[idx] === '{') depth++;
+    else if (str[idx] === '}') {
+      depth--;
+      if (depth === 0) return { content: str.slice(startIdx, idx + 1), nextIdx: idx + 1 };
+    }
+  }
+  return null;
+};
+
+// Helper to extract balanced brackets [...]
+const extractBalancedBrackets = (str: string, startIdx: number): { content: string; nextIdx: number } | null => {
+  if (str[startIdx] !== '[') return null;
+  let depth = 0;
+  for (let idx = startIdx; idx < str.length; idx++) {
+    if (str[idx] === '[') depth++;
+    else if (str[idx] === ']') {
+      depth--;
+      if (depth === 0) return { content: str.slice(startIdx, idx + 1), nextIdx: idx + 1 };
+    }
+  }
+  return null;
+};
+
+// Helper to tokenize outside $...$ in LATEX_BLOCKS mode or within expressions
+const tokenizeNonLatexPart = (part: string): string[] => {
+  const clean = part.trim();
+  if (!clean) return [];
+  const res: string[] = [];
+  let i = 0;
+  while (i < clean.length) {
+    if (/\s/.test(clean[i])) {
+      i++;
+      continue;
+    }
+    const rest = clean.slice(i);
+    const latexCmdMatch = /^\\[a-zA-Z]+/.exec(rest);
+    if (latexCmdMatch) {
+      let cur = i + latexCmdMatch[0].length;
+      while (cur < clean.length && clean[cur] === '{') {
+        const b = extractBalancedBraces(clean, cur);
+        if (!b) break;
+        cur = b.nextIdx;
+      }
+      res.push(clean.slice(i, cur));
+      i = cur;
+      continue;
+    }
+    const multiOpMatch = /^(<=|>=|!=|==|\+-|->|:=)/.exec(rest);
+    if (multiOpMatch) {
+      res.push(multiOpMatch[0]);
+      i += multiOpMatch[0].length;
+      continue;
+    }
+    const fracSlashMatch = /^([a-zA-Z0-9]+(?:\.[a-zA-Z0-9]+)?\/[a-zA-Z0-9]+(?:\.[a-zA-Z0-9]+)?)/.exec(rest);
+    if (fracSlashMatch) {
+      res.push(fracSlashMatch[0]);
+      i += fracSlashMatch[0].length;
+      continue;
+    }
+    const numMatch = /^(\d+(?:[.,]\d+)?|\d+,)/.exec(rest);
+    if (numMatch) {
+      res.push(numMatch[0]);
+      i += numMatch[0].length;
+      continue;
+    }
+    const wordMatch = /^(sin|cos|tan|cot|sec|csc|log|ln|lim|det)\b/.exec(rest);
+    if (wordMatch) {
+      res.push(wordMatch[0]);
+      i += wordMatch[0].length;
+      continue;
+    }
+    res.push(clean[i]);
+    i++;
+  }
+  return res;
+};
+
+// Decomposition algorithm: parses mathematical formulas, LaTeX expressions (e.g. $x_2$, \widehat{abc}, \frac{a}{b}, \sqrt{x}), variables, and operators
+export const decomposeFormula = (
+  input: string,
+  mode: 'SMART' | 'CHARS' | 'WORDS' | 'LATEX_BLOCKS' = 'SMART'
+): string[] => {
   const trimmed = input.trim();
   if (!trimmed) return [];
 
@@ -27,59 +112,313 @@ export const decomposeFormula = (input: string, mode: 'SMART' | 'CHARS' | 'WORDS
     return trimmed.replace(/\s+/g, '').split('');
   }
 
-  // SMART MODE:
-  // Breaks expressions like "E = mc²" -> ["E", "=", "m", "c", "²"]
-  // Keeps fractions together as single units: LaTeX \frac{a}{b}, unicode fractions (½, ⅓, etc.), or numeric/variable division (5/2, 1/2)
-  // Handles multi-letter trigonometric/logarithmic functions (sin, cos, tan, ln, log),
-  // numbers with decimals, superscripts, subscripts, Greek characters, operators and letters.
-  const tokens: string[] = [];
-  const regex = /(\\frac\{[^{}]+\}\{[^{}]+\})|([½⅓¼¾⅔⅕⅖⅗⅘⅙⅚⅛⅜⅝⅞])|([a-zA-Z0-9]+(?:\.[a-zA-Z0-9]+)?\/[a-zA-Z0-9]+(?:\.[a-zA-Z0-9]+)?)|(sin|cos|tan|cot|sec|csc|log|ln|lim|det)|(\d+(?:\.\d+)?)|(<=|>=|!=|==|\+-|->)|([⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻ⁿᵃᵇᶜᵈᵉᵒᵖʳˢᵗᵘᵛˣʸ₀₁₂₃₄₅₆₇₈₉₊₋])|([=+\-*\/·×÷±∓<>≤≥()\[\]{}√∫∑∂%!:,_])|([α-ωΑ-Ω])|([a-zA-Z])/g;
-  
-  let match;
-  while ((match = regex.exec(trimmed)) !== null) {
-    tokens.push(match[0]);
+  if (mode === 'LATEX_BLOCKS') {
+    // Each $$...$$ or $...$ is preserved verbatim as ONE block; text/operators outside are split cleanly
+    const blocks: string[] = [];
+    const regex = /(\$\$[\s\S]+?\$\$|\$[^$\n]+?\$)/g;
+    let lastIdx = 0;
+    let m: RegExpExecArray | null;
+    while ((m = regex.exec(trimmed)) !== null) {
+      if (m.index > lastIdx) {
+        blocks.push(...tokenizeNonLatexPart(trimmed.slice(lastIdx, m.index)));
+      }
+      blocks.push(m[0].trim());
+      lastIdx = regex.lastIndex;
+    }
+    if (lastIdx < trimmed.length) {
+      blocks.push(...tokenizeNonLatexPart(trimmed.slice(lastIdx)));
+    }
+    return blocks.length > 0 ? blocks : [trimmed];
   }
 
-  // Fallback if regex matched nothing
+  // SMART MODE:
+  // If user wrote multiple separate $...$ chunks like "$x_2$ + $x_1$" or "v = $x_2$ - $x_1$",
+  // check if there are >= 2 $...$ groups or mixed text+$...$; if so, preserve short atomic $...$ expressions or decompose cleanly
+  const dollarMatches = trimmed.match(/\$\$[\s\S]+?\$\$|\$[^$\n]+?\$/g) || [];
+  const hasMultipleDollarChunks = dollarMatches.length > 1 || (dollarMatches.length === 1 && dollarMatches[0].length < trimmed.length);
+
+  if (hasMultipleDollarChunks) {
+    const blocks: string[] = [];
+    const regex = /(\$\$[\s\S]+?\$\$|\$[^$\n]+?\$)/g;
+    let lastIdx = 0;
+    let m: RegExpExecArray | null;
+    while ((m = regex.exec(trimmed)) !== null) {
+      if (m.index > lastIdx) {
+        blocks.push(...decomposeFormula(trimmed.slice(lastIdx, m.index), 'SMART'));
+      }
+      // Keep the $...$ expression intact if it's an atomic LaTeX term (no top-level + - = outside braces)
+      const inner = m[0].replace(/^\$+|\$+$/g, '').trim();
+      const hasTopLevelBinaryOp = /(?:^|[^{])[+=<>](?:$|[^}])/.test(inner.replace(/\\[a-zA-Z]+\{[^{}]*\}/g, ''));
+      if (!hasTopLevelBinaryOp) {
+        blocks.push(m[0].trim());
+      } else {
+        blocks.push(...decomposeFormula(inner, 'SMART'));
+      }
+      lastIdx = regex.lastIndex;
+    }
+    if (lastIdx < trimmed.length) {
+      blocks.push(...decomposeFormula(trimmed.slice(lastIdx), 'SMART'));
+    }
+    if (blocks.length > 0) return blocks;
+  }
+
+  // Strip outer math delimiters $ or $$ if the whole formula is wrapped in one (e.g. $0,\widehat{abc}$ -> 0,\widehat{abc})
+  let clean = trimmed;
+  if ((clean.startsWith('$$') && clean.endsWith('$$') && clean.length > 3)) {
+    clean = clean.slice(2, -2).trim();
+  } else if ((clean.startsWith('$') && clean.endsWith('$') && clean.length > 1)) {
+    clean = clean.slice(1, -1).trim();
+  }
+  clean = clean.replace(/\$/g, '').trim();
+
+  const tokens: string[] = [];
+  let i = 0;
+
+  // Consume chained _{...} / ^{...} / _x / ^2 suffixes starting at cur
+  const consumeSubSupChain = (str: string, startIdx: number): number => {
+    let cur = startIdx;
+    while (cur < str.length && (str[cur] === '_' || str[cur] === '^')) {
+      cur++;
+      if (str[cur] === '{') {
+        const b = extractBalancedBraces(str, cur);
+        if (b) {
+          cur = b.nextIdx;
+        } else {
+          break;
+        }
+      } else if (cur < str.length && /[a-zA-Z0-9]/.test(str[cur])) {
+        cur++;
+      } else {
+        break;
+      }
+    }
+    return cur;
+  };
+
+  while (i < clean.length) {
+    // Skip whitespace
+    if (/\s/.test(clean[i])) {
+      i++;
+      continue;
+    }
+
+    const rest = clean.slice(i);
+
+    // 1. Two-arg LaTeX: \frac, \dfrac, \tfrac, \binom
+    const twoArgMatch = /^\\(d|t)?frac\b|^\\binom\b/.exec(rest);
+    if (twoArgMatch) {
+      let cur = i + twoArgMatch[0].length;
+      while (cur < clean.length && /\s/.test(clean[cur])) cur++;
+      const arg1 = extractBalancedBraces(clean, cur);
+      if (arg1) {
+        let cur2 = arg1.nextIdx;
+        while (cur2 < clean.length && /\s/.test(clean[cur2])) cur2++;
+        const arg2 = extractBalancedBraces(clean, cur2);
+        if (arg2) {
+          const endIdx = consumeSubSupChain(clean, arg2.nextIdx);
+          tokens.push(clean.slice(i, endIdx));
+          i = endIdx;
+          continue;
+        }
+      }
+    }
+
+    // 2. Root with optional [n]: \sqrt[n]{x} or \sqrt{x}
+    const sqrtMatch = /^\\sqrt\b/.exec(rest);
+    if (sqrtMatch) {
+      let cur = i + sqrtMatch[0].length;
+      while (cur < clean.length && /\s/.test(clean[cur])) cur++;
+      if (clean[cur] === '[') {
+        const opt = extractBalancedBrackets(clean, cur);
+        if (opt) cur = opt.nextIdx;
+      }
+      while (cur < clean.length && /\s/.test(clean[cur])) cur++;
+      const arg = extractBalancedBraces(clean, cur);
+      if (arg) {
+        const endIdx = consumeSubSupChain(clean, arg.nextIdx);
+        tokens.push(clean.slice(i, endIdx));
+        i = endIdx;
+        continue;
+      }
+    }
+
+    // 3. Single-arg LaTeX accent / decorator: \widehat, \hat, \overline, \bar, \vec, \tilde, \dot, \ddot, \underline, \widecheck, etc.
+    const oneArgMatch = /^\\(widehat|hat|overline|bar|vec|tilde|dot|ddot|underline|widecheck|text|mathrm|mathbf|mathit|textbf|textit)\b/.exec(rest);
+    if (oneArgMatch) {
+      let cur = i + oneArgMatch[0].length;
+      while (cur < clean.length && /\s/.test(clean[cur])) cur++;
+      const arg = extractBalancedBraces(clean, cur);
+      if (arg) {
+        const endIdx = consumeSubSupChain(clean, arg.nextIdx);
+        tokens.push(clean.slice(i, endIdx));
+        i = endIdx;
+        continue;
+      }
+    }
+
+    // 4. Subscript / Superscript expressions like x_2, x_{12}, v_0, x_2^3, \alpha_1, \log_2
+    const baseSubSuperMatch = /^([a-zA-Z0-9]|\\[a-zA-Z]+)(?=[_^])/.exec(rest);
+    if (baseSubSuperMatch) {
+      const endIdx = consumeSubSupChain(clean, i + baseSubSuperMatch[0].length);
+      if (endIdx > i + baseSubSuperMatch[0].length) {
+        tokens.push(clean.slice(i, endIdx));
+        i = endIdx;
+        continue;
+      }
+    }
+
+    // 5. Named LaTeX symbols and operators
+    const latexNamedRegex = /^(\\(?:alpha|beta|gamma|delta|epsilon|varepsilon|zeta|eta|theta|iota|kappa|lambda|mu|nu|xi|pi|rho|sigma|tau|upsilon|phi|chi|psi|omega|Delta|Gamma|Theta|Lambda|Xi|Pi|Sigma|Phi|Psi|Omega|cdot|times|div|pm|mp|approx|neq|leq|geq|infty|sum|prod|int|lim|det|sin|cos|tan|cot|sec|csc|log|ln|to|rightarrow|leftarrow|Rightarrow|Leftarrow|left\(|right\)|left\[|right\]|[a-zA-Z]+))/;
+    const latexMatch = latexNamedRegex.exec(rest);
+    if (latexMatch) {
+      tokens.push(latexMatch[0]);
+      i += latexMatch[0].length;
+      continue;
+    }
+
+    // 6. Unicode fractions
+    const uniFracMatch = /^([½⅓¼¾⅔⅕⅖⅗⅘⅙⅚⅛⅜⅝⅞])/.exec(rest);
+    if (uniFracMatch) {
+      tokens.push(uniFracMatch[0]);
+      i += uniFracMatch[0].length;
+      continue;
+    }
+
+    // 7. Slash fractions
+    const slashFracMatch = /^([a-zA-Z0-9]+(?:\.[a-zA-Z0-9]+)?\/[a-zA-Z0-9]+(?:\.[a-zA-Z0-9]+)?)/.exec(rest);
+    if (slashFracMatch) {
+      tokens.push(slashFracMatch[0]);
+      i += slashFracMatch[0].length;
+      continue;
+    }
+
+    // 8. Standard math words
+    const mathWordMatch = /^(sin|cos|tan|cot|sec|csc|log|ln|lim|det)\b/.exec(rest);
+    if (mathWordMatch) {
+      tokens.push(mathWordMatch[0]);
+      i += mathWordMatch[0].length;
+      continue;
+    }
+
+    // 9. Numbers (with decimals or followed by comma like 0,)
+    const numMatch = /^(\d+(?:[.,]\d+)?|\d+,)/.exec(rest);
+    if (numMatch) {
+      tokens.push(numMatch[0]);
+      i += numMatch[0].length;
+      continue;
+    }
+
+    // 10. Multi-char operators
+    const multiOpMatch = /^(<=|>=|!=|==|\+-|->|:=)/.exec(rest);
+    if (multiOpMatch) {
+      tokens.push(multiOpMatch[0]);
+      i += multiOpMatch[0].length;
+      continue;
+    }
+
+    // 11. Unicode superscripts/subscripts
+    const uniSuperMatch = /^([⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻ⁿᵃᵇᶜᵈᵉᵒᵖʳˢᵗᵘᵛˣʸ₀₁₂₃₄₅₆₇₈₉₊₋])/.exec(rest);
+    if (uniSuperMatch) {
+      tokens.push(uniSuperMatch[0]);
+      i += uniSuperMatch[0].length;
+      continue;
+    }
+
+    // 12. Single char operators & symbols
+    const singleOpMatch = /^([=+\-*\/·×÷±∓<>≤≥()\[\]{}√∫∑∂%!:,_~^])/.exec(rest);
+    if (singleOpMatch) {
+      tokens.push(singleOpMatch[0]);
+      i += singleOpMatch[0].length;
+      continue;
+    }
+
+    // 13. Greek and Latin letters
+    const letterMatch = /^([α-ωΑ-Ωa-zA-Z])/.exec(rest);
+    if (letterMatch) {
+      tokens.push(letterMatch[0]);
+      i += letterMatch[0].length;
+      continue;
+    }
+
+    // Fallback single character
+    tokens.push(clean[i]);
+    i++;
+  }
+
+  // Fallback if tokens array is empty
   if (tokens.length === 0) {
-    return trimmed.split('').filter(c => c.trim().length > 0);
+    return clean.split('').filter(c => c.trim().length > 0);
   }
 
   return tokens;
 };
 
-// Generates sensible distractors to test knowledge
+// Generates sensible distractors to test knowledge, with LaTeX support
 export const generateSuggestedDistractors = (tokens: string[]): string[] => {
   const distractors = new Set<string>();
   const tokenSet = new Set(tokens);
 
   tokens.forEach(t => {
+    const hasDollar = t.startsWith('$') && t.endsWith('$');
+    const bare = hasDollar ? t.slice(1, -1).trim() : t.trim();
+    const wrap = (val: string) => (hasDollar ? `$${val}$` : val);
+
     // Fraction distractors: inverted fraction or adjusted denominator
-    const frac = parseFractionToken(t);
+    const frac = parseFractionToken(bare);
     if (frac) {
-      const inverted = `${frac.denominator}/${frac.numerator}`;
+      const inverted = wrap(`${frac.denominator}/${frac.numerator}`);
       if (!tokenSet.has(inverted)) distractors.add(inverted);
       const dNum = parseInt(frac.denominator, 10);
       if (!isNaN(dNum)) {
-        distractors.add(`${frac.numerator}/${dNum + 1}`);
+        distractors.add(wrap(`${frac.numerator}/${dNum + 1}`));
       }
     }
 
-    if (t === '²') { distractors.add('³'); distractors.add('2'); }
-    if (t === '³') { distractors.add('²'); distractors.add('4'); }
-    if (t === '+') { distractors.add('-'); distractors.add('±'); }
-    if (t === '-') { distractors.add('+'); }
-    if (t === '*') { distractors.add('/'); distractors.add('+'); }
-    if (t === '/') { distractors.add('*'); distractors.add('·'); }
-    if (t === '·') { distractors.add('/'); distractors.add('+'); }
-    if (t === 'm') { distractors.add('v'); distractors.add('M'); }
-    if (t === 'a') { distractors.add('g'); distractors.add('v'); }
-    if (t === 'v') { distractors.add('t'); distractors.add('d'); }
-    if (t === 't') { distractors.add('s'); distractors.add('v'); }
-    if (t === 'r') { distractors.add('d'); distractors.add('R'); }
-    if (t === 'x') { distractors.add('y'); distractors.add('z'); }
-    if (t === 'sin') { distractors.add('cos'); }
-    if (t === 'cos') { distractors.add('sin'); distractors.add('tan'); }
+    // Subscript / superscript token distractors like $x_2$, x_2, y_1, a^2
+    const subMatch = /^([a-zA-Z]+)_\{?(\d+)\}?$/.exec(bare);
+    if (subMatch) {
+      const base = subMatch[1];
+      const num = parseInt(subMatch[2], 10);
+      if (num > 0) distractors.add(wrap(`${base}_${num === 1 ? 2 : num - 1}`));
+      distractors.add(wrap(`${base}_${num + 1}`));
+      distractors.add(wrap(`${base}^${num}`));
+    }
+
+    // LaTeX widehat distractors (periodic numbers, e.g. \widehat{abc} -> \overline{abc}, abc, \widehat{ab})
+    if (bare.startsWith('\\widehat{') && bare.endsWith('}')) {
+      const inner = bare.slice(9, -1);
+      if (!tokenSet.has(wrap(`\\overline{${inner}}`))) distractors.add(wrap(`\\overline{${inner}}`));
+      if (!tokenSet.has(wrap(inner))) distractors.add(wrap(inner));
+      if (inner.length > 1) {
+        distractors.add(wrap(`\\widehat{${inner.slice(0, -1)}}`));
+      }
+    } else if (bare.startsWith('\\overline{') && bare.endsWith('}')) {
+      const inner = bare.slice(10, -1);
+      if (!tokenSet.has(wrap(`\\widehat{${inner}}`))) distractors.add(wrap(`\\widehat{${inner}}`));
+      if (!tokenSet.has(wrap(inner))) distractors.add(wrap(inner));
+    } else if (bare.startsWith('\\sqrt{') && bare.endsWith('}')) {
+      const inner = bare.slice(6, -1);
+      distractors.add(wrap(`\\sqrt[3]{${inner}}`));
+      distractors.add(wrap(`${inner}^2`));
+    }
+
+    if (bare === '0' || bare === '0,') { distractors.add('1'); distractors.add('9'); }
+    if (bare === ',') { distractors.add('.'); distractors.add(';'); }
+    if (bare === '²' || bare === '^2' || bare === '^{2}') { distractors.add('³'); distractors.add('2'); }
+    if (bare === '³' || bare === '^3' || bare === '^{3}') { distractors.add('²'); distractors.add('4'); }
+    if (bare === '+') { distractors.add('-'); distractors.add('±'); }
+    if (bare === '-') { distractors.add('+'); }
+    if (bare === '*') { distractors.add('/'); distractors.add('+'); }
+    if (bare === '/') { distractors.add('*'); distractors.add('·'); }
+    if (bare === '·' || bare === '\\cdot') { distractors.add('/'); distractors.add('+'); }
+    if (bare === 'm') { distractors.add('v'); distractors.add('M'); }
+    if (bare === 'a') { distractors.add('g'); distractors.add('v'); }
+    if (bare === 'v') { distractors.add('t'); distractors.add('d'); }
+    if (bare === 't') { distractors.add('s'); distractors.add('v'); }
+    if (bare === 'r') { distractors.add('d'); distractors.add('R'); }
+    if (bare === 'x') { distractors.add('y'); distractors.add('z'); }
+    if (bare === 'sin') { distractors.add('cos'); }
+    if (bare === 'cos') { distractors.add('sin'); distractors.add('tan'); }
   });
 
   // Always supply a couple of subtle alternate symbols if bank is small
@@ -110,10 +449,11 @@ export const FormulaBuilderModal: React.FC<FormulaBuilderModalProps> = ({
   // Question & Formula details
   const [question, setQuestion] = useState<string>('');
   const [formulaInput, setFormulaInput] = useState<string>('E = mc²');
-  const [decompositionMode, setDecompositionMode] = useState<'SMART' | 'CHARS' | 'WORDS'>('SMART');
+  const [decompositionMode, setDecompositionMode] = useState<'SMART' | 'CHARS' | 'WORDS' | 'LATEX_BLOCKS'>('SMART');
   const [tokens, setTokens] = useState<string[]>(['E', '=', 'm', 'c', '²']);
   const [distractors, setDistractors] = useState<string[]>(['³', '-']);
   const [explanation, setExplanation] = useState<string>('');
+  const skipAutoDecomposeRef = useRef<boolean>(false);
   
   // Manual token inputs
   const [customToken, setCustomToken] = useState<string>('');
@@ -197,6 +537,10 @@ export const FormulaBuilderModal: React.FC<FormulaBuilderModalProps> = ({
 
   // Auto-decompose formula input whenever formulaInput or decompositionMode changes
   useEffect(() => {
+    if (skipAutoDecomposeRef.current) {
+      skipAutoDecomposeRef.current = false;
+      return;
+    }
     if (formulaInput.trim()) {
       const parsed = decomposeFormula(formulaInput, decompositionMode);
       setTokens(parsed);
@@ -210,12 +554,24 @@ export const FormulaBuilderModal: React.FC<FormulaBuilderModalProps> = ({
     setFormulaInput(prev => prev + sym);
   };
 
-  // Remove a token
-  const handleRemoveToken = (index: number) => {
-    setTokens(prev => prev.filter((_, i) => i !== index));
+  // Clear all blocks cleanly
+  const handleClearTokens = () => {
+    skipAutoDecomposeRef.current = true;
+    setTokens([]);
+    setFormulaInput('');
   };
 
-  // Move token left or right
+  // Remove a token and sync formulaInput without re-splitting custom blocks
+  const handleRemoveToken = (index: number) => {
+    setTokens(prev => {
+      const next = prev.filter((_, i) => i !== index);
+      skipAutoDecomposeRef.current = true;
+      setFormulaInput(next.join(' '));
+      return next;
+    });
+  };
+
+  // Move token left or right and sync formulaInput without re-splitting custom blocks
   const handleMoveToken = (index: number, dir: -1 | 1) => {
     const targetIdx = index + dir;
     if (targetIdx < 0 || targetIdx >= tokens.length) return;
@@ -224,6 +580,8 @@ export const FormulaBuilderModal: React.FC<FormulaBuilderModalProps> = ({
       const temp = next[index];
       next[index] = next[targetIdx];
       next[targetIdx] = temp;
+      skipAutoDecomposeRef.current = true;
+      setFormulaInput(next.join(' '));
       return next;
     });
   };
@@ -244,22 +602,21 @@ export const FormulaBuilderModal: React.FC<FormulaBuilderModalProps> = ({
       newFormula = `${current} ${trimmed}`;
     }
 
+    skipAutoDecomposeRef.current = true;
     setFormulaInput(newFormula);
-
-    // Synchronously ensure tokens has the fraction block as well
-    const parsed = decomposeFormula(newFormula, decompositionMode);
-    setTokens(parsed.length > 0 ? parsed : [...tokens, trimmed]);
+    setTokens(prev => [...prev, trimmed]);
 
     if (onToast) {
       onToast(`¡Fracción ${trimmed} añadida a la fórmula y a los bloques!`);
     }
   };
 
-  // Add custom token
+  // Add custom token as ONE intact block (e.g. $x_2$, $0,\widehat{abc}$, \frac{a}{b})
   const handleAddCustomToken = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!customToken.trim()) return;
     const tok = customToken.trim();
+    skipAutoDecomposeRef.current = true;
     setTokens(prev => [...prev, tok]);
     setFormulaInput(prev => {
       const p = prev.trim();
@@ -675,7 +1032,7 @@ export const FormulaBuilderModal: React.FC<FormulaBuilderModalProps> = ({
               </label>
               
               {/* Decomposition mode selector */}
-              <div className="flex items-center gap-1 text-[11px] bg-white dark:bg-[#000a14] p-1 rounded-xl border border-gray-200 dark:border-slate-800 self-start sm:self-auto">
+              <div className="flex flex-wrap items-center gap-1 text-[11px] bg-white dark:bg-[#000a14] p-1 rounded-xl border border-gray-200 dark:border-slate-800 self-start sm:self-auto">
                 <span className="text-gray-400 font-bold px-1.5">Modo:</span>
                 <button
                   type="button"
@@ -685,9 +1042,21 @@ export const FormulaBuilderModal: React.FC<FormulaBuilderModalProps> = ({
                       ? 'bg-indigo-600 text-white' 
                       : 'text-gray-600 dark:text-gray-300 hover:text-gray-900'
                   }`}
-                  title="Separa variables, exponentes (²), fracciones (5/2) y operadores automáticamente"
+                  title="Separa variables, subíndices ($x_2$), exponentes (²), fracciones (5/2) y LaTeX automáticamente"
                 >
                   Inteligente
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDecompositionMode('LATEX_BLOCKS')}
+                  className={`px-2 py-0.5 rounded-lg font-bold transition-all ${
+                    decompositionMode === 'LATEX_BLOCKS' 
+                      ? 'bg-indigo-600 text-white' 
+                      : 'text-gray-600 dark:text-gray-300 hover:text-gray-900'
+                  }`}
+                  title="Cada expresión entre $...$ se convierte en un único bloque intacto (ej. $x_2$ + $y_1$)"
+                >
+                  Bloques $...$
                 </button>
                 <button
                   type="button"
@@ -719,7 +1088,7 @@ export const FormulaBuilderModal: React.FC<FormulaBuilderModalProps> = ({
                 type="text"
                 value={formulaInput}
                 onChange={(e) => setFormulaInput(e.target.value)}
-                placeholder="Escribe la fórmula (ej: E = mc², F = m·a, v = d/t, y = 5/2 x)..."
+                placeholder="Escribe o pega la fórmula en texto o LaTeX (ej: $x_2$ = $x_1$ + $v_0 t$, $0,\widehat{abc}$, E = mc²)..."
                 className="w-full text-base sm:text-lg font-mono font-bold bg-white dark:bg-[#000a14] border-2 border-indigo-200 dark:border-indigo-800/80 rounded-2xl p-3 pr-20 outline-none text-indigo-700 dark:text-indigo-300 focus:border-indigo-500 shadow-sm"
               />
               {formulaInput && (
@@ -734,21 +1103,94 @@ export const FormulaBuilderModal: React.FC<FormulaBuilderModalProps> = ({
               )}
             </div>
 
-            {/* Quick Math Symbols palette */}
+            {/* Live KaTeX Formula Preview */}
+            {formulaInput.trim() && (
+              <div className="p-3 bg-gradient-to-r from-indigo-50/70 to-purple-50/40 dark:from-[#001228] dark:to-[#001020] border border-indigo-200/80 dark:border-indigo-800/70 rounded-2xl flex items-center justify-between gap-3 shadow-inner animate-fade-in">
+                <div className="flex items-center gap-2 overflow-x-auto [scrollbar-width:thin]">
+                  <span className="text-[10px] font-black uppercase text-indigo-500 dark:text-indigo-400 tracking-wider shrink-0 bg-white dark:bg-[#000a14] px-2 py-1 rounded-md border border-indigo-200/60 dark:border-indigo-900/60">
+                    Vista previa KaTeX:
+                  </span>
+                  <div className="text-base sm:text-lg text-indigo-950 dark:text-white font-bold select-text flex items-center">
+                    <FormulaTokenRenderer text={formulaInput.trim()} size="lg" />
+                  </div>
+                </div>
+                <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold shrink-0 bg-emerald-50 dark:bg-emerald-950/60 px-2.5 py-0.5 rounded-full border border-emerald-200/50 dark:border-emerald-800/50">
+                  Renderizado KaTeX ✓
+                </span>
+              </div>
+            )}
+
+            {/* Quick Math Symbols & LaTeX palette */}
             <div className="pt-1">
-              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">
-                Insertar símbolos rápidos:
-              </span>
-              <div className="flex flex-wrap gap-1.5">
-                {['²', '³', '⁴', 'ⁿ', '₀', '₁', '₂', '=', '+', '-', '·', '/', '±', '√', '(', ')', 'π', 'θ', 'λ', 'Δ', 'α', 'β', 'μ', '∫', '∑'].map(sym => (
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">
+                  Insertar símbolos y comandos LaTeX rápidos:
+                </span>
+                <span className="text-[10px] text-indigo-500 dark:text-indigo-400 font-bold">
+                  Usa $...$ o "+ Añadir Bloque" para bloques LaTeX (ej: $x_2$)
+                </span>
+              </div>
+
+              {/* Quick LaTeX examples */}
+              <div className="flex flex-wrap items-center gap-1.5 mb-2">
+                <span className="text-[10px] font-bold text-gray-400 uppercase">Ejemplos:</span>
+                {[
+                  { label: 'Bloques ($x_2$ + $x_1$)', formula: '$x_2$ = $x_1$ + $v_0$ \\cdot t', mode: 'LATEX_BLOCKS' as const },
+                  { label: 'Decimal ($0,\\widehat{abc}$)', formula: '$0,\\widehat{abc}$', mode: 'SMART' as const },
+                  { label: 'General Cuadrática', formula: 'x = \\frac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}', mode: 'SMART' as const },
+                  { label: 'Energía Relativista', formula: 'E = mc^2', mode: 'SMART' as const }
+                ].map(ex => (
                   <button
-                    key={sym}
+                    key={ex.label}
                     type="button"
-                    onClick={() => handleInsertSymbol(sym)}
-                    className="w-8 h-8 rounded-lg bg-white dark:bg-[#000f20] hover:bg-indigo-50 dark:hover:bg-[#001838] text-gray-700 dark:text-gray-200 font-mono font-bold text-sm border border-gray-200 dark:border-slate-800 shadow-xs active:scale-95 transition-all flex items-center justify-center"
-                    title={`Insertar ${sym}`}
+                    onClick={() => {
+                      setDecompositionMode(ex.mode);
+                      setFormulaInput(ex.formula);
+                    }}
+                    className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/50 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200/60 dark:border-indigo-800/60 transition-colors"
                   >
-                    {sym}
+                    {ex.label}
+                  </button>
+                ))}
+              </div>
+
+              <div className="flex flex-wrap gap-1.5">
+                {[
+                  { label: '\\widehat{...}', insert: '\\widehat{abc}' },
+                  { label: '\\overline{...}', insert: '\\overline{abc}' },
+                  { label: '\\frac{a}{b}', insert: '\\frac{a}{b}' },
+                  { label: '\\sqrt{x}', insert: '\\sqrt{x}' },
+                  { label: '²', insert: '²' },
+                  { label: '³', insert: '³' },
+                  { label: '⁴', insert: '⁴' },
+                  { label: 'ⁿ', insert: 'ⁿ' },
+                  { label: '₀', insert: '₀' },
+                  { label: '₁', insert: '₁' },
+                  { label: '₂', insert: '₂' },
+                  { label: '=', insert: ' = ' },
+                  { label: '+', insert: ' + ' },
+                  { label: '-', insert: ' - ' },
+                  { label: '·', insert: '·' },
+                  { label: '/', insert: '/' },
+                  { label: '±', insert: '±' },
+                  { label: '(', insert: '(' },
+                  { label: ')', insert: ')' },
+                  { label: 'π', insert: 'π' },
+                  { label: 'θ', insert: 'θ' },
+                  { label: 'λ', insert: 'λ' },
+                  { label: 'Δ', insert: 'Δ' },
+                  { label: 'α', insert: 'α' },
+                  { label: 'β', insert: 'β' },
+                  { label: 'μ', insert: 'μ' },
+                ].map(sym => (
+                  <button
+                    key={sym.label}
+                    type="button"
+                    onClick={() => handleInsertSymbol(sym.insert)}
+                    className="px-2 h-8 rounded-lg bg-white dark:bg-[#000f20] hover:bg-indigo-50 dark:hover:bg-[#001838] text-gray-700 dark:text-gray-200 font-mono font-bold text-xs border border-gray-200 dark:border-slate-800 shadow-xs active:scale-95 transition-all flex items-center justify-center"
+                    title={`Insertar ${sym.insert}`}
+                  >
+                    {sym.label}
                   </button>
                 ))}
               </div>
@@ -866,7 +1308,7 @@ export const FormulaBuilderModal: React.FC<FormulaBuilderModalProps> = ({
               {tokens.length > 0 && (
                 <button
                   type="button"
-                  onClick={() => setTokens([])}
+                  onClick={handleClearTokens}
                   className="text-[11px] font-bold text-rose-600 dark:text-rose-400 hover:underline"
                 >
                   Limpiar bloques
@@ -878,7 +1320,7 @@ export const FormulaBuilderModal: React.FC<FormulaBuilderModalProps> = ({
             <div className="min-h-[56px] p-3 bg-white dark:bg-[#000a14] rounded-xl border border-dashed border-gray-300 dark:border-indigo-800/60 flex flex-wrap items-center gap-2">
               {tokens.length === 0 ? (
                 <span className="text-xs text-gray-400 italic">
-                  Escribe una fórmula arriba o añade fracciones para generar los bloques automáticamente.
+                  Escribe una fórmula arriba o añade bloques manuales abajo (ej. $x_2$, \widehat&#123;abc&#125;, 5/2).
                 </span>
               ) : (
                 tokens.map((tok, index) => (
@@ -929,22 +1371,29 @@ export const FormulaBuilderModal: React.FC<FormulaBuilderModalProps> = ({
               )}
             </div>
 
-            {/* Add Custom Token manually */}
-            <form onSubmit={handleAddCustomToken} className="flex items-center gap-2 pt-1">
-              <input
-                type="text"
-                value={customToken}
-                onChange={(e) => setCustomToken(e.target.value)}
-                placeholder="Añadir bloque manual (ej. 5/2, sen, cos, x, 2, +)..."
-                className="text-xs bg-white dark:bg-[#000a14] border border-gray-200 dark:border-slate-700 rounded-xl px-3 py-1.5 outline-none text-gray-800 dark:text-gray-100 flex-grow font-mono focus:border-indigo-500"
-              />
-              <button
-                type="submit"
-                disabled={!customToken.trim()}
-                className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 text-white font-bold text-xs rounded-xl transition-all shadow-xs shrink-0"
-              >
-                + Añadir Bloque
-              </button>
+            {/* Add Custom Token manually (preserves entire expression as a single block) */}
+            <form onSubmit={handleAddCustomToken} className="space-y-1.5 pt-1">
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={customToken}
+                  onChange={(e) => setCustomToken(e.target.value)}
+                  placeholder="Añadir bloque único en LaTeX o texto (ej: $x_2$, $0,\widehat{abc}$, 5/2, \sqrt{x}, +)..."
+                  className="text-xs bg-white dark:bg-[#000a14] border border-gray-200 dark:border-slate-700 rounded-xl px-3 py-1.5 outline-none text-gray-800 dark:text-gray-100 flex-grow font-mono focus:border-indigo-500"
+                />
+                {customToken.trim() && (
+                  <div className="px-2.5 py-1 bg-indigo-50 dark:bg-[#001228] border border-indigo-200 dark:border-indigo-700 rounded-xl text-indigo-900 dark:text-white flex items-center shrink-0">
+                    <FormulaTokenRenderer text={customToken.trim()} size="sm" />
+                  </div>
+                )}
+                <button
+                  type="submit"
+                  disabled={!customToken.trim()}
+                  className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 text-white font-bold text-xs rounded-xl transition-all shadow-xs shrink-0"
+                >
+                  + Añadir Bloque
+                </button>
+              </div>
             </form>
           </div>
 
@@ -1002,9 +1451,14 @@ export const FormulaBuilderModal: React.FC<FormulaBuilderModalProps> = ({
                 type="text"
                 value={customDistractor}
                 onChange={(e) => setCustomDistractor(e.target.value)}
-                placeholder="Añadir distractor manual (ej. 2/5, ³, -, /, sin)..."
+                placeholder="Añadir distractor manual en texto o LaTeX (ej: $x_1$, $y_2$, 2/5, ³, -, sin)..."
                 className="text-xs bg-white dark:bg-[#000a14] border border-gray-200 dark:border-slate-700 rounded-xl px-3 py-1.5 outline-none text-gray-800 dark:text-gray-100 flex-grow font-mono focus:border-indigo-500"
               />
+              {customDistractor.trim() && (
+                <div className="px-2.5 py-1 bg-indigo-50 dark:bg-[#001228] border border-indigo-200 dark:border-indigo-700 rounded-xl text-indigo-900 dark:text-white flex items-center shrink-0">
+                  <FormulaTokenRenderer text={customDistractor.trim()} size="sm" />
+                </div>
+              )}
               <button
                 type="submit"
                 disabled={!customDistractor.trim()}

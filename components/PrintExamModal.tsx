@@ -91,12 +91,17 @@ export const PrintExamModal: React.FC<PrintExamModalProps> = ({
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${exam.title} - Practix</title>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.18.9/dist/katex.min.css">
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     body { font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #ffffff; color: #0f172a; padding: 24px; }
     .printable-exam-container { max-width: 900px; margin: 0 auto; background: #ffffff; }
     .break-inside-avoid { break-inside: avoid; page-break-inside: avoid; }
+    .katex .katex-overline .overline-line,
+    .katex .overline .overline-line,
+    .katex .katex-underline .underline-line,
+    .katex .underline .underline-line,
+    .katex .mfrac .frac-line { border-bottom-style: solid !important; border-bottom-color: currentColor !important; display: inline-block !important; width: 100% !important; min-height: 1px !important; }
     @media print {
       body { padding: 0 !important; background: #fff !important; }
       .printable-exam-container { max-width: 100% !important; width: 100% !important; margin: 0 !important; padding: 0 !important; }

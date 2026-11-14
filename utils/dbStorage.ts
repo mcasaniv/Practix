@@ -134,10 +134,17 @@ function pruneDatabaseForLocalStorage(db: AppDatabase): Partial<AppDatabase> {
   // 4. Strip base64 imageUrl from flashcards in emergency localStorage prune (IndexedDB keeps full data)
   if (cloned.flashcards) {
     cloned.flashcards = cloned.flashcards.map(f => {
+      let updated = f;
       if (f.imageUrl?.startsWith('data:image')) {
-        return { ...f, imageUrl: '' };
+        updated = { ...updated, imageUrl: '' };
       }
-      return f;
+      if (f.frontImageUrl?.startsWith('data:image')) {
+        updated = { ...updated, frontImageUrl: '' };
+      }
+      if (f.backImageUrl?.startsWith('data:image')) {
+        updated = { ...updated, backImageUrl: '' };
+      }
+      return updated;
     });
   }
 
