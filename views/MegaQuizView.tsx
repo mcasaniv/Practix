@@ -1,8 +1,8 @@
 
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Question, ReadingText, ExamMode, TopicResult, SavedExam, UserProfile } from '../types';
-import { AREA_EXAM_CONFIGS } from '../constants';
-import { formatQuestionText, parseHTMLTags, getQuestionWeek, getQuestionProcess, getProcessBadgeStyle, getProcessShortName, matchesSubject } from '../utils';
+import { AREA_EXAM_CONFIGS, ACADEMIC_STRUCTURE } from '../constants';
+import { formatQuestionText, parseHTMLTags, getQuestionWeek, getQuestionProcess, getProcessBadgeStyle, getProcessShortName, matchesSubject, getTopicResultForSubject } from '../utils';
 import { PrintExamModal } from '../components/PrintExamModal';
 import { QuizizzGame } from '../components/QuizizzGame';
 import { EditResolutionModal } from '../components/EditResolutionModal';
@@ -84,13 +84,13 @@ const MegaQuizView: React.FC<MegaQuizViewProps> = ({
 
   const basePool = useMemo(() => {
     if (questionSource === 'PRACTICED') {
-      return questions.filter(q => results && results[`${q.subject}|${q.topic}`] !== undefined);
+      return questions.filter(q => getTopicResultForSubject(results, q.subject, q.topic) !== undefined);
     }
     return questions;
   }, [questions, results, questionSource]);
 
   const practicedQuestionsCount = useMemo(() => {
-    return questions.filter(q => results && results[`${q.subject}|${q.topic}`] !== undefined).length;
+    return questions.filter(q => getTopicResultForSubject(results, q.subject, q.topic) !== undefined).length;
   }, [questions, results]);
 
   const getExamDefaultTitle = () => {
@@ -189,9 +189,37 @@ const MegaQuizView: React.FC<MegaQuizViewProps> = ({
 
     const finalSelection: { question: Question; weight: number; category: string; readingText?: ReadingText }[] = [];
     const usedQuestionIds = new Set<string>();
+    const categorySelectedCounts: Record<string, number> = {};
+
+    const getCourseForCategorySubjects = (subjects: string[]) => {
+      return ACADEMIC_STRUCTURE.find(c =>
+        subjects.some(s => c.subjects.some(cs => matchesSubject(cs, s)))
+      );
+    };
+
+    const getFallbackSubjectsForCategory = (categoryName: string, subjects: string[]): string[] => {
+      if (
+        matchesSubject(categoryName, 'Comprensión Lectora') ||
+        subjects.some(s => matchesSubject(s, 'Comprensión Lectora'))
+      ) {
+        return ['Razonamiento Verbal'];
+      }
+      const parentCourse = getCourseForCategorySubjects(subjects);
+      return parentCourse ? parentCourse.subjects : [];
+    };
+
+    const resolveCategoryAndWeight = (q: Question, fallbackCat: string, fallbackWeight: number) => {
+      for (const [cat, cfg] of Object.entries(activeAreaConfig)) {
+        if (cfg.subjects.some(s => matchesSubject(s, q.subject)) || matchesSubject(cat, q.subject)) {
+          return { catName: cat, weight: cfg.weight };
+        }
+      }
+      return { catName: fallbackCat, weight: fallbackWeight };
+    };
 
     // Paso 1: Seleccionar preguntas de cada categoría respetando cuotas y completando con la semana más próxima si faltan
     Object.entries(configToUse).forEach(([categoryName, config]) => {
+      let pickedForCat = 0;
       if (categoryName === 'Comprensión Lectora') {
         const pool = basePool.filter(q => q.subject === 'Comprensión Lectora' && q.readingTextId && !usedQuestionIds.has(q.id));
         const groupedByText: Record<string, Question[]> = {};
@@ -229,6 +257,7 @@ const MegaQuizView: React.FC<MegaQuizViewProps> = ({
           qs1.forEach(q => {
             finalSelection.push({ question: q, weight: config.weight, category: categoryName, readingText: text1 });
             usedQuestionIds.add(q.id);
+            pickedForCat++;
           });
           questionsNeeded -= qs1.length;
         }
@@ -241,6 +270,7 @@ const MegaQuizView: React.FC<MegaQuizViewProps> = ({
           qs2.forEach(q => {
             finalSelection.push({ question: q, weight: config.weight, category: categoryName, readingText: text2 });
             usedQuestionIds.add(q.id);
+            pickedForCat++;
           });
           questionsNeeded -= qs2.length;
         }
@@ -254,6 +284,7 @@ const MegaQuizView: React.FC<MegaQuizViewProps> = ({
             qsI.forEach(q => {
               finalSelection.push({ question: q, weight: config.weight, category: categoryName, readingText: textI });
               usedQuestionIds.add(q.id);
+              pickedForCat++;
             });
             questionsNeeded -= qsI.length;
           }
@@ -267,6 +298,7 @@ const MegaQuizView: React.FC<MegaQuizViewProps> = ({
             const text = q.readingTextId ? (readingTexts || []).find(t => Boolean(t && t.id === q.readingTextId)) : undefined;
             finalSelection.push({ question: q, weight: config.weight, category: categoryName, readingText: text });
             usedQuestionIds.add(q.id);
+            pickedForCat++;
           });
         }
       } else if (categoryName === 'Inglés Lectura') {
@@ -302,6 +334,7 @@ const MegaQuizView: React.FC<MegaQuizViewProps> = ({
           qs1.forEach(q => {
             finalSelection.push({ question: q, weight: config.weight, category: categoryName, readingText: text1 });
             usedQuestionIds.add(q.id);
+            pickedForCat++;
           });
           questionsNeeded -= qs1.length;
         }
@@ -314,6 +347,7 @@ const MegaQuizView: React.FC<MegaQuizViewProps> = ({
             const text = q.readingTextId ? (readingTexts || []).find(t => Boolean(t && t.id === q.readingTextId)) : undefined;
             finalSelection.push({ question: q, weight: config.weight, category: categoryName, readingText: text });
             usedQuestionIds.add(q.id);
+            pickedForCat++;
           });
         }
       } else {
@@ -323,32 +357,62 @@ const MegaQuizView: React.FC<MegaQuizViewProps> = ({
         selected.forEach(q => {
           finalSelection.push({ question: q, weight: config.weight, category: categoryName });
           usedQuestionIds.add(q.id);
+          pickedForCat++;
         });
       }
+      categorySelectedCounts[categoryName] = pickedForCat;
     });
 
-    // Paso 2: Si es un simulacro completo de 80 preguntas y faltaron preguntas en alguna materia,
-    // rellenar con preguntas disponibles de otras materias del área (priorizando semana más próxima)
+    // Paso 1.5: Si faltan preguntas en alguna materia (ej. Geometría/Aritmética/Trigonometría en Matemática),
+    // completar primero usando las preguntas disponibles de otras materias del mismo curso (ej. Álgebra).
+    // Si falta de Comprensión Lectora, completar únicamente con Razonamiento Verbal.
+    Object.entries(configToUse).forEach(([categoryName, config]) => {
+      const deficit = (config.count || 0) - (categorySelectedCounts[categoryName] || 0);
+      if (deficit <= 0) return;
+
+      const fallbackSubjects = getFallbackSubjectsForCategory(categoryName, config.subjects);
+      if (fallbackSubjects.length === 0) return;
+
+      const siblingPool = scoreAndSortQuestions(
+        basePool.filter(q =>
+          !usedQuestionIds.has(q.id) &&
+          fallbackSubjects.some(cs => matchesSubject(q.subject, cs))
+        )
+      );
+
+      const fillers = siblingPool.slice(0, deficit);
+      fillers.forEach(q => {
+        const { catName, weight } = resolveCategoryAndWeight(q, categoryName, config.weight);
+        const readingText = q.readingTextId ? (readingTexts || []).find(r => Boolean(r && r.id === q.readingTextId)) : undefined;
+        finalSelection.push({ question: q, weight, category: catName, readingText });
+        usedQuestionIds.add(q.id);
+      });
+    });
+
+    // Paso 2: Si aún faltan preguntas para alcanzar el total esperado (80 en simulacro completo o suma de cursos seleccionados),
+    // rellenar con preguntas disponibles (del área en simulacro completo, o de los cursos/materias seleccionadas en examen personalizado)
     const isFull80Target = !selectedExamSubjects || selectedExamSubjects.length === 0;
     const targetTotal = isFull80Target ? 80 : Object.values(configToUse).reduce((sum, c) => sum + c.count, 0);
 
     if (finalSelection.length < targetTotal) {
-      const allAreaSubjects = Object.values(activeAreaConfig).flatMap(c => c.subjects);
-      const remainingUnused = basePool.filter(q => allAreaSubjects.some(s => matchesSubject(q.subject, s)) && !usedQuestionIds.has(q.id));
+      const allowedSubjects = isFull80Target
+        ? Object.values(activeAreaConfig).flatMap(c => c.subjects)
+        : Array.from(new Set(
+            Object.entries(configToUse).flatMap(([catName, c]) => {
+              const fallbackSubjs = getFallbackSubjectsForCategory(catName, c.subjects);
+              return [...c.subjects, ...fallbackSubjs];
+            })
+          ));
+
+      const remainingUnused = basePool.filter(
+        q => allowedSubjects.some(s => matchesSubject(q.subject, s)) && !usedQuestionIds.has(q.id)
+      );
       const sortedRemaining = scoreAndSortQuestions(remainingUnused);
       const neededCount = targetTotal - finalSelection.length;
       const fillers = sortedRemaining.slice(0, neededCount);
 
       fillers.forEach(q => {
-        let catName = q.subject;
-        let weight = 1.25;
-        for (const [cat, cfg] of Object.entries(activeAreaConfig)) {
-          if (cfg.subjects.some(s => matchesSubject(s, q.subject)) || matchesSubject(cat, q.subject)) {
-            catName = cat;
-            weight = cfg.weight;
-            break;
-          }
-        }
+        const { catName, weight } = resolveCategoryAndWeight(q, q.subject, 1.25);
         const readingText = q.readingTextId ? (readingTexts || []).find(r => Boolean(r && r.id === q.readingTextId)) : undefined;
         finalSelection.push({ question: q, weight, category: catName, readingText });
         usedQuestionIds.add(q.id);
