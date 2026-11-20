@@ -1,7 +1,7 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { AREA_EXAM_CONFIGS, ADMISSION_PROCESSES } from '../constants';
 import { Question, TopicResult, CourseStructure, UserProfile } from '../types';
-import { getQuestionProcess, getProcessBadgeStyle } from '../utils';
+import { getQuestionProcess, getProcessBadgeStyle, normalizeSubjectName, matchesSubject, getTopicResultForSubject } from '../utils';
 import { StatsCourseCard } from '../components/StatsCourseCard';
 
 interface StatsViewProps {
@@ -49,19 +49,20 @@ export const StatsView: React.FC<StatsViewProps> = ({
 
   // Helper to map a subject to its category in the selected exam config
   const getCategoryForSubject = (subjectName: string, config: typeof AREA_EXAM_CONFIGS['Biomédicas']) => {
+    const normSubj = normalizeSubjectName(subjectName);
     // 1. Direct match or within config subjects array
     for (const [catName, catConfig] of Object.entries(config)) {
-      if (catName === subjectName || catConfig.subjects.includes(subjectName)) {
+      if (matchesSubject(catName, normSubj) || catConfig.subjects.some(s => matchesSubject(s, normSubj))) {
         return { category: catName, weight: catConfig.weight, count: catConfig.count };
       }
     }
     // 2. Special cases
-    if (subjectName === 'Anatomía') {
+    if (normSubj === 'Anatomía') {
       if (config['Biología']) {
         return { category: 'Biología', weight: config['Biología'].weight, count: config['Biología'].count };
       }
     }
-    if (subjectName === 'Inglés') {
+    if (normSubj === 'Inglés') {
       if (config['Inglés Gramática']) {
         return { category: 'Inglés Gramática', weight: config['Inglés Gramática'].weight, count: config['Inglés Gramática'].count };
       }
@@ -70,17 +71,21 @@ export const StatsView: React.FC<StatsViewProps> = ({
     return null;
   };
 
+  const activeQuestions = useMemo(() => {
+    return questions.filter(q => !matchesSubject(q.subject, 'Economía'));
+  }, [questions]);
+
   // Filtered questions based on selected process
   const filteredQuestions = useMemo(() => {
-    if (!selectedProcess) return questions;
-    return questions.filter(q => getQuestionProcess(q) === selectedProcess);
-  }, [questions, selectedProcess]);
+    if (!selectedProcess) return activeQuestions;
+    return activeQuestions.filter(q => getQuestionProcess(q) === selectedProcess);
+  }, [activeQuestions, selectedProcess]);
 
   // Per-process summary calculations: only processes with questions in the database
   const processSummary = useMemo(() => {
-    // Gather all processes present in questions
+    // Gather all processes present in active questions
     const setOfProcesses = new Set<string>();
-    questions.forEach(q => {
+    activeQuestions.forEach(q => {
       const p = getQuestionProcess(q);
       if (p) setOfProcesses.add(p);
     });
@@ -88,13 +93,20 @@ export const StatsView: React.FC<StatsViewProps> = ({
     const activeList = Array.from(setOfProcesses).sort();
 
     return activeList.map(proc => {
-      const qInProc = questions.filter(q => getQuestionProcess(q) === proc);
-      const topicsInProc = new Set<string>(qInProc.map(q => `${q.subject}|${q.topic}`));
+      const qInProc = activeQuestions.filter(q => getQuestionProcess(q) === proc);
+      const topicsInProc = new Map<string, { subject: string; topic: string }>();
+      qInProc.forEach(q => {
+        const normSubj = normalizeSubjectName(q.subject);
+        const tKey = `${normSubj}|${q.topic}`;
+        if (!topicsInProc.has(tKey)) {
+          topicsInProc.set(tKey, { subject: normSubj, topic: q.topic });
+        }
+      });
       let practicedTopics = 0;
       let correctQ = 0;
       let totalPracticedQ = 0;
-      topicsInProc.forEach(tKey => {
-        const res = results[tKey];
+      topicsInProc.forEach(({ subject, topic }) => {
+        const res = getTopicResultForSubject(results, subject, topic);
         if (res && res.total > 0) {
           practicedTopics++;
           correctQ += res.score;
@@ -109,17 +121,18 @@ export const StatsView: React.FC<StatsViewProps> = ({
         accuracy: totalPracticedQ > 0 ? (correctQ / totalPracticedQ) * 100 : 0
       };
     }).filter(p => p.questionCount > 0);
-  }, [questions, results]);
+  }, [activeQuestions, results]);
 
   // Group all unique topics available in the filtered questions
   const dbTopics = useMemo(() => {
     const map = new Map<string, { course: string; subject: string; name: string; questionCount: number }>();
     filteredQuestions.forEach(q => {
-      const key = `${q.subject}|${q.topic}`;
+      const normSubj = normalizeSubjectName(q.subject);
+      const key = `${normSubj}|${q.topic}`;
       if (!map.has(key)) {
         map.set(key, {
           course: q.course,
-          subject: q.subject,
+          subject: normSubj,
           name: q.topic,
           questionCount: 0
         });
@@ -166,8 +179,7 @@ export const StatsView: React.FC<StatsViewProps> = ({
         const cat = mapResult.category;
         categoryDetails[cat].totalTopics++;
 
-        const resultKey = `${topic.subject}|${topic.name}`;
-        const result = results[resultKey];
+        const result = getTopicResultForSubject(results, topic.subject, topic.name);
         if (result && result.total > 0) {
           categoryDetails[cat].practicedTopics++;
           categoryDetails[cat].correctQuestions += result.score;
@@ -242,10 +254,9 @@ export const StatsView: React.FC<StatsViewProps> = ({
 
         // Count topics
         dbTopics.forEach(topic => {
-          if (topic.subject === subj) {
+          if (matchesSubject(topic.subject, subj)) {
             totalTopicsInSubj++;
-            const resultKey = `${topic.subject}|${topic.name}`;
-            const result = results[resultKey];
+            const result = getTopicResultForSubject(results, topic.subject, topic.name);
             if (result && result.total > 0) {
               practicedTopicsInSubj++;
               correctQInSubj += result.score;
@@ -269,7 +280,7 @@ export const StatsView: React.FC<StatsViewProps> = ({
 
         if (mapResult) {
           // Approximate weight contribution for this subject
-          // If a category has multiple subjects (e.g. Historia lists HP and HU), divide weight and count among them
+          // If a category has multiple subjects, divide weight and count among them
           const totalSubjectsInCat = config[mapResult.category].subjects.length || 1;
           portionMaxPoints = (subjCount * subjWeight) / totalSubjectsInCat;
           portionQuestions = subjCount / totalSubjectsInCat;
@@ -323,7 +334,7 @@ export const StatsView: React.FC<StatsViewProps> = ({
   // General summary statistics
   const generalSummary = useMemo(() => {
     const totalTopicsCount = dbTopics.length;
-    const practicedTopicsCount = dbTopics.filter(t => results[`${t.subject}|${t.name}`]?.total > 0).length;
+    const practicedTopicsCount = dbTopics.filter(t => (getTopicResultForSubject(results, t.subject, t.name)?.total || 0) > 0).length;
     const progressPercentage = totalTopicsCount > 0 ? (practicedTopicsCount / totalTopicsCount) * 100 : 0;
 
     return {
@@ -397,7 +408,7 @@ export const StatsView: React.FC<StatsViewProps> = ({
               onChange={(e) => setSelectedProcess(e.target.value)}
               className="w-full sm:w-56 bg-white dark:bg-slate-900 border border-gray-200 dark:border-indigo-800/80 text-gray-800 dark:text-gray-100 text-xs font-bold rounded-xl py-2 px-3 outline-none focus:ring-2 focus:ring-indigo-500 transition-all cursor-pointer shadow-sm"
             >
-              <option value="" className="bg-white dark:bg-slate-900 text-gray-900 dark:text-gray-100">Todos los procesos ({questions.length} preg.)</option>
+              <option value="" className="bg-white dark:bg-slate-900 text-gray-900 dark:text-gray-100">Todos los procesos ({activeQuestions.length} preg.)</option>
               {processSummary.map(proc => (
                 <option key={proc.name} value={proc.name} className="bg-white dark:bg-slate-900 text-gray-900 dark:text-gray-100">
                   {proc.name} ({proc.questionCount} preg.)

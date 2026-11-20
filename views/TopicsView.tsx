@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Question, ReadingText, TopicResult, SavedExam } from '../types';
-import { getQuestionProcess, getQuestionWeek, getProcessBadgeStyle, getProcessShortName, getAvailableProcesses, getQuestionArea, getQuestionAreas, matchesQuestionArea, getAreaBadgeStyle } from '../utils';
+import { getQuestionProcess, getQuestionWeek, getProcessBadgeStyle, getProcessShortName, getAvailableProcesses, getQuestionArea, getQuestionAreas, matchesQuestionArea, getAreaBadgeStyle, matchesSubject, getTopicResultForSubject, normalizeSubjectName } from '../utils';
 import { PrintExamModal } from '../components/PrintExamModal';
 import { UploadExamQuestionsModal } from '../components/UploadExamQuestionsModal';
 
@@ -268,7 +268,7 @@ const TopicsView: React.FC<TopicsViewProps> = ({
         if (exam.userAnswers) {
           Object.entries(exam.userAnswers).forEach(([qId, ans]) => {
             const q = questions.find(item => item.id === qId) || allDatabaseQuestions.find(item => item.id === qId);
-            if (q && (q.subject === subjectName || q.targetSubject === subjectName) && ans !== q.correctIndex) {
+            if (q && (matchesSubject(q.subject, subjectName) || matchesSubject(q.targetSubject, subjectName)) && ans !== q.correctIndex) {
               incorrectSet.add(qId);
             }
           });
@@ -278,7 +278,7 @@ const TopicsView: React.FC<TopicsViewProps> = ({
 
     // Pool of questions for this subject
     const pool = (allDatabaseQuestions && allDatabaseQuestions.length > 0)
-      ? allDatabaseQuestions.filter(q => q.subject === subjectName || q.targetSubject === subjectName)
+      ? allDatabaseQuestions.filter(q => matchesSubject(q.subject, subjectName) || matchesSubject(q.targetSubject, subjectName))
       : questions;
 
     return pool.filter(q => incorrectSet.has(q.id));
@@ -491,7 +491,7 @@ const TopicsView: React.FC<TopicsViewProps> = ({
   };
 
   const getTopicColorClasses = (topicName: string) => {
-    const result = results[`${subjectName}|${topicName}`];
+    const result = getTopicResultForSubject(results, subjectName, topicName);
     const timesPracticed = result?.timesPracticed ?? (result && result.total > 0 ? 1 : 0);
     const isPracticed = timesPracticed > 0 && result && result.total > 0;
 
@@ -515,7 +515,7 @@ const TopicsView: React.FC<TopicsViewProps> = ({
   };
 
   const renderPracticeBadge = (topicName: string) => {
-    const res = results[`${subjectName}|${topicName}`];
+    const res = getTopicResultForSubject(results, subjectName, topicName);
     const timesPracticed = res?.timesPracticed ?? (res && res.total > 0 ? 1 : 0);
 
     if (timesPracticed === 0 || !res || res.total === 0) {
@@ -557,14 +557,14 @@ const TopicsView: React.FC<TopicsViewProps> = ({
   const renderTopicCard = (topic: typeof topics[0], globalIndex: number) => {
     const isOfficialExamView = subjectName === 'Simulacros Oficiales' || courseName === 'Exámenes';
     const topicQuestions = filteredQuestions.filter(q => q.topic === topic.name);
-    const result = results[`${subjectName}|${topic.name}`];
+    const result = getTopicResultForSubject(results, subjectName, topic.name);
     const timesPracticed = result?.timesPracticed ?? (result && result.total > 0 ? 1 : 0);
     const isPracticed = timesPracticed > 0 && result && result.total > 0;
     
     // Group subjects inside this exam deck
     const subjectsMap = new Map<string, { count: number; weight?: number }>();
     topicQuestions.forEach(q => {
-      const s = q.targetSubject || q.subject;
+      const s = normalizeSubjectName(q.targetSubject || q.subject);
       const cur = subjectsMap.get(s) || { count: 0, weight: q.weight };
       cur.count++;
       if (q.weight) cur.weight = q.weight;

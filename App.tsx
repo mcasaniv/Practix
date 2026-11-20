@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Question, AppDatabase, ViewType, NavigationState, TopicResult, ReadingText, Flashcard, SavedExam, UserProfile, CustomDeck, TheoryNote } from './types';
 import { ACADEMIC_STRUCTURE, DB_STORAGE_KEY } from './constants';
-import { getQuestionProcess, parseAndNormalizeImport, matchesQuestionArea } from './utils';
+import { getQuestionProcess, parseAndNormalizeImport, matchesQuestionArea, matchesSubject, normalizeSubjectName, getTopicResultForSubject } from './utils';
 import { saveAppDatabase, loadAppDatabase } from './utils/dbStorage';
 import Navbar from './components/Navbar';
 import HomeView from './views/HomeView';
@@ -430,13 +430,19 @@ const App: React.FC = () => {
 
   const deleteTopic = useCallback((topicName: string, subjectName: string) => {
     setDb(prev => {
-      const resultKey = `${subjectName}|${topicName}`;
       const newResults = { ...prev.results };
-      delete newResults[resultKey];
+      delete newResults[`${subjectName}|${topicName}`];
+      if (normalizeSubjectName(subjectName) === 'Historia') {
+        delete newResults[`Historia|${topicName}`];
+        delete newResults[`Historia del Perú|${topicName}`];
+        delete newResults[`Historia del Peru|${topicName}`];
+        delete newResults[`Historia Peruana|${topicName}`];
+        delete newResults[`Historia Universal|${topicName}`];
+      }
       
       return {
         ...prev,
-        questions: prev.questions.filter(q => !(q.topic === topicName && q.subject === subjectName)),
+        questions: prev.questions.filter(q => !(q.topic === topicName && matchesSubject(q.subject, subjectName))),
         results: newResults
       };
     });
@@ -445,7 +451,7 @@ const App: React.FC = () => {
   const moveTopic = useCallback((topicName: string, subjectName: string, direction: 'UP' | 'DOWN') => {
     setDb(prev => {
       const allQuestions = [...prev.questions];
-      const subjectQuestions = allQuestions.filter(q => q.subject === subjectName);
+      const subjectQuestions = allQuestions.filter(q => matchesSubject(q.subject, subjectName));
       
       // Get unique topics for this subject
       const uniqueTopicNames = Array.from(new Set(subjectQuestions.map(q => q.topic)));
@@ -468,7 +474,7 @@ const App: React.FC = () => {
 
       // Update the order property of all questions in this subject based on the new array index
       const updatedQuestions = allQuestions.map(q => {
-        if (q.subject !== subjectName) return q;
+        if (!matchesSubject(q.subject, subjectName)) return q;
         const newOrder = newTopicsOrder.findIndex(t => t.name === q.topic);
         return { ...q, order: newOrder === -1 ? 999 : newOrder };
       });
@@ -593,8 +599,9 @@ const App: React.FC = () => {
         });
       }
 
-      const key = `${subject}|${topic}`;
-      const prevResult = prev.results?.[key];
+      const normalizedSubject = normalizeSubjectName(subject);
+      const key = `${normalizedSubject}|${topic}`;
+      const prevResult = getTopicResultForSubject(prev.results, normalizedSubject, topic) || prev.results?.[key];
       const prevTimes = prevResult?.timesPracticed ?? (prevResult && prevResult.total > 0 ? 1 : 0);
       const prevClassic = prevResult?.classicPracticesCount ?? (prevResult && !prevResult.gamePracticesCount ? prevTimes : 0);
       const prevGame = prevResult?.gamePracticesCount ?? 0;
@@ -627,15 +634,21 @@ const App: React.FC = () => {
         correctQuestionIds.forEach(id => nextIncorrect.delete(id));
       }
 
+      const nextResults = { ...(prev.results || {}) };
+      if (normalizedSubject === 'Historia') {
+        delete nextResults[`Historia del Perú|${topic}`];
+        delete nextResults[`Historia del Peru|${topic}`];
+        delete nextResults[`Historia Peruana|${topic}`];
+        delete nextResults[`Historia Universal|${topic}`];
+      }
+      nextResults[key] = newResult;
+
       return {
         ...prev,
         totalPracticed: (prev.totalPracticed || 0) + total,
         customDecks: updatedCustomDecks,
         incorrectQuestionIds: Array.from(nextIncorrect),
-        results: {
-          ...prev.results,
-          [key]: newResult
-        }
+        results: nextResults
       };
     });
   }, [nav.selectedDeckId]);
@@ -675,7 +688,7 @@ const App: React.FC = () => {
     setDb(prev => {
       const subjectQIds = new Set(
         prev.questions
-          .filter(q => q.subject === subject || q.targetSubject === subject)
+          .filter(q => matchesSubject(q.subject, subject) || matchesSubject(q.targetSubject, subject))
           .map(q => q.id)
       );
       return {
@@ -789,7 +802,7 @@ const App: React.FC = () => {
   const moveFlashcardTopic = useCallback((topicName: string, subjectName: string, courseName: string, direction: 'UP' | 'DOWN') => {
     setDb(prev => {
       const allFlashcards = prev.flashcards ? [...prev.flashcards] : [];
-      const subjectCards = allFlashcards.filter(f => f.course === courseName && f.subject === subjectName);
+      const subjectCards = allFlashcards.filter(f => f.course === courseName && matchesSubject(f.subject, subjectName));
       
       const uniqueTopicNames = Array.from(new Set(subjectCards.map(f => f.topic ? f.topic.trim() : 'General / Sin Tema')));
       const nonDefaultTopics = uniqueTopicNames.filter(t => t !== 'General / Sin Tema');
@@ -809,7 +822,7 @@ const App: React.FC = () => {
       [newTopicsOrder[currentIndex], newTopicsOrder[targetIndex]] = [newTopicsOrder[targetIndex], newTopicsOrder[currentIndex]];
 
       const updatedFlashcards = allFlashcards.map(f => {
-        if (f.course !== courseName || f.subject !== subjectName) return f;
+        if (f.course !== courseName || !matchesSubject(f.subject, subjectName)) return f;
         if (!f.topic) return f;
         const newOrder = newTopicsOrder.findIndex(t => t.name === f.topic);
         return { ...f, order: newOrder === -1 ? 999 : newOrder };
@@ -914,7 +927,7 @@ const App: React.FC = () => {
             key={nav.selectedSubject}
             subjectName={nav.selectedSubject!} 
             courseName={nav.selectedCourse}
-            questions={db.questions.filter(q => q.subject === nav.selectedSubject)}
+            questions={db.questions.filter(q => matchesSubject(q.subject, nav.selectedSubject))}
             allDatabaseQuestions={db.questions}
             readingTexts={db.readingTexts || []}
             results={db.results || {}}
@@ -942,13 +955,13 @@ const App: React.FC = () => {
         const areaToFilter = nav.selectedAreaFilter || selectedArea;
         const topicFilteredQuestions = db.questions.filter(q => 
           q.topic === nav.selectedTopic && 
-          q.subject === nav.selectedSubject && 
+          matchesSubject(q.subject, nav.selectedSubject) && 
           (!nav.selectedProcess || getQuestionProcess(q) === nav.selectedProcess) &&
           matchesQuestionArea(q, areaToFilter)
         );
         const finalQuizQuestions = topicFilteredQuestions.length > 0 ? topicFilteredQuestions : db.questions.filter(q => 
           q.topic === nav.selectedTopic && 
-          q.subject === nav.selectedSubject && 
+          matchesSubject(q.subject, nav.selectedSubject) && 
           (!nav.selectedProcess || getQuestionProcess(q) === nav.selectedProcess)
         );
         return (
@@ -1040,7 +1053,7 @@ const App: React.FC = () => {
       case 'FLASHCARDS_PLAY': {
         const filteredCards = (db.flashcards || []).filter(f => {
           const matchCourse = f.course === nav.selectedCourse;
-          const matchSubject = f.subject === nav.selectedSubject;
+          const matchSubject = matchesSubject(f.subject, nav.selectedSubject);
           const matchTopic = !nav.selectedTopic || f.topic === nav.selectedTopic;
           return matchCourse && matchSubject && matchTopic;
         });

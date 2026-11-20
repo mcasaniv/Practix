@@ -1,7 +1,7 @@
 import React from 'react';
 import katex from 'katex';
 import { AREA_EXAM_CONFIGS, ACADEMIC_STRUCTURE } from './constants';
-import { Question, AppDatabase, AcademicArea, TargetArea } from './types';
+import { Question, AppDatabase, AcademicArea, TargetArea, TopicResult } from './types';
 
 /**
  * Safely renders a LaTeX math expression to an HTML string using KaTeX.
@@ -512,6 +512,92 @@ export function getEffectiveQuestionSubject(q: Question): string {
 }
 
 /**
+ * Normalizes subject names so legacy variants like "Historia del Perú" and
+ * "Historia Universal" resolve transparently to the unified "Historia" subject.
+ */
+export function normalizeSubjectName(subject?: string): string {
+  const trimmed = (subject || '').trim();
+  if (!trimmed) return '';
+  const lower = trimmed
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+  if (
+    lower === 'historia' ||
+    lower === 'historia del peru' ||
+    lower === 'historia peruana' ||
+    lower === 'historia universal'
+  ) {
+    return 'Historia';
+  }
+  return trimmed;
+}
+
+/**
+ * Compares two subject names accounting for unified legacy variants (e.g. Historia).
+ */
+export function matchesSubject(a?: string, b?: string): boolean {
+  if (!a || !b) return false;
+  return normalizeSubjectName(a).toLowerCase() === normalizeSubjectName(b).toLowerCase();
+}
+
+/**
+ * Retrieves a topic result for a subject and topic, merging or falling back to
+ * legacy keys (e.g. "Historia del Perú|..." or "Historia Universal|...") when
+ * viewing the unified "Historia" subject.
+ */
+export function getTopicResultForSubject(
+  results: Record<string, TopicResult> | undefined,
+  subjectName: string,
+  topicName: string
+): TopicResult | undefined {
+  if (!results) return undefined;
+  const norm = normalizeSubjectName(subjectName);
+  const candidateSubjects =
+    norm === 'Historia'
+      ? ['Historia', 'Historia del Perú', 'Historia del Peru', 'Historia Peruana', 'Historia Universal']
+      : [subjectName];
+
+  const seenKeys = new Set<string>();
+  const matches: TopicResult[] = [];
+  for (const subj of candidateSubjects) {
+    const key = `${subj}|${topicName}`;
+    if (!seenKeys.has(key)) {
+      seenKeys.add(key);
+      const res = results[key];
+      if (res && res.total > 0) {
+        matches.push(res);
+      }
+    }
+  }
+
+  if (matches.length === 0) {
+    return results[`${norm}|${topicName}`] || results[`${subjectName}|${topicName}`];
+  }
+  if (matches.length === 1) return matches[0];
+
+  const canonical = results[`${norm}|${topicName}`];
+  if (canonical && canonical.total > 0) {
+    return canonical;
+  }
+
+  const sortedByLatest = [...matches].sort((a, b) => (b.lastPracticedAt || 0) - (a.lastPracticedAt || 0));
+  const latest = sortedByLatest[0];
+  const combinedScore = matches.reduce((sum, m) => sum + m.score, 0);
+  const combinedTotal = matches.reduce((sum, m) => sum + m.total, 0);
+  return {
+    score: combinedScore,
+    total: combinedTotal,
+    timesPracticed: matches.reduce((sum, m) => sum + (m.timesPracticed ?? (m.total > 0 ? 1 : 0)), 0),
+    classicPracticesCount: matches.reduce((sum, m) => sum + (m.classicPracticesCount ?? 0), 0),
+    gamePracticesCount: matches.reduce((sum, m) => sum + (m.gamePracticesCount ?? 0), 0),
+    lastPracticedAt: latest.lastPracticedAt,
+    bestScore: matches.reduce((sum, m) => sum + (m.bestScore ?? m.score), 0),
+    history: matches.flatMap(m => m.history || []).sort((a, b) => a.date - b.date)
+  };
+}
+
+/**
  * Returns the official score weight for a given academic subject and admission area.
  */
 export function getOfficialSubjectWeight(
@@ -519,8 +605,9 @@ export function getOfficialSubjectWeight(
   area: 'Biomédicas' | 'Ingenierías' | 'Sociales' = 'Biomédicas'
 ): number {
   const config = AREA_EXAM_CONFIGS[area] || AREA_EXAM_CONFIGS['Biomédicas'];
+  const normSubject = normalizeSubjectName(subject);
   for (const [catName, cat] of Object.entries(config)) {
-    if (cat.subjects.includes(subject) || catName === subject) {
+    if (cat.subjects.some(s => matchesSubject(s, normSubject)) || matchesSubject(catName, normSubject)) {
       return cat.weight;
     }
   }
@@ -537,10 +624,8 @@ export const ALL_ACADEMIC_SUBJECTS: string[] = [
   'Biología',
   'Lenguaje',
   'Literatura',
-  'Historia del Perú',
-  'Historia Universal',
+  'Historia',
   'Geografía',
-  'Economía',
   'Cívica',
   'Psicología',
   'Filosofía',
@@ -688,7 +773,7 @@ export function normalizeQuestionObject(item: any): Question | null {
   }
 
   // Resolve subject & course
-  let subject = (item.subject ?? item.materia ?? '').toString().trim();
+  let subject = normalizeSubjectName((item.subject ?? item.materia ?? '').toString().trim());
   let course = (item.course ?? item.curso ?? '').toString().trim();
 
   // If subject is known in ACADEMIC_STRUCTURE, infer course if missing

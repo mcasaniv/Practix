@@ -2,7 +2,7 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Question, ReadingText, Flashcard, AcademicArea, TargetArea } from '../types';
 import { ACADEMIC_STRUCTURE, ADMISSION_PROCESSES, DEFAULT_ADMISSION_PROCESS, CEPRE_BASE_TYPES } from '../constants';
-import { formatQuestionText, parseHTMLTags, getQuestionProcess, getProcessBadgeStyle, getProcessShortName, getAvailableProcesses, getOfficialSubjectWeight, ALL_ACADEMIC_SUBJECTS, getAreaBadgeStyle, ACADEMIC_AREAS, getQuestionArea, getQuestionAreas, matchesQuestionArea, FormulaTokenRenderer, renderMathAndHtml } from '../utils';
+import { formatQuestionText, parseHTMLTags, getQuestionProcess, getProcessBadgeStyle, getProcessShortName, getAvailableProcesses, getOfficialSubjectWeight, ALL_ACADEMIC_SUBJECTS, getAreaBadgeStyle, ACADEMIC_AREAS, getQuestionArea, getQuestionAreas, matchesQuestionArea, FormulaTokenRenderer, renderMathAndHtml, matchesSubject, normalizeSubjectName } from '../utils';
 import { ImageOcclusionModal } from '../components/ImageOcclusionModal';
 import { FormulaBuilderModal, decomposeFormula } from '../components/FormulaBuilderModal';
 
@@ -645,7 +645,7 @@ const AdminView: React.FC<AdminViewProps> = ({
   const handleEditExisting = (q: Question) => {
     setEditingId(q.id);
     setCourse(q.course);
-    setSubject(q.subject);
+    setSubject(normalizeSubjectName(q.subject));
     setTopic(q.topic);
     
     const qProc = q.process || DEFAULT_ADMISSION_PROCESS;
@@ -691,7 +691,7 @@ const AdminView: React.FC<AdminViewProps> = ({
     setImageUrl(q.imageUrl || '');
     setWeek(q.week !== undefined && q.week !== null ? q.week : '');
     if (q.targetSubject) {
-      setExamTargetSubject(q.targetSubject);
+      setExamTargetSubject(normalizeSubjectName(q.targetSubject));
     }
     const resolvedAreas = getQuestionAreas(q);
     setQuestionAreas(resolvedAreas);
@@ -909,7 +909,7 @@ const AdminView: React.FC<AdminViewProps> = ({
   const filteredFlashcards = useMemo(() => {
     return flashcards.filter(f => {
       const matchCourse = !fcFilterCourse || f.course === fcFilterCourse;
-      const matchSubject = !fcFilterSubject || f.subject === fcFilterSubject;
+      const matchSubject = !fcFilterSubject || matchesSubject(f.subject, fcFilterSubject);
       return matchCourse && matchSubject;
     });
   }, [flashcards, fcFilterCourse, fcFilterSubject]);
@@ -937,7 +937,7 @@ const AdminView: React.FC<AdminViewProps> = ({
   const filteredQuestions = useMemo(() => {
     return questions.filter(q => {
       const matchCourse = !manageFilterCourse || q.course === manageFilterCourse;
-      const matchSubject = !manageFilterSubject || q.subject === manageFilterSubject;
+      const matchSubject = !manageFilterSubject || matchesSubject(q.subject, manageFilterSubject);
       const matchProcess = !manageFilterProcess || getQuestionProcess(q) === manageFilterProcess;
       const resolvedArea = q.area || 'Biomédicas';
       const matchArea = !manageFilterArea || resolvedArea === manageFilterArea;
@@ -1955,7 +1955,7 @@ const AdminView: React.FC<AdminViewProps> = ({
                       <div className="flex items-center gap-1.5 opacity-65 group-hover:opacity-100 transition-opacity">
                         <button 
                           onClick={() => {
-                            setFcEditing({ ...fc });
+                            setFcEditing({ ...fc, subject: normalizeSubjectName(fc.subject) });
                             setFcEditNewToken('');
                             setFcEditNewDistractor('');
                           }} 

@@ -2,7 +2,7 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Question, ReadingText, ExamMode, TopicResult, SavedExam, UserProfile } from '../types';
 import { AREA_EXAM_CONFIGS } from '../constants';
-import { formatQuestionText, parseHTMLTags, getQuestionWeek, getQuestionProcess, getProcessBadgeStyle, getProcessShortName } from '../utils';
+import { formatQuestionText, parseHTMLTags, getQuestionWeek, getQuestionProcess, getProcessBadgeStyle, getProcessShortName, matchesSubject } from '../utils';
 import { PrintExamModal } from '../components/PrintExamModal';
 import { QuizizzGame } from '../components/QuizizzGame';
 import { EditResolutionModal } from '../components/EditResolutionModal';
@@ -138,7 +138,7 @@ const MegaQuizView: React.FC<MegaQuizViewProps> = ({
           let catName = q.subject;
           let weight = 1.25;
           for (const [cat, cfg] of Object.entries(activeAreaConfig)) {
-            if (cfg.subjects.includes(q.subject) || cat === q.subject) {
+            if (cfg.subjects.some(s => matchesSubject(s, q.subject)) || matchesSubject(cat, q.subject)) {
               catName = cat;
               weight = cfg.weight;
               break;
@@ -317,7 +317,7 @@ const MegaQuizView: React.FC<MegaQuizViewProps> = ({
           });
         }
       } else {
-        const pool = basePool.filter(q => config.subjects.includes(q.subject) && !usedQuestionIds.has(q.id));
+        const pool = basePool.filter(q => config.subjects.some(s => matchesSubject(q.subject, s)) && !usedQuestionIds.has(q.id));
         const sorted = scoreAndSortQuestions(pool);
         const selected = sorted.slice(0, config.count);
         selected.forEach(q => {
@@ -333,8 +333,8 @@ const MegaQuizView: React.FC<MegaQuizViewProps> = ({
     const targetTotal = isFull80Target ? 80 : Object.values(configToUse).reduce((sum, c) => sum + c.count, 0);
 
     if (finalSelection.length < targetTotal) {
-      const allAreaSubjects = new Set(Object.values(activeAreaConfig).flatMap(c => c.subjects));
-      const remainingUnused = basePool.filter(q => allAreaSubjects.has(q.subject) && !usedQuestionIds.has(q.id));
+      const allAreaSubjects = Object.values(activeAreaConfig).flatMap(c => c.subjects);
+      const remainingUnused = basePool.filter(q => allAreaSubjects.some(s => matchesSubject(q.subject, s)) && !usedQuestionIds.has(q.id));
       const sortedRemaining = scoreAndSortQuestions(remainingUnused);
       const neededCount = targetTotal - finalSelection.length;
       const fillers = sortedRemaining.slice(0, neededCount);
@@ -343,7 +343,7 @@ const MegaQuizView: React.FC<MegaQuizViewProps> = ({
         let catName = q.subject;
         let weight = 1.25;
         for (const [cat, cfg] of Object.entries(activeAreaConfig)) {
-          if (cfg.subjects.includes(q.subject) || cat === q.subject) {
+          if (cfg.subjects.some(s => matchesSubject(s, q.subject)) || matchesSubject(cat, q.subject)) {
             catName = cat;
             weight = cfg.weight;
             break;

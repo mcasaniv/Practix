@@ -1,7 +1,7 @@
 import React from 'react';
 import { ACADEMIC_STRUCTURE } from '../constants';
 import { CourseStructure, Question, TopicResult, SavedExam, TargetArea } from '../types';
-import { matchesQuestionArea, getAreaBadgeStyle } from '../utils';
+import { matchesQuestionArea, getAreaBadgeStyle, matchesSubject } from '../utils';
 
 interface SubjectsViewProps {
   courseName: string;
@@ -65,7 +65,7 @@ const SubjectsView: React.FC<SubjectsViewProps> = ({
       {/* Subjects Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
         {course.subjects.map((subject) => {
-          const subjectQuestions = questions.filter(q => q.subject === subject);
+          const subjectQuestions = questions.filter(q => matchesSubject(q.subject, subject));
           const subjectQuestionsCount = subjectQuestions.length;
           const areaQuestionsCount = subjectQuestions.filter(q => matchesQuestionArea(q, currentArea)).length;
           const isSavedExamsSubject = subject === 'Exámenes Rendidos' || subject === 'Exámenes Simulacros';

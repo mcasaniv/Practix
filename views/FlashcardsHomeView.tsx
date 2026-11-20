@@ -4,6 +4,7 @@ import { Flashcard, CourseStructure } from '../types';
 import { ImageOcclusionModal } from '../components/ImageOcclusionModal';
 import { FormulaBuilderModal } from '../components/FormulaBuilderModal';
 import { FlashcardTopicCard } from '../components/FlashcardTopicCard';
+import { matchesSubject } from '../utils';
 
 interface FlashcardsHomeViewProps {
   flashcards: Flashcard[];
@@ -53,7 +54,7 @@ const FlashcardsHomeView: React.FC<FlashcardsHomeViewProps> = ({
   };
 
   const getSubjectCardCount = (subjectName: string) => {
-    return flashcards.filter(f => f.course === selectedCourseName && f.subject === subjectName).length;
+    return flashcards.filter(f => f.course === selectedCourseName && matchesSubject(f.subject, subjectName)).length;
   };
 
   const getCourseMastery = (courseName: string) => {
@@ -67,7 +68,7 @@ const FlashcardsHomeView: React.FC<FlashcardsHomeViewProps> = ({
   };
 
   const getSubjectMastery = (subjectName: string) => {
-    const subjectCards = flashcards.filter(f => f.course === selectedCourseName && f.subject === subjectName);
+    const subjectCards = flashcards.filter(f => f.course === selectedCourseName && matchesSubject(f.subject, subjectName));
     if (subjectCards.length === 0) return null;
     const rated = subjectCards.filter(f => f.difficulty);
     if (rated.length === 0) return null;
@@ -82,7 +83,7 @@ const FlashcardsHomeView: React.FC<FlashcardsHomeViewProps> = ({
     if (!selectedCourseName || !selectedSubjectName) return [];
     
     const subjectCards = flashcards.filter(
-      f => f.course === selectedCourseName && f.subject === selectedSubjectName
+      f => f.course === selectedCourseName && matchesSubject(f.subject, selectedSubjectName)
     );
 
     const groups: Record<string, { name: string; isDefault: boolean; count: number; easy: number; medium: number; rated: number; order: number; imageCount: number }> = {};
@@ -250,7 +251,7 @@ const FlashcardsHomeView: React.FC<FlashcardsHomeViewProps> = ({
 
   // VIEW 3: SELECT TOPIC INSIDE SUBJECT
   if (selectedSubjectName) {
-    const totalSubjectCards = flashcards.filter(f => f.course === selectedCourseName && f.subject === selectedSubjectName).length;
+    const totalSubjectCards = flashcards.filter(f => f.course === selectedCourseName && matchesSubject(f.subject, selectedSubjectName)).length;
 
     return (
       <div id="flashcards-home-topics-root" className="space-y-6 animate-fade-in">

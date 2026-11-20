@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useRef } from 'react';
 import { TheoryNote } from '../types';
 import { ACADEMIC_STRUCTURE } from '../constants';
+import { matchesSubject, normalizeSubjectName } from '../utils';
 
 interface TheoryViewProps {
   theoryNotes: TheoryNote[];
@@ -136,7 +137,7 @@ export const TheoryView: React.FC<TheoryViewProps> = ({
   const openEditModal = (note: TheoryNote) => {
     setEditingNote(note);
     setFormCourse(note.course);
-    setFormSubject(note.subject);
+    setFormSubject(normalizeSubjectName(note.subject));
     setFormTopic(note.topic || '');
     setFormTitle(note.title);
     setFormContent(note.content);
@@ -203,7 +204,7 @@ export const TheoryView: React.FC<TheoryViewProps> = ({
   const filteredNotes = useMemo(() => {
     return theoryNotes.filter(note => {
       if (selectedCourse !== 'TODOS' && note.course !== selectedCourse) return false;
-      if (selectedSubject !== 'TODAS' && note.subject !== selectedSubject) return false;
+      if (selectedSubject !== 'TODAS' && !matchesSubject(note.subject, selectedSubject)) return false;
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
         const inTitle = note.title.toLowerCase().includes(q);
@@ -360,7 +361,7 @@ export const TheoryView: React.FC<TheoryViewProps> = ({
               </button>
               {availableSubjectsForFilter.map(subj => {
                 const count = theoryNotes.filter(n =>
-                  (selectedCourse === 'TODOS' || n.course === selectedCourse) && n.subject === subj
+                  (selectedCourse === 'TODOS' || n.course === selectedCourse) && matchesSubject(n.subject, subj)
                 ).length;
                 return (
                   <button

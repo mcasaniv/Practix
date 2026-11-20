@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Question, ReadingText, UserProfile, TopicResult } from '../types';
-import { formatQuestionText, parseHTMLTags } from '../utils';
+import { formatQuestionText, parseHTMLTags, getTopicResultForSubject, normalizeSubjectName } from '../utils';
 import { QuizizzGame } from '../components/QuizizzGame';
 import { EditResolutionModal } from '../components/EditResolutionModal';
 
@@ -51,7 +51,7 @@ const QuizView: React.FC<QuizViewProps> = ({
     setCurrentQuestions(questions);
   }, [questions]);
 
-  const currentTopicResult = results[`${subjectName}|${topicName}`];
+  const currentTopicResult = getTopicResultForSubject(results, subjectName, topicName);
   const previousTimes = currentTopicResult?.timesPracticed ?? (currentTopicResult ? 1 : 0);
 
   const handleSaveEditedQuestion = (updatedQuestion: Question) => {
@@ -93,7 +93,7 @@ const QuizView: React.FC<QuizViewProps> = ({
         onUpdateQuestion={handleSaveEditedQuestion}
         onToast={onToast}
         onFinish={(score, total, wrongIds, correctIds) => {
-          onFinish(subjectName, topicName, score, total, 'QUIZZIZ', wrongIds, correctIds);
+          onFinish(normalizeSubjectName(subjectName), topicName, score, total, 'QUIZZIZ', wrongIds, correctIds);
         }}
         onBack={onBack}
       />
@@ -128,7 +128,7 @@ const QuizView: React.FC<QuizViewProps> = ({
       }
     });
 
-    onFinish(subjectName, topicName, score, currentQuestions.length, 'CLASSIC', wrongIds, correctIds);
+    onFinish(normalizeSubjectName(subjectName), topicName, score, currentQuestions.length, 'CLASSIC', wrongIds, correctIds);
   };
 
   const scoreValue = calculateScore();

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { SavedExam, Question, ReadingText } from '../types';
 import { AREA_EXAM_CONFIGS } from '../constants';
-import { formatQuestionText, parseHTMLTags } from '../utils';
+import { formatQuestionText, parseHTMLTags, matchesSubject } from '../utils';
 
 interface PrintExamModalProps {
   exam: SavedExam;
@@ -33,7 +33,7 @@ export const PrintExamModal: React.FC<PrintExamModalProps> = ({
       if (q) {
         let catName = q.subject;
         for (const [cat, cfg] of Object.entries(activeAreaConfig)) {
-          if (cfg.subjects.includes(q.subject) || cat === q.subject) {
+          if (cfg.subjects.some(s => matchesSubject(s, q.subject)) || matchesSubject(cat, q.subject)) {
             catName = cat;
             break;
           }
